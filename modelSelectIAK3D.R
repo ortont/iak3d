@@ -1,4 +1,4 @@
-selectCovIAK3D <- function(x , dI , z , covs , modelX , modelx , nud = NULL , sdfdTypeANDcmeInit = c() , allKnotsd = c() , prodSum = TRUE , lnTfmdData , useReml , compLikMats = NULL , rqrBTfmdPreds = TRUE){
+selectCovIAK3D <- function(x , dI , z , covs , modelX , modelx , nud = NULL , sdfdTypeANDcmeInit = c() , allKnotsd = c() , prodSum = TRUE , lnTfmdData , useReml , compLikMats = NULL , rqrBTfmdPreds = TRUE , dirPlot = getwd()){
 
 #########################################################
 ### error check for duplicated x,dI data, if no measurement error being included...
@@ -14,6 +14,7 @@ selectCovIAK3D <- function(x , dI , z , covs , modelX , modelx , nud = NULL , sd
       print('Attention! Some NAs found in data ; removing them.')
       x <- x[-iNA,drop = FALSE]
       dI <- dI[-iNA,drop = FALSE]
+      covs <- covs[-iNA,drop = FALSE]
       z <- z[iNA]
     }else{}
      
@@ -55,7 +56,7 @@ selectCovIAK3D <- function(x , dI , z , covs , modelX , modelx , nud = NULL , sd
         print(paste0('nud = ' , nudVec[i] , ', sdfdType_cd1 = ' , sdfdTypeANDcmeOpt[1] , ', sdfdType_cxd0 = ' , sdfdTypeANDcmeOpt[2] , 
                 ', sdfdType_cxd1 = ' , sdfdTypeANDcmeOpt[3] , ', cmeOpt = ' , sdfdTypeANDcmeOpt[4] , '...'))
         
-        namePlot <- paste0('lmm.fit.Selectnud' , floor(nudVec[i]) , '.pdf')
+        namePlot <- paste0(dirPlot , '/lmm.fit.Selectnud' , floor(nudVec[i]) , '.pdf')
         lmm.fit.Selectnud[[i]] <- fitIAK3D(x = x , dI = dI , z = z , covs = covs , modelX = modelX , modelx = modelx , nud = nudVec[i] , allKnotsd = allKnotsd ,
 			sdfdType_cd1 = sdfdTypeANDcmeOpt[1] , sdfdType_cxd0 = sdfdTypeANDcmeOpt[2] , sdfdType_cxd1 = sdfdTypeANDcmeOpt[3] , cmeOpt = sdfdTypeANDcmeOpt[4] , prodSum = prodSum , 
             lnTfmdData = lnTfmdData , useReml = useReml , compLikMats = compLikMats , namePlot = namePlot , rqrBTfmdPreds = rqrBTfmdPreds)
@@ -65,7 +66,7 @@ selectCovIAK3D <- function(x , dI , z , covs , modelX , modelx , nud = NULL , sd
       nudSelected <- nudVec[iBest]
     }else{
     
-      namePlot <- paste0('lmm.fit.Selectnud' , floor(nud) , '.pdf')
+      namePlot <- paste0(dirPlot , '/lmm.fit.Selectnud' , floor(nud) , '.pdf')
       iBest <- ceiling(nud)
       lmm.fit.Selectnud <- list()
       lmm.fit.Selectnud[[1]] <- NA
@@ -123,7 +124,7 @@ selectCovIAK3D <- function(x , dI , z , covs , modelX , modelx , nud = NULL , sd
                     ', sdfdType_cxd1 = ' , sdfdTypeANDcmeOptThis[3] , ', cmeOpt = ' , sdfdTypeANDcmeOptThis[4] , '...'))
         
 
-            namePlot <- paste0('lmm.fit.DropStep' , iStep , '_Drop' , i , '.pdf')
+            namePlot <- paste0(dirPlot , '/lmm.fit.DropStep' , iStep , '_Drop' , i , '.pdf')
             lmm.fit.Drop[[iStep]][[i]] <- fitIAK3D(x = x , dI = dI , z = z , covs = covs , modelX = modelX , modelx = modelx , nud = nudSelected , allKnotsd = allKnotsd ,
                     sdfdType_cd1 = sdfdTypeANDcmeOptThis[1] , sdfdType_cxd0 = sdfdTypeANDcmeOptThis[2] , sdfdType_cxd1 = sdfdTypeANDcmeOptThis[3] , cmeOpt = sdfdTypeANDcmeOptThis[4] , prodSum = prodSum , 
                     lnTfmdData = lnTfmdData , useReml = useReml  , compLikMats = compLikMats , namePlot = namePlot , rqrBTfmdPreds = rqrBTfmdPreds)
@@ -666,8 +667,9 @@ lmGivenX <- function(z , X , method = 'ML' , XFULL = NULL){
     XX <- t(X) %*% X
     Xz <- matrix(t(X) %*% z , ncol = 1)
     
+    tmp0 <- try(solve(XX , Xz) , silent = TRUE)
     tmp <- lndetANDinvCb(XX , Xz)
-    if(is.character(tmp$cholC)){
+    if(is.character(tmp$cholC) | is.character(tmp0)){
       return(list('nll' = NA , 'AIC' = NA , 'betahat' = matrix(NA , p , 1)))
     }else{}
     betahat <- matrix(tmp$invCb , ncol = 1)
