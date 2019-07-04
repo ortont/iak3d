@@ -75,12 +75,12 @@ makeXvX <- function(covData = NA , dI , modelX , allKnotsd = c() , iU = NA , nDi
         }else{}
       }
 
-	  p <- length(namesX)
+	    p <- length(namesX)
 
     }else if(is.character(modelX)){
       modelType <- 'mlr'
   	  namesX <- modelX
-	  p <- length(namesX)
+	    p <- length(namesX)
 
     }else if(class(modelX) == "cubist"){
 ########################################
@@ -100,9 +100,11 @@ makeXvX <- function(covData = NA , dI , modelX , allKnotsd = c() , iU = NA , nDi
       }else{}
  
 ### just to get the names and number of parameters...
-      namesX <- modelX$names4XCubist
-      p <- sum(modelX$pVec)
-
+      # namesX <- modelX$names4XCubist
+      # p <- sum(modelX$pVec)
+      namesX <- modelX$namesX
+      p <- length(namesX)
+      
     }else{}
 
 ###############################################
@@ -115,18 +117,20 @@ makeXvX <- function(covData = NA , dI , modelX , allKnotsd = c() , iU = NA , nDi
     if(length(allKnotsd) > 0){
 
 #        if(length(allKnotsd) < 3){ stop('Error - must input two boundary knots and at least one internal knot in allKnotsd!') }else{}
-        if(length(allKnotsd) < 2){ stop('Error - must input at least two boundary knots and at least one internal knot in allKnotsd!') }else{}
+        if(length(allKnotsd) < 2){ stop('Error - must input at least two boundary knots in allKnotsd!') }else{}
         
         intKnots <- allKnotsd[-1]
         intKnots <- intKnots[-length(intKnots)]
         bdryKnots <- c(allKnotsd[1] , allKnotsd[length(allKnotsd)])
 
-        if(is.integer(modelXIn) | is.numeric(modelXIn) | class(modelXIn) == "cubist"){
-          XSplineCheck <- bs(x = c(0.1 , 0.2) , knots = intKnots , degree = 3 , intercept = F , Boundary.knots = bdryKnots)
-          namesX <- c(namesX , rep('dSpline' , ncol(XSplineCheck))) 
-          p <- length(namesX)
-        }else{} # if came in as character vector, this has already been done.
-        
+### this should be done in cubist2X now.        
+#         if(is.integer(modelXIn) | is.numeric(modelXIn) | class(modelXIn) == "cubist"){
+#           XSplineCheck <- bs(x = c(0.1 , 0.2) , knots = intKnots , degree = 3 , intercept = F , Boundary.knots = bdryKnots)
+# #          namesX <- c(namesX , rep('dSpline' , ncol(XSplineCheck))) 
+#           namesX <- c(namesX , paste0('dSpline.' , seq(ncol(XSplineCheck)))) 
+#           p <- length(namesX)
+#         }else{} # if came in as character vector, this has already been done.
+#         
         if (modelType == 'mlr'){
           iRemove <- which((namesX == 'd') | (namesX == 'd2') | (namesX == 'd3'))    
           if(length(iRemove) > 0){
@@ -149,7 +153,7 @@ makeXvX <- function(covData = NA , dI , modelX , allKnotsd = c() , iU = NA , nDi
     }    
 
     if(length(allKnotsd) > 0){
-      ipSpline <- which(namesX == 'dSpline')
+      ipSpline <- which(substr(namesX , 1 , 8) == 'dSpline.')
     }else{}
     
     if(is.null(XLims)){
@@ -182,7 +186,11 @@ makeXvX <- function(covData = NA , dI , modelX , allKnotsd = c() , iU = NA , nDi
         idInt <- which(substr(namesX , 1 , 2) == 'd.')    
         id2Int <- which(substr(namesX , 1 , 3) == 'd2.')    
         id3Int <- which(substr(namesX , 1 , 3) == 'd3.')    
-        idSpline <- which(namesX == 'dSpline')    
+        idSpline <- which(substr(namesX , 1 , 8) == 'dSpline.')    
+
+### get which columns have any kind of dependence on depth...
+        idAny <- c(id , id2 , id3 , idInt , id2Int , id3Int , idSpline)
+        iNod <- setdiff(seq(p) , idAny)
 
         namesX_d <- namesX
         namesX_d[c(id,id2,id3,idSpline)] <- 'const'
@@ -214,41 +222,93 @@ makeXvX <- function(covData = NA , dI , modelX , allKnotsd = c() , iU = NA , nDi
           }
         }
 
-        for(i in 1:n){
-          XTmp <- kronecker(matrix(X_d[i,] , nrow = 1) , matrix(1 , nDiscPts , 1))
-          if(nDiscPts > 1){
+        if(lnTfmdData){ 
+          for(i in 1:n){
+            XTmp <- kronecker(matrix(X_d[i,] , nrow = 1) , matrix(1 , nDiscPts , 1))
+            if(nDiscPts > 1){
               dDiscPts <- seq(dI[i,1] , dI[i,2] , (dI[i,2] - dI[i,1]) / (nDiscPts - 1))
-          }else{
+            }else{
               dDiscPts <- 0.5 * (dI[i,1] + dI[i,2])
-          }
-          if(length(id) > 0){ XTmp[,id] <- XTmp[,id] * dDiscPts }else{}
-          if(length(id2) > 0){ XTmp[,id2] <- XTmp[,id2] * (dDiscPts ^ 2) }else{}
-          if(length(id3) > 0){ XTmp[,id3] <- XTmp[,id3] * (dDiscPts ^ 3) }else{}
-          if(length(idInt) > 0){ XTmp[,idInt] <- XTmp[,idInt] * kronecker(dDiscPts , matrix(1 , 1 , length(idInt))) }else{}
-          if(length(id2Int) > 0){ XTmp[,id2Int] <- XTmp[,id2Int] * kronecker(dDiscPts ^ 2 , matrix(1 , 1 , length(id2Int))) }else{}
-          if(length(id3Int) > 0){ XTmp[,id3Int] <- XTmp[,id3Int] * kronecker(dDiscPts ^ 3 , matrix(1 , 1 , length(id3Int))) }else{}
-          if(length(idSpline) > 0){ 
-            XTmp[,idSpline] <- XTmp[,idSpline] * bs(x = dDiscPts , knots = intKnots , degree = 3 , intercept = F , Boundary.knots = bdryKnots) 
-          }else{}
+            }
+            if(length(id) > 0){ XTmp[,id] <- XTmp[,id] * dDiscPts }else{}
+            if(length(id2) > 0){ XTmp[,id2] <- XTmp[,id2] * (dDiscPts ^ 2) }else{}
+            if(length(id3) > 0){ XTmp[,id3] <- XTmp[,id3] * (dDiscPts ^ 3) }else{}
+            if(length(idInt) > 0){ XTmp[,idInt] <- XTmp[,idInt] * kronecker(dDiscPts , matrix(1 , 1 , length(idInt))) }else{}
+            if(length(id2Int) > 0){ XTmp[,id2Int] <- XTmp[,id2Int] * kronecker(dDiscPts ^ 2 , matrix(1 , 1 , length(id2Int))) }else{}
+            if(length(id3Int) > 0){ XTmp[,id3Int] <- XTmp[,id3Int] * kronecker(dDiscPts ^ 3 , matrix(1 , 1 , length(id3Int))) }else{}
+            if(length(idSpline) > 0){ 
+              XTmp[,idSpline] <- XTmp[,idSpline] * bs(x = dDiscPts , knots = intKnots , degree = 3 , intercept = F , Boundary.knots = bdryKnots) 
+            }else{}
 
-          if(setXLims){
-            XLims[1,] <- apply(rbind(XTmp , XLims[1,]) , 2 , minNonZero)
-            XLims[2,] <- apply(rbind(XTmp , XLims[2,]) , 2 , maxNonZero)
-          }else{
+            if(setXLims){
+              XLims[1,] <- apply(rbind(XTmp , XLims[1,]) , 2 , minNonZero)
+              XLims[2,] <- apply(rbind(XTmp , XLims[2,]) , 2 , maxNonZero)
+            }else{
 ### apply the given constraints to the point-support design matrix...
-            XTmp <- matrix(mapply(replaceLT , x = t(XTmp) , llim = XLims[1,] , replaceZeros = FALSE , SIMPLIFY = TRUE) , nrow = nrow(XTmp) , ncol = ncol(XTmp) , byrow = TRUE)
-            XTmp <- matrix(mapply(replaceGT , x = t(XTmp) , ulim = XLims[2,] , replaceZeros = FALSE , SIMPLIFY = TRUE) , nrow = nrow(XTmp) , ncol = ncol(XTmp) , byrow = TRUE)
-          }
+              XTmp <- matrix(mapply(replaceLT , x = t(XTmp) , llim = XLims[1,] , replaceZeros = FALSE , SIMPLIFY = TRUE) , nrow = nrow(XTmp) , ncol = ncol(XTmp) , byrow = TRUE)
+              XTmp <- matrix(mapply(replaceGT , x = t(XTmp) , ulim = XLims[2,] , replaceZeros = FALSE , SIMPLIFY = TRUE) , nrow = nrow(XTmp) , ncol = ncol(XTmp) , byrow = TRUE)
+            }
 
-          X[i,] <- colMeans(XTmp)
+            X[i,] <- colMeans(XTmp)
 
-          if(lnTfmdData){ 
             iThis <- seq((i - 1) * p + 1 , i * p)
             vXU[iThis,] <- var(XTmp)
+          }
+        
+        }else{
+### quicker version if vXU not rqd, with slight difference to loop version in setting and applying limits...
+          X[,iNod] <- X_d[,iNod,drop=FALSE]
+          id1Tmp <- c(id , idInt)
+          if(length(id1Tmp) > 0){
+            EdTmp <- rowMeans(dI)
+            X[,id1Tmp] <- X_d[,id1Tmp,drop=FALSE] * matrix(EdTmp , N , length(id1Tmp))
           }else{}
-          
-        }
+          id2Tmp <- c(id2 , id2Int)
+          if(length(id2Tmp) > 0){
+            Ed2Tmp <- dI[,1]^2 + dI[,1] * dI[,2] + dI[,2]^2
+            X[,id2Tmp] <- X_d[,id2Tmp,drop=FALSE] * matrix(Ed2Tmp , N , length(id2Tmp))
+          }else{}
+          id3Tmp <- c(id3 , id3Int)
+          if(length(id3Tmp) > 0){
+            Ed3Tmp <- dI[,1]^3 + (dI[,1]^2)*dI[,2] + dI[,1]*(dI[,2]^2) + dI[,2]^3
+            X[,id3Tmp] <- X_d[,id3Tmp,drop=FALSE] * matrix(Ed3Tmp , N , length(id3Tmp))
+          }else{}
 
+          id123Tmp <- c(id1Tmp , id2Tmp , id3Tmp)
+          if(length(id123Tmp) > 0){
+            if(setXLims){
+### slight difference to loop version, lims are now calcd from the averaged values.          
+              XLims[1,id123Tmp] <- apply(X[,i123Tmp,drop=FALSE] , 2 , min)
+              XLims[2,id123Tmp] <- apply(X[,i123Tmp,drop=FALSE] , 2 , max)
+            }else{
+### slight difference, apply the given constraints to the interval-support design matrix...
+              X[,id123Tmp] <- matrix(mapply(replaceLT , x = t(X[,id123Tmp]) , llim = XLims[1,] , replaceZeros = FALSE , SIMPLIFY = TRUE) , nrow = nrow(X[,id123Tmp]) , ncol = ncol(X[,id123Tmp]) , byrow = TRUE)
+              X[,id123Tmp] <- matrix(mapply(replaceGT , x = t(X[,id123Tmp]) , ulim = XLims[2,] , replaceZeros = FALSE , SIMPLIFY = TRUE) , nrow = nrow(X[,id123Tmp]) , ncol = ncol(X[,id123Tmp]) , byrow = TRUE)
+            }
+          }else{}
+            
+          if(length(idSpline) > 0){ 
+            for(i in 1:n){
+              if(nDiscPts > 1){
+                dDiscPts <- seq(dI[i,1] , dI[i,2] , (dI[i,2] - dI[i,1]) / (nDiscPts - 1))
+              }else{
+                dDiscPts <- 0.5 * (dI[i,1] + dI[i,2])
+              }
+              XTmp <- bs(x = dDiscPts , knots = intKnots , degree = 3 , intercept = F , Boundary.knots = bdryKnots) 
+              if(setXLims){
+                XLims[1,idSpline] <- apply(rbind(XTmp , XLims[1,idSpline]) , 2 , minNonZero)
+                XLims[2,idSpline] <- apply(rbind(XTmp , XLims[2,idSpline]) , 2 , maxNonZero)
+              }else{
+### apply the given constraints to the point-support design matrix...
+                XTmp <- matrix(mapply(replaceLT , x = t(XTmp) , llim = XLims[1,idSpline] , replaceZeros = FALSE , SIMPLIFY = TRUE) , nrow = nrow(XTmp) , ncol = ncol(XTmp) , byrow = TRUE)
+                XTmp <- matrix(mapply(replaceGT , x = t(XTmp) , ulim = XLims[2,idSpline] , replaceZeros = FALSE , SIMPLIFY = TRUE) , nrow = nrow(XTmp) , ncol = ncol(XTmp) , byrow = TRUE)
+              }
+              X[i,idSpline] <- colMeans(XTmp)
+            }
+          }else{}
+        
+        } # end of the if lnTfmdData else bit.
+        
 ###############################################
 ### or if we have a cubist model...
 ###############################################
@@ -302,12 +362,14 @@ makeXvX <- function(covData = NA , dI , modelX , allKnotsd = c() , iU = NA , nDi
           covDataThis <- covData[iRep,,drop=FALSE]
           covDataThis$dIMidPts <- dDiscPts
           
-          XTmp <- cubist2X(cubistModel = modelX , dataFit = covDataThis , incdSpline = incdSpline)
+          XTmp <- cubist2X(cubistModel = modelX , dataFit = covDataThis , allKnotsd = allKnotsd)
           XTmp <- XTmp$X
 
-          if(length(allKnotsd) > 0){
-              XTmp <- cbind(XTmp , bs(x = dDiscPts , knots = intKnots , degree = 3 , intercept = F , Boundary.knots = c(allKnotsd[1] , allKnotsd[length(allKnotsd)])) )
-          }else{}
+          # XTmp <- cubist2X(cubistModel = modelX , dataFit = covDataThis , incdSpline = incdSpline)
+          # XTmp <- XTmp$X
+          # if(length(allKnotsd) > 0){
+          #     XTmp <- cbind(XTmp , bs(x = dDiscPts , knots = intKnots , degree = 3 , intercept = F , Boundary.knots = c(allKnotsd[1] , allKnotsd[length(allKnotsd)])) )
+          # }else{}
 
           if(setXLims){
             XLims[1,] <- apply(rbind(XTmp , XLims[1,]) , 2 , minNonZero)
@@ -337,7 +399,6 @@ makeXvX <- function(covData = NA , dI , modelX , allKnotsd = c() , iU = NA , nDi
 ### all variables within Cubist rules are continuous, so...
         pX <- 1 + integer(p)
 
-
     }else{}
 
 
@@ -348,7 +409,7 @@ makeXvX <- function(covData = NA , dI , modelX , allKnotsd = c() , iU = NA , nDi
       if(is.na(iU[1])){
 ### use names to determine which will vary within sample support
         if(modelType == 'mlr'){
-          iU <- which(namesX == 'd' | namesX == 'd2' | substr(namesX , 1 , 2) == 'd.' | substr(namesX , 1 , 3) == 'd2.' | substr(namesX , 1 , 3) == 'd3.' | namesX == 'dSpline') 
+          iU <- which(namesX == 'd' | namesX == 'd2' | substr(namesX , 1 , 2) == 'd.' | substr(namesX , 1 , 3) == 'd2.' | substr(namesX , 1 , 3) == 'd3.' | substr(namesX , 1 , 8) == 'dSpline.') 
           iK <- setdiff(seq(p) , iU)
           
         }else if(modelType == 'cubist'){
