@@ -634,7 +634,7 @@ plotProfilesIAK3D <- function(namePlot = 'profilePlots.pdf' , x , dI , z , xPred
           iThis <- which((x[,1] == xPred[iProfThis,1]) & (x[,2] == xPred[iProfThis,2]))       
           for (j in 1:length(iThis)){
             lines(z[iThis[j]] * c(1,1) , -dI[iThis[j],] , lty = 1 , lwd = 3 , col = 'black')
-            if(!is.na(zhatxv[1])[1]){
+            if((length(zhatxv) >= iThis[j]) && (!is.na(zhatxv[iThis[j]]))){
               lines(zhatxv[iThis[j]] * c(1,1) , -dI[iThis[j],] , lty = 1 , lwd = 2 , col = 'cyan')
               lines(pi90Lxv[iThis[j]] * c(1,1) , -dI[iThis[j],] , lty = 2 , lwd = 1 , col = 'cyan')
               lines(pi90Uxv[iThis[j]] * c(1,1) , -dI[iThis[j],] , lty = 2 , lwd = 1 , col = 'cyan')
@@ -647,4 +647,85 @@ plotProfilesIAK3D <- function(namePlot = 'profilePlots.pdf' , x , dI , z , xPred
     dev.off()
 
     return()
+}
+
+#############################################################
+### calculate lins CCC...
+#############################################################
+linsCCC <- function(o , p , na.rm = FALSE){
+  
+  if(na.rm){
+    iNA <- which(is.na(o) | is.na(p))
+    
+    if(length(iNA) > 0){
+      o <- o[-iNA]
+      p <- p[-iNA]
+    }else{}
+  }else{}
+  
+  mp <- mean(p)
+  mo <- mean(o)
+  sp <- mean((p - mp) ^ 2)
+  so <- mean((o - mo) ^ 2)
+  spo <- mean((p-mp) * (o - mo))
+  
+  lCCC <- 2 * spo / (sp + so + (mp - mo) ^ 2)
+  
+  return(lCCC)
+}
+
+##########################################
+### calc val stats...
+##########################################
+calcValStats <- function(zVal , dIVal , zkVal , vkVal , layerMidPts = c(0.025 , 0.1 , 0.225 , 0.45 , 0.8 , 1.5) , printValStats = TRUE){
+  
+  
+  dTmp <- xyDist(layerMidPts , rowMeans(dIVal))
+  ilayer <- apply(dTmp , 2 , which.min)
+
+  inPI <- numeric(nrow(dIVal))
+  inPI[which((zVal >= (zkVal - 1.64 * sqrt(vkVal))) & (zVal <= (zkVal + 1.64 * sqrt(vkVal))))] <- 1
+  
+  valStatsAllLayers <- data.frame('layerMidPts' = layerMidPts , 'bias' = NA , 'rmse' = NA ,  'R2' = NA , 'ccc' = NA , 'pInPI90' = NA)
+  valStatsTot <- data.frame('bias' = NA , 'rmse' = NA ,  'ccc' = NA , 'pInP90' = NA)
+  for(i in 1:length(layerMidPts)){
+    iThis <- which(ilayer == i & rowMeans(dIVal) <= 2) # constrain so that v deep val data not incd
+  
+    zkThis <- zkVal[iThis]
+    zThis <- zVal[iThis]
+  
+    valStatsAllLayers$bias[i] <- mean(zkThis - zThis)
+    valStatsAllLayers$rmse[i] <- sqrt(mean((zkThis - zThis) ^ 2))
+    valStatsAllLayers$R2[i] <- 1 - sum((zkThis - zThis) ^ 2) / sum((mean(zThis) - zThis) ^ 2)
+    valStatsAllLayers$ccc[i] <- linsCCC(zkThis , zThis)
+    valStatsAllLayers$pInPI90[i] <- mean(inPI[iThis]) 
+  }
+
+  valStatsTot$bias <- mean(zkVal - zVal)
+  valStatsTot$rmse <- sqrt(mean((zkVal - zVal) ^ 2))
+  valStatsTot$R2 <- 1 - sum((zkVal - zVal) ^ 2) / sum((mean(zVal) - zVal) ^ 2)
+  valStatsTot$ccc <- linsCCC(zkVal , zVal)
+  valStatsTot$pInPI90 <- mean(inPI) 
+
+##############################
+### print out val stats    
+##############################
+  if(printValStats){
+    print('Overall prob in PI90:')
+    print(valStatsTot$pInPI90)
+    print('Prob in PI90 for each of the 6 layers:')
+    print(valStatsAllLayers$pInPI90)
+  
+    print('Overall RMSE:')
+    print(valStatsAllLayers$rmse)
+    print('RMSE for each of the 6 layers:')
+    print(valStatsTot$rmse)
+  
+    print('Overall CCC:')
+    print(valStatsAllLayers$ccc)
+    print('CCC for each of the 6 layers:')
+    print(valStatsTot$ccc)
+  }
+
+  return(list('valStatsAllLayers' = valStatsAllLayers , 'valStatsTot' = valStatsTot))
 }
