@@ -466,16 +466,43 @@ covCloud <- function(x , z){
 }
 
 ####################################################################
+### distance function...
+####################################################################
+xyDist <- function(x , y){
+
+  if(is.null(dim(x)) & is.null(dim(y))){
+    x <- matrix(x , ncol = 1)
+    y <- matrix(y , ncol = 1)
+  }else{}
+
+  if(!is.element(class(x) , c('matrix' , 'Matrix' , 'dgeMatrix' , 'data.frame'))){ stop('Error - xyDist function programmed for matrices or data.frames!') }
+  if(!is.element(class(y) , c('matrix' , 'Matrix' , 'dgeMatrix' , 'data.frame'))){ stop('Error - xyDist function programmed for matrices or data.frames!') }
+
+  nd <- ncol(x)
+  if(ncol(y) != nd){ stop('Error - both x and y must have the same number of columns!') }else{}
+
+  nx <- nrow(x)
+  ny <- nrow(y)
+  
+  D <- matrix(0 , nx , ny)
+  for(id in 1:nd){
+    D <- D + (matrix(x[,id] , nx , ny) - matrix(y[,id] , nx , ny , byrow = TRUE)) ^ 2
+  }
+  D <- sqrt(D)
+  
+  return(D)
+}
+
+####################################################################
 ### for plotting the covariance function (as variogram) for given depths...
 ####################################################################
-plotCovx <- function(lmm.fit , hx , dIPlot , addExpmntlV = TRUE , hzntlUnits = 'km' , ylim = NULL){
+plotCovx <- function(lmm.fit , hx , dIPlot , addExpmntlV = TRUE , hzntlUnits = 'km' , ylim = NULL , roundTo = 0.10){
 
   if (hx[1] != 0){ stop('For the plotCov function, enter hx with first element 0!') }else{}
   hxBins <- cbind(hx[-length(hx)] , hx[-1])
   hxModelPlot <- seq(0 , max(hx) , max(hx) / 500)
 
-### round dIFit to nearest 10 cm...
-  roundTo <- 0.10
+### round dIFit to nearest roundTo cm...
   dIFitRnd <- lmm.fit$dI
   dIFitRnd[,1] <- round(dIFitRnd[,1] / roundTo) * roundTo
   dIFitRnd[,2] <- round(dIFitRnd[,2] / roundTo) * roundTo
@@ -561,7 +588,7 @@ plotCord <- function(lmm.fit , hdPlot , vrtclUnits = 'm'){
 ### a color plot to show modelled covariances between different depth intervals (above x=y)
 ### and empirical covariances between (rounded) depth intervals (below x=y)
 ############################################################################
-getCovs4Plot <- function(lmm.fit , dIPlot){
+getCovs4Plot <- function(lmm.fit , dIPlot , roundTo = 0.10){
   dIPlotMdPts <- rowMeans(dIPlot)
   
   setupMats <- setupIAK3D(x = cbind(0 , rep(0 , nrow(dIPlot))) , dI = dIPlot , nDscPts = 0)
@@ -569,8 +596,7 @@ getCovs4Plot <- function(lmm.fit , dIPlot){
               sdfdType_cd1 = lmm.fit$sdfdType_cd1 , sdfdType_cxd0 = lmm.fit$sdfdType_cxd0 , sdfdType_cxd1 = lmm.fit$sdfdType_cxd1 , cmeOpt = lmm.fit$cmeOpt , setupMats = setupMats)
   modelC <- tmp$C
   
-### round dIFit to nearest 10 cm...
-  roundTo <- 0.10
+### round dIFit to nearest roundTo cm...
   dIFitRnd <- lmm.fit$dI
   dIFitRnd[,1] <- round(dIFitRnd[,1] / roundTo) * roundTo
   dIFitRnd[,2] <- round(dIFitRnd[,2] / roundTo) * roundTo
@@ -604,9 +630,9 @@ getCovs4Plot <- function(lmm.fit , dIPlot){
   return(list('empiricalC' = empiricalC , 'modelC' = modelC , 'dfCovariances' = dfCovariances))
 }
 
-plotCovd <- function(lmm.fit , dIPlot , vrtclUnits = 'm' , breaksVec = NULL , addScalebar = FALSE){
+plotCovd <- function(lmm.fit , dIPlot , vrtclUnits = 'm' , breaksVec = NULL , addScalebar = FALSE , roundTo = 0.10){
 
-  tmp <- getCovs4Plot(lmm.fit = lmm.fit , dIPlot = dIPlot)
+  tmp <- getCovs4Plot(lmm.fit = lmm.fit , dIPlot = dIPlot , roundTo = roundTo)
   empiricalC <- tmp$empiricalC 
   modelC <- tmp$modelC 
   dfCovariances <- tmp$dfCovariances
