@@ -39,6 +39,7 @@ fitIAK3D <- function(x , dI , z , covs , modelX , modelx = 'matern' , nud = 0.5 
       print('Attention! Some NAs found in data ; removing them.')
       x <- x[-iNA,drop = FALSE]
       dI <- dI[-iNA,drop = FALSE]
+      covs <- covs[-iNA,drop = FALSE]
       z <- z[iNA]
     }else{}
 
@@ -46,6 +47,7 @@ fitIAK3D <- function(x , dI , z , covs , modelX , modelx = 'matern' , nud = 0.5 
 ### round depths to nearest cm (assuming depths were inputted in m)
 #########################################################
     dI <- round(dI , digits = 2)
+    if(min(dI[,2] - dI[,1]) <= 0){ stop('Error - some data entered with lower depth less than or equal to upper depth. Check profiles!') }else{}
     
 ################################################
 ### if compLikMats is not null, fit assuming additive on input scale (ie put lnTfmdData = FALSE)
@@ -103,6 +105,20 @@ fitIAK3D <- function(x , dI , z , covs , modelX , modelx = 'matern' , nud = 0.5 
     namesX <- tmp$namesX
     XLims <- tmp$XLims
 
+############################################################
+### check if X has a lot of zeros, and if so, make it sparse...
+############################################################
+#    propnX0 <- sum(X == 0) / (ncol(X) * nrow(X))
+#    if(propnX0 > 0.8){
+#      X <- Matrix(X)
+#    }else{}
+#    if(length(vXU) > 1){
+#      propnvXU0 <- sum(vXU == 0) / (ncol(vXU) * nrow(vXU))
+#      if(propnvXU0 > 0.8){
+#        vXU <- Matrix(vXU)
+#      }else{}
+#    }else{} 
+#
 ######################################################
 ### setup random-effects design matrices...
 ######################################################
@@ -169,11 +185,7 @@ fitIAK3D <- function(x , dI , z , covs , modelX , modelx = 'matern' , nud = 0.5 
     if(is.null(lmmFit$fitRange)){  
       fitRange <- setFitRangeIAK3D(pars = parsInit , modelx = modelx , 
             sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , 
-            cmeOpt = cmeOpt , prodSum = prodSum)            
-
-      fitRangeStat <- setFitRangeIAK3D(pars = parsInit , modelx = modelx , 
-            sdfdType_cd1 = 0 , sdfdType_cxd0 = 0 , sdfdType_cxd1 = 0 , 
-            cmeOpt = cmeOpt , prodSum = prodSum)            
+            cmeOpt = cmeOpt , prodSum = prodSum , lnTfmdData = lnTfmdData)            
     }else{
       fitRange <- lmmFit$fitRange
     }
@@ -286,7 +298,7 @@ fitIAK3D <- function(x , dI , z , covs , modelX , modelx = 'matern' , nud = 0.5 
       nxPred <- dim(xPred)[[1]]
         
 ### call the predict function...
-      tmp <- predictIAK3D(xMap = rbind(xPred , xPredDistant) , dIMap = dIPred , covsMap = rbind(covsPred , covsPredDistant) , lmmFit = lmmFit , rqrBTfmdPreds = rqrBTfmdPreds , constrainX4Pred = constrainX4Pred)
+      tmp <- predictIAK3D(xMap = rbind(xPred , xPredDistant) , dIMap = dIPred , covsMap = rbind(covsPred , covsPredDistant) , lmmFit = lmmFit , rqrBTfmdPreds = rqrBTfmdPreds , constrainX4Pred = FALSE)
 
       zPred <- tmp$zMap[,1:nxPred]
       vPred <- tmp$vMap[,1:nxPred]
@@ -341,7 +353,7 @@ nllIAK3D <- function(pars , z , X , vXU , iU , modelx , nud ,
       ptm <- proc.time()
     }else{}
 
-    if(exists("parsTrace4Optim") & (!forCompLik)){
+    if(exists("parsTrace4Optim") && (!forCompLik)){
     
       if(is.null(ncol(parsTrace4Optim)) || (ncol(parsTrace4Optim) == length(pars))){
 
@@ -512,7 +524,7 @@ nllIAK3D <- function(pars , z , X , vXU , iU , modelx , nud ,
       print(proc.time() - ptm)
     }else{}
     
-    if(exists("parsTrace4Optim") & (length(nllTrace4Optim) > 0) & (!forCompLik)){
+    if(exists("parsTrace4Optim") && (length(nllTrace4Optim) > 0) && (!forCompLik)){
       nllTmp <- nllTrace4Optim # update the final value, now fn has been successful.
       if(nll != badnll){
         nllTmp[length(nllTmp)] <- nll
@@ -545,11 +557,13 @@ setCIAK3D <- function(parsBTfmd , modelx ,
 ### else full cov mtx for all of z rqd.
 
 ### defined for the unique locations...
-    phix0 <- 1 * (setupMats$Dx == 0)
+    ijTmp <- which(setupMats$Dx == 0 , arr.ind = TRUE)
+    phix0 <- sparseMatrix(i = ijTmp[,1] , j = ijTmp[,2] , x = 1)
+    
     if (modelx == 'matern'){
         phix1 <- maternCov(setupMats$Dx , c(1 , parsBTfmd$ax , parsBTfmd$nux))
     }else if(modelx == 'nugget'){
-        phix1 <- matrix(0 , dim(setupMats$Dx)[[1]] , dim(setupMats$Dx)[[1]])
+        phix1 <- 0
     }else{
         stop('Not ready!')
     }
@@ -583,28 +597,42 @@ setCIAK3D <- function(parsBTfmd , modelx ,
         avVard_cxd0 <- tmp$avVarVec
     }
 
-    if(sdfdType_cxd1 == 0){
+    if(modelx == 'nugget'){
+      phid_cxd1 <- 0
+      avVard_cxd1 <- 0
+    }else{
+      if(sdfdType_cxd1 == 0){
         phid_cxd1 <- phidStat
         avVard_cxd1 <- avVardStat
-    }else{
+      }else{
         tmp <- iaCovMatern(setupMats$dIU , parsBTfmd$ad , parsBTfmd$nud , parsBTfmd$sdfdPars_cxd1 , sdfdType_cxd1 , setupMats$dIUabcd , setupMats$dIUiUElements)
         phid_cxd1 <- tmp$avCovMtx
         avVard_cxd1 <- tmp$avVarVec
+      }
     }
     
     parsOK <- T
     if((max(is.na(phid_cd1)) == 1) | (max(is.na(phid_cxd0)) == 1) | (max(is.na(phid_cxd1)) == 1)){ parsOK <- F } else{}
 
     if(parsOK){
-        Kphix0K <- setupMats$Kx %*% phix0 %*% t(setupMats$Kx)
-        Cx0 <- parsBTfmd$cx0 * Kphix0K 
-        Kphix1K <- setupMats$Kx %*% phix1 %*% t(setupMats$Kx)
-        Cx1 <- parsBTfmd$cx1 * Kphix1K 
-
         if(length(iStat) > 0){
+        
+          if(modelx == 'nugget' & sdfdType_cd1 == -9){
+### wasteful to allocate full matrix here, so just do prof blocks...   
+#            KphidKStat <- (setupMats$Kx %*% t(setupMats$Kx)) * (setupMats$Kd %*% phidStat %*% t(setupMats$Kd))
+            tmp <- diagBlocksKdMKd(setupMats = setupMats , M = list(phidStat , phid_cxd0))
+            KphidKStat <- tmp[[1]]
+            Cxd0 <- parsBTfmd$cxd0 * tmp[[2]]
+
+          }else{        
             KphidKStat <- setupMats$Kd %*% phidStat %*% t(setupMats$Kd)	
-        }else{}
-		
+            Cxd0 <- parsBTfmd$cxd0 * diagBlocksKdMKd(setupMats = setupMats , M = phid_cxd0)
+          }
+        }else{
+          Cxd0 <- parsBTfmd$cxd0 * diagBlocksKdMKd(setupMats = setupMats , M = phid_cxd0)
+        }
+
+
         if(sdfdType_cd1 == 0){
             Cd <- parsBTfmd$cd1 * KphidKStat
         }else if(sdfdType_cd1 == -9){
@@ -612,19 +640,26 @@ setCIAK3D <- function(parsBTfmd , modelx ,
         }else{
             Cd <- parsBTfmd$cd1 * (setupMats$Kd %*% phid_cd1 %*% t(setupMats$Kd))
         }
-        if(sdfdType_cxd0 == 0){
-            Cxd0 <- parsBTfmd$cxd0 * Kphix0K * KphidKStat  
+		
+        Kphix0K <- setupMats$Kx %*% phix0 %*% t(setupMats$Kx)
+        Cx0 <- parsBTfmd$cx0 * Kphix0K 
+        
+        if(modelx == 'nugget'){
+          Cx1 <- Cxd1 <- 0
         }else{
-            Cxd0 <- parsBTfmd$cxd0 * Kphix0K * (setupMats$Kd %*% phid_cxd0 %*% t(setupMats$Kd))
-        }
-        if(sdfdType_cxd1 == 0){
+          Kphix1K <- setupMats$Kx %*% phix1 %*% t(setupMats$Kx)
+          Cx1 <- parsBTfmd$cx1 * Kphix1K 
+          if(sdfdType_cxd1 == 0){
             Cxd1 <- parsBTfmd$cxd1 * Kphix1K * KphidKStat 
-        }else{
+          }else{
             Cxd1 <- parsBTfmd$cxd1 * Kphix1K * (setupMats$Kd %*% phid_cxd1 %*% t(setupMats$Kd))
+          }
         }
 
         n <- nrow(setupMats$Kx)
-        C <- Cx0 + Cx1 + Cd + Cxd0 + Cxd1 + parsBTfmd$cme * diag(n)
+
+        C <- Cx0 + Cx1 + Cd + Cxd0 + Cxd1
+        diag(C) <- diag(C) + parsBTfmd$cme
 
         sigma2Vec <- parsBTfmd$cx0 + parsBTfmd$cx1 + parsBTfmd$cd1 * avVard_cd1 + parsBTfmd$cxd0 * avVard_cxd0 + parsBTfmd$cxd1 * avVard_cxd1 + parsBTfmd$cme
         sigma2Vec <- setupMats$Kd %*%sigma2Vec 
@@ -653,6 +688,43 @@ setmuIAK3D <- function(X , vXU , iU , beta , diagC , sigma2Vec){
 
     return(mu)
 }
+
+######################################################################
+### function for calculating (Kx %*% t(Kx)) * (Kd %*% M %*% t(Kd)) 
+### where one entry of 1 in each row of Kx and in each row of Kd
+### ie only the diagonal blocks of (Kd %*% M %*% t(Kd)) rqd
+### useful for nugget.
+######################################################################
+diagBlocksKdMKd <- function(setupMats , M){
+  newcoladds <- as.numeric(setupMats$Kx %*% seq(0,ncol(setupMats$Kx)-1) * ncol(setupMats$Kd))
+  ijx <- summary(setupMats$Kd)
+  ijx <- ijx[order(ijx$i),]
+  ijx$j <- ijx$j + newcoladds
+  KdB <- sparseMatrix(i = ijx$i , j = ijx$j , x = ijx$x , dims = c(nrow(setupMats$Kd) , ncol(setupMats$Kd) * ncol(setupMats$Kx)))
+
+### M is dense matrix, as is Kd %*% M...
+### this bit could be improved so that sorting isn't needed, and so that M could be a list of similarly sized matrices.
+  newcoladds <- rep(setupMats$Kx %*% seq(0,ncol(setupMats$Kx)-1) * ncol(setupMats$Kd) , each = ncol(setupMats$Kd))
+  
+  if(is.list(M)){
+
+    iTmp <- rep(seq(nrow(setupMats$Kd)) , each = ncol(setupMats$Kd)) 
+    jTmp <- rep(seq(ncol(setupMats$Kd)), nrow(setupMats$Kd)) + newcoladds 
+                 
+    KdMKd <- list()
+    for(i in 1:length(M)){
+      KdMKdTmp <- sparseMatrix(i = iTmp , j = jTmp , x = as.numeric(t(setupMats$Kd %*% M[[i]])) , dims = c(nrow(setupMats$Kd) , ncol(setupMats$Kd) * ncol(setupMats$Kx)))
+      KdMKd[[i]] <- KdMKdTmp %*% t(KdB)
+    }  
+  }else{
+    KdMKd <- sparseMatrix(i = rep(seq(nrow(setupMats$Kd)) , each = ncol(setupMats$Kd)) , 
+                          j = rep(seq(ncol(setupMats$Kd)), nrow(setupMats$Kd)) + newcoladds , 
+                          x = as.numeric(t(setupMats$Kd %*% M)) , dims = c(nrow(setupMats$Kd) , ncol(setupMats$Kd) * ncol(setupMats$Kx)))
+    KdMKd <- KdMKd %*% t(KdB)
+  }
+  return(KdMKd)
+}
+	
 	
 calcbetavXbeta <- function(vX , beta){
 #################################################
