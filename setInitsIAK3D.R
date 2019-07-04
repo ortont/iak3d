@@ -80,24 +80,29 @@ setInitsIAK3D <- function(x , dI , z , X , vXU , iU , modelx , nud ,
       varResInit <- var(as.numeric(resInit))
       
 ###############################################
-### first, fit model to profile-average data... (I think by this I meant averages for each depth in profile)
+### first, fit model to profile-average data, crudely averaged at 5cm-rounded midpoints... (I think by this I meant averages for each depth in profile)
 ### this should give inits for depth-wise sum component, cd1
 ###############################################
       zTmp <- lndetANDinvCb(t(allKd) %*% allKd , t(allKd) %*% resInit)$invCb
-
       dIUTmp <- rowMeans(alldIU)
-      dIUTmp <- dIUTmp + 0.001 * rnorm(length(dIUTmp)) # jitter
-      
+      dIUTmp <- round(dIUTmp * 20) / 20
+      dIUTmpU <- unique(dIUTmp)
+      zTmpU <- NA * numeric(length(dIUTmpU))
+      for(i in 1:length(dIUTmpU)){ 
+        iThis <- which(dIUTmp == dIUTmpU[i])
+        zTmpU[i] <- mean(zTmp[iThis])
+      }
 ### initially, make bounds a bit more estrictive than usual to make sure not starting at extremes. 
       minaTmp <- parBnds$adBnds[1] + 0.2 * (parBnds$adBnds[2] - parBnds$adBnds[1])
       maxaTmp <- parBnds$adBnds[2] - 0.4 * (parBnds$adBnds[2] - parBnds$adBnds[1])
 
-      DTmp <- xyDist(dIUTmp , dIUTmp)
+      DTmp <- xyDist(dIUTmpU , dIUTmpU)
 
-      tmp <- optimIt(par = c(0.5 , 0.5 * (minaTmp + maxaTmp)), fn = fLMM2 , methodOptim = c('Nelder-Mead') , c = dIUTmp , z = zTmp , X = matrix(1 , length(zTmp) , 1) , D = DTmp , 
+      tmp <- optimIt(par = c(0.5 , 0.5 * (minaTmp + maxaTmp)), fn = fLMM2 , methodOptim = c('Nelder-Mead') , c = dIUTmpU , z = zTmpU , X = matrix(1 , length(zTmpU) , 1) , D = DTmp , 
           covModel = paste0('matern' , nud) , nSpatStructs = 1 , returnAll = F , optionML = F , verbose = F , forCompLik = FALSE , mina = minaTmp , maxa = maxaTmp)
         
       ad <- tmp$par[2]
+
 ###############################################
 ### now, fit spatial models to three depths:, A, B , C...
 ### use midpoints to assign, max of one datum for each depth per location.
@@ -159,53 +164,58 @@ setInitsIAK3D <- function(x , dI , z , X , vXU , iU , modelx , nud ,
       zTmpC <- resInit[iC]
       dC <- mean(dMidpntsC)
 
-      minaTmp <- parBnds$ax[1] + 0.25 * (parBnds$ax[2] - parBnds$ax[1])
-      maxaTmp <- parBnds$ax[1] + 0.75 * (parBnds$ax[2] - parBnds$ax[1])
+      if(modelx == 'nugget'){
+        covInitxdA <- list('c0' = var(zTmpA) , 'c1' = 0 , 'a' = NA , 'nu' = NA)
+        covInitxdB <- list('c0' = var(zTmpB) , 'c1' = 0 , 'a' = NA , 'nu' = NA)
+        covInitxdC <- list('c0' = var(zTmpC) , 'c1' = 0 , 'a' = NA , 'nu' = NA)
+      }else{
+        minaTmp <- parBnds$ax[1] + 0.25 * (parBnds$ax[2] - parBnds$ax[1])
+        maxaTmp <- parBnds$ax[1] + 0.75 * (parBnds$ax[2] - parBnds$ax[1])
     
-      DTmp <- xyDist(xA , xA)
-      tmp <- optimIt(par = c(0.5 , 0.5 * (minaTmp + maxaTmp)) , fn = fLMM2 , methodOptim = c('Nelder-Mead') , c = xA , z = zTmpA , X = matrix(1 , length(zTmpA) , 1) , D = DTmp , 
+        DTmp <- xyDist(xA , xA)
+        tmp <- optimIt(par = c(0.5 , 0.5 * (minaTmp + maxaTmp)) , fn = fLMM2 , methodOptim = c('Nelder-Mead') , c = xA , z = zTmpA , X = matrix(1 , length(zTmpA) , 1) , D = DTmp , 
           covModel = 'matern0.5' , nSpatStructs = 1 , returnAll = F , optionML = F , verbose = F , forCompLik = FALSE , mina = minaTmp , maxa = maxaTmp)
-      tmp <- fLMM2(tmp$par , c = xA , z = zTmpA , X = matrix(1 , length(zTmpA) , 1) , D = DTmp , 
+        tmp <- fLMM2(tmp$par , c = xA , z = zTmpA , X = matrix(1 , length(zTmpA) , 1) , D = DTmp , 
           covModel = 'matern0.5' , nSpatStructs = 1 , returnAll = T , optionML = F , verbose = F , forCompLik = FALSE , mina = minaTmp , maxa = maxaTmp)
-      covInitxdA <- list('c0' = tmp$sigma2hat * (1 - tmp$pars[1]) , 'c1' = tmp$sigma2hat * tmp$pars[1] , 'a' = tmp$pars[2] , 'nu' = 0.5)
+        covInitxdA <- list('c0' = tmp$sigma2hat * (1 - tmp$pars[1]) , 'c1' = tmp$sigma2hat * tmp$pars[1] , 'a' = tmp$pars[2] , 'nu' = 0.5)
 
-      ax <- covInitxdA$a
-      nux <- covInitxdA$nu
-      vTmp <- (covInitxdA$c0 + covInitxdA$c1)
-      if((covInitxdA$c1 / vTmp) < 0.05){ covInitxdA$c1 <- 0.05 * vTmp ; covInitxdA$c0 <- 0.95 * vTmp }else{}
-      if((covInitxdA$c0 / vTmp) < 0.05){ covInitxdA$c0 <- 0.05 * vTmp ; covInitxdA$c1 <- 0.95 * vTmp }else{}
+        ax <- covInitxdA$a
+        nux <- covInitxdA$nu
+        vTmp <- (covInitxdA$c0 + covInitxdA$c1)
+        if((covInitxdA$c1 / vTmp) < 0.05){ covInitxdA$c1 <- 0.05 * vTmp ; covInitxdA$c0 <- 0.95 * vTmp }else{}
+        if((covInitxdA$c0 / vTmp) < 0.05){ covInitxdA$c0 <- 0.05 * vTmp ; covInitxdA$c1 <- 0.95 * vTmp }else{}
 
-      DTmp <- xyDist(xB , xB)
-      fitRangeTmp <- matrix(NA , 2 , 2)
-      fitRangeTmp[1,] <- c(0 , 1)
-      mina4B <- ax - 1
-      maxa4B <- ax + 1
-      tmp <- optimIt(par = c(0.5 , ax) , fn = fLMM2 , methodOptim = c('Brent') , fitRange = fitRangeTmp , vecFixedIn = c(F , T) , c = xB , z = zTmpB , X = matrix(1 , length(zTmpB) , 1) , D = DTmp , 
+        DTmp <- xyDist(xB , xB)
+        fitRangeTmp <- matrix(NA , 2 , 2)
+        fitRangeTmp[1,] <- c(0 , 1)
+        mina4B <- ax - 1
+        maxa4B <- ax + 1
+        tmp <- optimIt(par = c(0.5 , ax) , fn = fLMM2 , methodOptim = c('Brent') , fitRange = fitRangeTmp , vecFixedIn = c(F , T) , c = xB , z = zTmpB , X = matrix(1 , length(zTmpB) , 1) , D = DTmp , 
           covModel = 'matern0.5' , nSpatStructs = 1 , returnAll = F , optionML = F , verbose = F , forCompLik = FALSE , mina = mina4B , maxa = maxa4B)
 
-      tmp <- fLMM2(c(tmp$par , ax) , c = xB , z = zTmpB , X = matrix(1 , length(zTmpB) , 1) , D = DTmp , 
+        tmp <- fLMM2(c(tmp$par , ax) , c = xB , z = zTmpB , X = matrix(1 , length(zTmpB) , 1) , D = DTmp , 
           covModel = 'matern0.5' , nSpatStructs = 1 , returnAll = T , optionML = F , verbose = F , forCompLik = FALSE , mina = mina4B , maxa = maxa4B)
-      covInitxdB <- list('c0' = tmp$sigma2hat * (1 - tmp$pars[1]) , 'c1' = tmp$sigma2hat * tmp$pars[1] , 'a' = tmp$pars[2] , 'nu' = 0.5)
+        covInitxdB <- list('c0' = tmp$sigma2hat * (1 - tmp$pars[1]) , 'c1' = tmp$sigma2hat * tmp$pars[1] , 'a' = tmp$pars[2] , 'nu' = 0.5)
 
-      vTmp <- (covInitxdB$c0 + covInitxdB$c1)
-      if((covInitxdB$c1 / vTmp) < 0.05){ covInitxdB$c1 <- 0.05 * vTmp ; covInitxdB$c0 <- 0.95 * vTmp }else{}
-      if((covInitxdB$c0 / vTmp) < 0.05){ covInitxdB$c0 <- 0.05 * vTmp ; covInitxdB$c1 <- 0.95 * vTmp }else{}
+        vTmp <- (covInitxdB$c0 + covInitxdB$c1)
+        if((covInitxdB$c1 / vTmp) < 0.05){ covInitxdB$c1 <- 0.05 * vTmp ; covInitxdB$c0 <- 0.95 * vTmp }else{}
+        if((covInitxdB$c0 / vTmp) < 0.05){ covInitxdB$c0 <- 0.05 * vTmp ; covInitxdB$c1 <- 0.95 * vTmp }else{}
 
-      DTmp <- xyDist(xC , xC)
-      fitRangeTmp <- matrix(NA , 2 , 2)
-      fitRangeTmp[1,] <- c(0 , 1)
-      mina4C <- ax - 1
-      maxa4C <- ax + 1
-      tmp <- optimIt(par = c(0.5 , ax) , fn = fLMM2 , methodOptim = c('Brent') , fitRange = fitRangeTmp , vecFixedIn = c(F , T) , c = xC , z = zTmpC , X = matrix(1 , length(zTmpC) , 1) , D = DTmp , 
+        DTmp <- xyDist(xC , xC)
+        fitRangeTmp <- matrix(NA , 2 , 2)
+        fitRangeTmp[1,] <- c(0 , 1)
+        mina4C <- ax - 1
+        maxa4C <- ax + 1
+        tmp <- optimIt(par = c(0.5 , ax) , fn = fLMM2 , methodOptim = c('Brent') , fitRange = fitRangeTmp , vecFixedIn = c(F , T) , c = xC , z = zTmpC , X = matrix(1 , length(zTmpC) , 1) , D = DTmp , 
           covModel = 'matern0.5' , nSpatStructs = 1 , returnAll = F , optionML = F , verbose = F , forCompLik = FALSE , mina = mina4C , maxa = maxa4C)
-      tmp <- fLMM2(c(tmp$par , ax) , c = xC , z = zTmpC , X = matrix(1 , length(zTmpC) , 1) , D = DTmp , 
+        tmp <- fLMM2(c(tmp$par , ax) , c = xC , z = zTmpC , X = matrix(1 , length(zTmpC) , 1) , D = DTmp , 
           covModel = 'matern0.5' , nSpatStructs = 1 , returnAll = T , optionML = F , verbose = F , forCompLik = FALSE , mina = mina4C , maxa = maxa4C)
-      covInitxdC <- list('c0' = tmp$sigma2hat * (1 - tmp$pars[1]) , 'c1' = tmp$sigma2hat * tmp$pars[1] , 'a' = tmp$pars[2] , 'nu' = 0.5)
+        covInitxdC <- list('c0' = tmp$sigma2hat * (1 - tmp$pars[1]) , 'c1' = tmp$sigma2hat * tmp$pars[1] , 'a' = tmp$pars[2] , 'nu' = 0.5)
 
-      vTmp <- (covInitxdC$c0 + covInitxdC$c1)
-      if((covInitxdC$c1 / vTmp) < 0.05){ covInitxdC$c1 <- 0.05 * vTmp ; covInitxdC$c0 <- 0.95 * vTmp }else{}
-      if((covInitxdC$c0 / vTmp) < 0.05){ covInitxdC$c0 <- 0.05 * vTmp ; covInitxdC$c1 <- 0.95 * vTmp }else{}
-
+        vTmp <- (covInitxdC$c0 + covInitxdC$c1)
+        if((covInitxdC$c1 / vTmp) < 0.05){ covInitxdC$c1 <- 0.05 * vTmp ; covInitxdC$c0 <- 0.95 * vTmp }else{}
+        if((covInitxdC$c0 / vTmp) < 0.05){ covInitxdC$c0 <- 0.05 * vTmp ; covInitxdC$c1 <- 0.95 * vTmp }else{}
+      }
 ######################################################
 ### use topsoil c0A to give cx0 + cxd0 + cd1 
 ### to allow fitting initial tau1s below, have different values of cxd0 and cd1...
@@ -545,16 +555,25 @@ setInitsIAK3D <- function(x , dI , z , X , vXU , iU , modelx , nud ,
 }
 
 
-setFitRangeIAK3D <- function(pars , modelx , sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1 , prodSum , cmeOpt){
+setFitRangeIAK3D <- function(pars , modelx , sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1 , prodSum , cmeOpt , lnTfmdData){
+
+### logitab tfms are given the range -20 , 20
+### log tfms are given the range -20 , Inf
 
     if(modelx == 'matern'){
       if(!lnTfmdData){
+
 ### beta,cxd[d=0] auto    
+### parsStat1 <- logitab[c(ax , nux , ad)] , lncx0ParTmp , lncx1ParTmp , lncd1ParTmp , logitab(cxd1/(cxd0+cxd1))
+### parsNonStat <- c(sdfdPars_cd1 , sdfdPars_cxd0 , sdfdPars_cxd1)
+### parsStat2 <- c(lncme - log(cxd0+cxd1))
+
         fitRange <- matrix(NA , length(pars) , 2) ; fitRange[,1] <- -Inf ; fitRange[,2] <- Inf ; 
         inext <- 1
         fitRange[inext,] <- c(-20 , 20) ; inext <- inext + 1
         fitRange[inext,] <- c(-20 , 20) ; inext <- inext + 1
         fitRange[inext,] <- c(-20 , 20) ; inext <- inext + 1
+        
         if(prodSum){
           fitRange[inext:(inext+1),1] <- -20 ; inext <- inext + 2 # the variance ratios for cx0 and cx1
         }else{}
@@ -562,6 +581,7 @@ setFitRangeIAK3D <- function(pars , modelx , sdfdType_cd1 , sdfdType_cxd0 , sdfd
           fitRange[inext,1] <- -20 ; inext <- inext + 1 # the variance ratio for cd1
         }else{}
         fitRange[inext,] <- c(-20 , 20) ; inext <- inext + 1 # the 1 variance logit, (cxd1 / (cxd0 + cxd1)) 
+
         if(sdfdType_cd1 == -1){ 
             fitRange[inext,1] <- -20 ; inext <- inext + 1 # log of sd fn at dmax
             fitRange[inext,] <- c(-20 , 20) ; inext <- inext + 1 # logit of tau2
@@ -577,8 +597,15 @@ setFitRangeIAK3D <- function(pars , modelx , sdfdType_cd1 , sdfdType_cxd0 , sdfd
         if(cmeOpt == 1){
             fitRange[inext,1] <- -20 ; inext <- inext + 1
         }else{}
+               
       }else{
+
 ### beta by nr
+### beta by nr
+### parsStat1 <- logitab[ax , nux , ad] , lncx0ParTmp , lncx1ParTmp , lncd1ParTmp , log(cxd0) , log(cxd1)
+### parsNonStat <- c(sdfdPars_cd1 , sdfdPars_cxd0 , sdfdPars_cxd1)
+### parsStat2 <- lncme
+
         fitRange <- matrix(NA , length(pars) , 2) ; fitRange[,1] <- -Inf ; fitRange[,2] <- Inf ; 
         inext <- 1
         fitRange[inext,] <- c(-20 , 20) ; inext <- inext + 1
@@ -588,7 +615,7 @@ setFitRangeIAK3D <- function(pars , modelx , sdfdType_cd1 , sdfdType_cxd0 , sdfd
           fitRange[inext:(inext+1),1] <- -20 ; inext <- inext + 2 # for cx0 and cx1 variances.
         }else{}
 
-        if(sdfdType_cd1 != -9){
+        if(prodSum & (sdfdType_cd1 != -9)){
           fitRange[inext,1] <- -20 ; inext <- inext + 1 # the cd1 variance.
         }else{}
 
@@ -612,16 +639,23 @@ setFitRangeIAK3D <- function(pars , modelx , sdfdType_cd1 , sdfdType_cxd0 , sdfd
       }
           
     }else if(modelx == 'nugget'){
+
       if(!lnTfmdData){
 ### beta,cxd[d=0] auto    
+### parsStat1 <- logitab[ad] , log((cx0 + cx1) / (cxd0 + cxd1)) , lncd1ParTmp
+### parsNonStat <- c(sdfdPars_cd1 , sdfdPars_cxd0)
+### parsStat2 <- lncme - log(cxd0+cxd1)
         fitRange <- matrix(NA , length(pars) , 2) ; fitRange[,1] <- -Inf ; fitRange[,2] <- Inf ; 
         inext <- 1
         fitRange[inext,] <- c(-20 , 20) ; inext <- inext + 1
-        if(sdfdType_cd1 == -9){
-          fitRange[inext,1] <- -20 ; inext <- inext + 1 # the 1 variance ratios
-        }else{
-          fitRange[inext:(inext+1),1] <- -20 ; inext <- inext + 2 # the 2 variance ratios
-        }
+        
+        if(prodSum){
+          fitRange[inext,1] <- -20 ; inext <- inext + 1 # the variance ratio for cx0 
+        }else{}
+        if(prodSum & (sdfdType_cd1 != -9)){
+          fitRange[inext,1] <- -20 ; inext <- inext + 1 # the variance ratio for cd1
+        }else{}
+        
         if(sdfdType_cd1 == -1){ 
             fitRange[inext,1] <- -20 ; inext <- inext + 1 # log of sd fn at dmax
             fitRange[inext,] <- c(-20 , 20) ; inext <- inext + 1 # logit of tau2
@@ -633,20 +667,29 @@ setFitRangeIAK3D <- function(pars , modelx , sdfdType_cd1 , sdfdType_cxd0 , sdfd
         if(cmeOpt == 1){
             fitRange[inext,1] <- -20 ; inext <- inext + 1
         }else{}
+                
       }else{
 ### beta by nr
+### parsStat1 <- logitab[ad] , log(cx0 + cx1) , lncd1ParTmp , log(cxd0 + cxd1)
+### parsNonStat <- c(sdfdPars_cd1 , sdfdPars_cxd0)
+### parsStat2 <- lncme
+
         fitRange <- matrix(NA , length(pars) , 2) ; fitRange[,1] <- -Inf ; fitRange[,2] <- Inf ; 
         inext <- 1
         fitRange[inext,] <- c(-20 , 20) ; inext <- inext + 1
-        if(sdfdType_cd1 == -9){
-          fitRange[inext:(inext+1),1] <- -20 ; inext <- inext + 2 # the 2 variances
-        }else{
-          fitRange[inext:(inext+2),1] <- -20 ; inext <- inext + 3 # the 3 variances
-        }
+        
+        if(prodSum){
+          fitRange[inext,1] <- -20 ; inext <- inext + 1 # the variance for cx0 
+        }else{}
+        if(prodSum & (sdfdType_cd1 != -9)){
+          fitRange[inext,1] <- -20 ; inext <- inext + 1 # the variance for cd1
+        }else{}
+        fitRange[inext,1] <- -20 ; inext <- inext + 1 # the variance for cxd0
+        
         if(sdfdType_cd1 == -1){ 
             fitRange[inext,1] <- -20 ; inext <- inext + 1 # log of sd fn at dmax
             fitRange[inext,] <- c(-20 , 20) ; inext <- inext + 1 # logit of tau2
-        }else{}        
+        }else{}   
         if(sdfdType_cxd0 == -1){ 
             fitRange[inext,1] <- -20 ; inext <- inext + 1 # log of sd fn at dmax
             fitRange[inext,] <- c(-20 , 20) ; inext <- inext + 1 # logit of tau2
@@ -657,6 +700,15 @@ setFitRangeIAK3D <- function(pars , modelx , sdfdType_cd1 , sdfdType_cxd0 , sdfd
       }
       
     }
+
+    if(inext != (length(pars)+1)){ 
+      print(inext)
+      print('pars:')
+      print(pars)
+      print('fitRange:')
+      print(fitRange)
+      stop('Some error in defining fitRange - should have one row for each parameter in the vector pars!') 
+    }else{}
 
     return(fitRange)
 }
