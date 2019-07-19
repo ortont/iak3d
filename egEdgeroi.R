@@ -127,7 +127,7 @@ rList <- tmp$rList
 if(is.na(nRules) | is.na(refineCubistModel)){
   if(is.na(nRules)){ nRulesVec <- seq(20) }else{ nRulesVec <- nRules }
   if(is.na(refineCubistModel)){ refineCubistModelVec <- c(FALSE , TRUE) }else{ refineCubistModelVec <- refineCubistModel }
-  tmp <- selectCubistOptsXV(cFit = cFit , covsFit = covsFit , allKnotsd = allKnotsd , nRulesVec = nRulesVec , refineCubistModelVec = refineCubistModelVec)
+  tmp <- selectCubistOptsXV(cFit = cFit , zFit = zFit , covsFit = covsFit , allKnotsd = allKnotsd , nRulesVec = nRulesVec , refineCubistModelVec = refineCubistModelVec)
   nRules <- tmp$nRules
   refineCubistModel <- tmp$refineCubistModel
   rmseMatList <- tmp$rmseMatList
