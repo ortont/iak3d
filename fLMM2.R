@@ -1,4 +1,4 @@
-fitLMM2 <- function(pars , c , z , X , D , covModel , nSpatStructs , returnAll , optionML , verbose , forCompLik = FALSE , mina = NULL , maxa = NULL , badNll = NA){
+fitLMM2 <- function(pars , c , z , X , D , covModel , nSpatStructs , returnAll , optionML , verbose , forCompLik = FALSE , mina = NULL , maxa = NULL , badNll = 9E99){
 
   DFit <- xyDist(cTmp[iFit,] , cTmp[iFit,])
 
@@ -9,13 +9,13 @@ maxa <- max(DFit) / 2
 
 parInit <- c(0.3 , 1 , 0.3 , 50)
 
-#fLMM2 <- function(pars , c , z , X , D , covModel , nSpatStructs , returnAll , optionML , verbose , forCompLik = FALSE , mina = NULL , maxa = NULL , badNll = NA){
+#fLMM2 <- function(pars , c , z , X , D , covModel , nSpatStructs , returnAll , optionML , verbose , forCompLik = FALSE , mina = NULL , maxa = NULL , badNll = 9E99){
 
 ftLMM2Init <- fLMM2(pars = parInit , c = cTmp[iFit,] , z = yTmp[iFit] , X = XFit , D = DFit , 
                     covModel = 'exponential' , nSpatStructs = 2 , returnAll = FALSE , optionML = useML , 
                     verbose = TRUE , forCompLik = FALSE , mina = mina , maxa = maxa)
     
-badNll <- ftLMM2Init + 100
+#badNll <- ftLMM2Init + 100
     
 #####################################################    
 ### fit model with temporal correlation accounted for...
@@ -27,7 +27,7 @@ badNll <- ftLMM2Init + 100
   return(parFit)
 }
 
-fLMM2 <- function(pars , c , z , X , D , covModel , nSpatStructs , returnAll , optionML , verbose , forCompLik = FALSE , mina = NULL , maxa = NULL , badNll = NA){
+fLMM2 <- function(pars , c , z , X , D , covModel , nSpatStructs , returnAll , optionML , verbose , forCompLik = FALSE , mina = NULL , maxa = NULL , badNll = 9E99){
     N <- length(z)
     np <- dim(X)[2]
 
@@ -162,7 +162,7 @@ fLMM2 <- function(pars , c , z , X , D , covModel , nSpatStructs , returnAll , o
 ### possibly two levels of blocks, bricked, so that both sets include all data 
 ### (ie each data point appears once in level 1 blocks and once in level 2 blocks)
 #############################################################################
-compLikLMM2 <- function(pars , c , z , X , DBlocks , blocks , nBlocks1 = length(blocks) , covModel , nSpatStructs , returnAll = FALSE , optionML = FALSE , verbose = TRUE , mina = NULL , maxa = NULL , partOfBiggerModel = F , badNll = NA){
+compLikLMM2 <- function(pars , c , z , X , DBlocks , blocks , nBlocks1 = length(blocks) , covModel , nSpatStructs , returnAll = FALSE , optionML = FALSE , verbose = TRUE , mina = NULL , maxa = NULL , partOfBiggerModel = F , badNll = 9E99){
 
     n <- dim(X)[[1]]
     p <- dim(X)[[2]]
