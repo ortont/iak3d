@@ -129,7 +129,7 @@ setInitsIAK3D <- function(x , dI , z , X , vXU , iU , modelx , nud ,
           iA <- c(iA , iAThis)
         }
 
-        iBThis <- which((allKx[,i] == 1) & (dMidpnts > dAB) & (dMidpnts < dBC))
+        iBThis <- which((allKx[,i] == 1) & (dMidpnts > dAB) & (dMidpnts <= dBC))
         if(length(iBThis) == 0){
         }else if(length(iBThis) == 1){
           iB <- c(iB , iBThis)
@@ -138,7 +138,7 @@ setInitsIAK3D <- function(x , dI , z , X , vXU , iU , modelx , nud ,
           iB <- c(iB , iBThis)
         }
 
-        iCThis <- which((allKx[,i] == 1) & (dMidpnts >= dBC))
+        iCThis <- which((allKx[,i] == 1) & (dMidpnts > dBC))
         if(length(iCThis) == 0){
         }else if(length(iCThis) == 1){
           iC <- c(iC , iCThis)
