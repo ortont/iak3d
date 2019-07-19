@@ -1018,7 +1018,7 @@ refineXIAK3D <- function(X , z , profID , alpha = 0.5){
 ### function to do a xv routine with cFit to select best nRules and whether refineCubistModel = T/F is best
 ### xv is with full profiles removed/kept.
 #############################################################################
-selectCubistOptsXV <- function(cFit , covsFit , allKnotsd = c() , nRulesVec = seq(10) , refineCubistModelVec = c(FALSE , TRUE)){
+selectCubistOptsXV <- function(cFit , zFit , covsFit , allKnotsd = c() , nRulesVec = seq(10) , refineCubistModelVec = c(FALSE , TRUE)){
 
 ### proportion of cFit profiles used to fit, the rest used as 'val' data
   prop4XVFit <- 0.7
