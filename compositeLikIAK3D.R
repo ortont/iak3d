@@ -9,7 +9,13 @@ nllIAK3D_CL <- function(pars , z , X , modelx , nud ,
     if(printnllTime){
       ptm <- proc.time()
     }else{}
- 
+
+    if(exists("lnTfmdData") && lnTfmdData){
+      stop('Error - lnTfmdData entered as TRUE for composite likelihood - this option not available with composite likelihood!')
+    }else{
+      lnTfmdData <- FALSE
+    }
+
     if(exists("parsTrace4Optim")){
       parsTmp <- rbind(parsTrace4Optim , pars)
       assign("parsTrace4Optim" , parsTmp , envir = .GlobalEnv)
@@ -32,7 +38,7 @@ nllIAK3D_CL <- function(pars , z , X , modelx , nud ,
       iThis <- c(compLikMats$listBlocks[[compLikMats$subsetPairsAdj[i,1]]]$i , compLikMats$listBlocks[[compLikMats$subsetPairsAdj[i,2]]]$i)
       tmp <- nllIAK3D(pars = pars , z = z[iThis] , X = X[iThis,,drop = FALSE] , vXU = NA , iU = NA , modelx = modelx , nud = nud , 
             sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , 
-            cmeOpt = cmeOpt , prodSum = prodSum , setupMats = setupMats[[i]] , parBnds = parBnds , useReml = useReml , lnTfmdData = FALSE , rtnAll = TRUE , forCompLik = TRUE)	      
+            cmeOpt = cmeOpt , prodSum = prodSum , setupMats = setupMats[[i]] , parBnds = parBnds , useReml = useReml , lnTfmdData = lnTfmdData , rtnAll = TRUE , forCompLik = TRUE)	      
       XziAXz_SUM <- XziAXz_SUM + tmp$WiAW
       lndetA_SUM <- lndetA_SUM + tmp$lndetA
       n_SUM <- n_SUM + length(iThis)
@@ -58,7 +64,7 @@ nllIAK3D_CL <- function(pars , z , X , modelx , nud ,
           iThis <- compLikMats$listBlocks[[i]]$i
           tmp <- nllIAK3D(pars = pars , z = z[iThis] , X = X[iThis,,drop = FALSE] , vXU = NA , iU = NA , modelx = modelx , nud = nud , 
                 sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , 
-                cmeOpt = cmeOpt , prodSum = prodSum , setupMats = setupMats[[i+nadjSubsets]] , parBnds = parBnds , useReml = useReml , lnTfmdData = FALSE , rtnAll = TRUE , forCompLik = TRUE)	      
+                cmeOpt = cmeOpt , prodSum = prodSum , setupMats = setupMats[[i+nadjSubsets]] , parBnds = parBnds , useReml = useReml , lnTfmdData = lnTfmdData , rtnAll = TRUE , forCompLik = TRUE)	      
           XziAXz_BLOCKS[[i]] <- tmp$WiAW
           lndetA_BLOCKS[i] <- tmp$lndetA
           if(rtnAll){ # these ones are for a single block, not for a pair 
@@ -497,7 +503,7 @@ predMatsIAK3D_CLEV_ByBlock <- function(z_muhat , X , xMap , dIMap , iData = seq(
       }
 
 ### for Eidsvik implemented with all pairs in likelihood function, non-adj pairs assumed independent...
-      if(compLikMats$compLikOptn == 3){
+      if(lmmFit$compLikMats$compLikOptn == 3){
         nnonadjBlocks <- length(lmmFit$compLikMats$listBlocks) - length(iBlocksAdj) - 1
         nadjSubsets <- nrow(lmmFit$compLikMats$subsetPairsAdj) # not to be confused with above which was refering to adjacency to the prediction block
         if(loadFromFit){
@@ -558,12 +564,16 @@ setVoronoiBlocks <- function(x , nPerBlock = 50 , plotVor = F , vcentres = NULL)
   xU <- x[!duplicated(x),]
   nU <- nrow(xU)
   
-  nBlocks <- floor(nU / nPerBlock)
-  nPerSmallBlock <- nPerBlock
-  nPerBigBlock <- nPerBlock + 1
+  if(is.null(vcentres)){
+    nBlocks <- floor(nU / nPerBlock)
+    nPerSmallBlock <- nPerBlock
+    nPerBigBlock <- nPerBlock + 1
   
-  nSmallBlocks <- nBlocks * (nPerSmallBlock+1) - nU
-  nBigBlocks <- nBlocks - nSmallBlocks 
+    nSmallBlocks <- nBlocks * (nPerSmallBlock+1) - nU
+    nBigBlocks <- nBlocks - nSmallBlocks 
+  }else{
+    nBlocks <- nrow(vcentres)
+  }
   
   xUTmp <- xU
   listBlocks <- list()
