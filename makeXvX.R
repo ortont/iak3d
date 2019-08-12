@@ -82,7 +82,7 @@ makeXvX <- function(covData = NA , dI , modelX , allKnotsd = c() , iU = NA , nDi
   	  namesX <- modelX
 	    p <- length(namesX)
 
-    }else if(class(modelX) == "cubist"){
+    }else if(length(class(modelX)) == 1 && class(modelX) == "cubist"){
 ########################################
 ### assume cubist model was fitted with covariates covData
 ### and that 'dIMidPts' is included in covData
@@ -105,7 +105,24 @@ makeXvX <- function(covData = NA , dI , modelX , allKnotsd = c() , iU = NA , nDi
       namesX <- modelX$namesX
       p <- length(namesX)
       
-    }else{}
+    }else if(is.element('gam' , class(modelX))){
+########################################
+### assume gam model was fitted with covariates covData
+### and that 'dIMidPts' is included in covData
+########################################
+      modelType <- 'gam'
+
+      idInCovData <- which(names(covData) == 'dIMidPts')
+      if(length(idInCovData) == 0){
+        stop('Refit the gam model, but make the name of the depth variable dIMidPts')
+      }else{}
+
+      namesX <- modelX$namesX
+      p <- length(namesX)
+    
+    }else{
+      stop('Unknown class for modelX! Check the options in makeXvX!')
+    }
 
 ###############################################
 ### if allKnotsd is not empty, then it gives knots (internal and boundary) 
@@ -116,21 +133,12 @@ makeXvX <- function(covData = NA , dI , modelX , allKnotsd = c() , iU = NA , nDi
 ###############################################
     if(length(allKnotsd) > 0){
 
-#        if(length(allKnotsd) < 3){ stop('Error - must input two boundary knots and at least one internal knot in allKnotsd!') }else{}
         if(length(allKnotsd) < 2){ stop('Error - must input at least two boundary knots in allKnotsd!') }else{}
         
         intKnots <- allKnotsd[-1]
         intKnots <- intKnots[-length(intKnots)]
         bdryKnots <- c(allKnotsd[1] , allKnotsd[length(allKnotsd)])
 
-### this should be done in cubist2X now.        
-#         if(is.integer(modelXIn) | is.numeric(modelXIn) | class(modelXIn) == "cubist"){
-#           XSplineCheck <- bs(x = c(0.1 , 0.2) , knots = intKnots , degree = 3 , intercept = F , Boundary.knots = bdryKnots)
-# #          namesX <- c(namesX , rep('dSpline' , ncol(XSplineCheck))) 
-#           namesX <- c(namesX , paste0('dSpline.' , seq(ncol(XSplineCheck)))) 
-#           p <- length(namesX)
-#         }else{} # if came in as character vector, this has already been done.
-#         
         if (modelType == 'mlr'){
           iRemove <- which((namesX == 'd') | (namesX == 'd2') | (namesX == 'd3'))    
           if(length(iRemove) > 0){
@@ -166,8 +174,16 @@ makeXvX <- function(covData = NA , dI , modelX , allKnotsd = c() , iU = NA , nDi
         XLims[1,ipSpline] <- -Inf
         XLims[2,ipSpline] <- Inf
       }else{}
+
+      infBnds <- FALSE
+
     }else{
       setXLims <- FALSE
+      if((min(XLims[1,]) == Inf) & (max(XLims[2,]) == -Inf)){
+        infBnds <- TRUE
+      }else{
+        infBnds <- FALSE
+      }
     }
 
 # number of parameters associated with each name
@@ -244,9 +260,11 @@ makeXvX <- function(covData = NA , dI , modelX , allKnotsd = c() , iU = NA , nDi
               XLims[1,] <- apply(rbind(XTmp , XLims[1,]) , 2 , minNonZero)
               XLims[2,] <- apply(rbind(XTmp , XLims[2,]) , 2 , maxNonZero)
             }else{
+              if(!infBnds){
 ### apply the given constraints to the point-support design matrix...
-              XTmp <- matrix(mapply(replaceLT , x = t(XTmp) , llim = XLims[1,] , replaceZeros = FALSE , SIMPLIFY = TRUE) , nrow = nrow(XTmp) , ncol = ncol(XTmp) , byrow = TRUE)
-              XTmp <- matrix(mapply(replaceGT , x = t(XTmp) , ulim = XLims[2,] , replaceZeros = FALSE , SIMPLIFY = TRUE) , nrow = nrow(XTmp) , ncol = ncol(XTmp) , byrow = TRUE)
+                XTmp <- matrix(mapply(replaceLT , x = t(XTmp) , llim = XLims[1,] , replaceZeros = FALSE , SIMPLIFY = TRUE) , nrow = nrow(XTmp) , ncol = ncol(XTmp) , byrow = TRUE)
+                XTmp <- matrix(mapply(replaceGT , x = t(XTmp) , ulim = XLims[2,] , replaceZeros = FALSE , SIMPLIFY = TRUE) , nrow = nrow(XTmp) , ncol = ncol(XTmp) , byrow = TRUE)
+              }else{}
             }
 
             X[i,] <- colMeans(XTmp)
@@ -281,9 +299,11 @@ makeXvX <- function(covData = NA , dI , modelX , allKnotsd = c() , iU = NA , nDi
               XLims[1,id123Tmp] <- apply(X[,i123Tmp,drop=FALSE] , 2 , min)
               XLims[2,id123Tmp] <- apply(X[,i123Tmp,drop=FALSE] , 2 , max)
             }else{
+              if(!infBnds){
 ### slight difference, apply the given constraints to the interval-support design matrix...
-              X[,id123Tmp] <- matrix(mapply(replaceLT , x = t(X[,id123Tmp]) , llim = XLims[1,] , replaceZeros = FALSE , SIMPLIFY = TRUE) , nrow = nrow(X[,id123Tmp]) , ncol = ncol(X[,id123Tmp]) , byrow = TRUE)
-              X[,id123Tmp] <- matrix(mapply(replaceGT , x = t(X[,id123Tmp]) , ulim = XLims[2,] , replaceZeros = FALSE , SIMPLIFY = TRUE) , nrow = nrow(X[,id123Tmp]) , ncol = ncol(X[,id123Tmp]) , byrow = TRUE)
+                X[,id123Tmp] <- matrix(mapply(replaceLT , x = t(X[,id123Tmp]) , llim = XLims[1,] , replaceZeros = FALSE , SIMPLIFY = TRUE) , nrow = nrow(X[,id123Tmp]) , ncol = ncol(X[,id123Tmp]) , byrow = TRUE)
+                X[,id123Tmp] <- matrix(mapply(replaceGT , x = t(X[,id123Tmp]) , ulim = XLims[2,] , replaceZeros = FALSE , SIMPLIFY = TRUE) , nrow = nrow(X[,id123Tmp]) , ncol = ncol(X[,id123Tmp]) , byrow = TRUE)
+              }else{}
             }
           }else{}
             
@@ -299,9 +319,11 @@ makeXvX <- function(covData = NA , dI , modelX , allKnotsd = c() , iU = NA , nDi
                 XLims[1,idSpline] <- apply(rbind(XTmp , XLims[1,idSpline]) , 2 , minNonZero)
                 XLims[2,idSpline] <- apply(rbind(XTmp , XLims[2,idSpline]) , 2 , maxNonZero)
               }else{
+                if(!infBnds){
 ### apply the given constraints to the point-support design matrix...
-                XTmp <- matrix(mapply(replaceLT , x = t(XTmp) , llim = XLims[1,idSpline] , replaceZeros = FALSE , SIMPLIFY = TRUE) , nrow = nrow(XTmp) , ncol = ncol(XTmp) , byrow = TRUE)
-                XTmp <- matrix(mapply(replaceGT , x = t(XTmp) , ulim = XLims[2,idSpline] , replaceZeros = FALSE , SIMPLIFY = TRUE) , nrow = nrow(XTmp) , ncol = ncol(XTmp) , byrow = TRUE)
+                  XTmp <- matrix(mapply(replaceLT , x = t(XTmp) , llim = XLims[1,idSpline] , replaceZeros = FALSE , SIMPLIFY = TRUE) , nrow = nrow(XTmp) , ncol = ncol(XTmp) , byrow = TRUE)
+                  XTmp <- matrix(mapply(replaceGT , x = t(XTmp) , ulim = XLims[2,idSpline] , replaceZeros = FALSE , SIMPLIFY = TRUE) , nrow = nrow(XTmp) , ncol = ncol(XTmp) , byrow = TRUE)
+                }else{}
               }
               X[i,idSpline] <- colMeans(XTmp)
             }
@@ -312,7 +334,7 @@ makeXvX <- function(covData = NA , dI , modelX , allKnotsd = c() , iU = NA , nDi
 ###############################################
 ### or if we have a cubist model...
 ###############################################
-    }else if(modelType == 'cubist'){
+    }else if(modelType == 'cubist' | modelType == 'gam'){
 
 #n x p x nDiscPts <= maxTmp
 
@@ -323,6 +345,17 @@ makeXvX <- function(covData = NA , dI , modelX , allKnotsd = c() , iU = NA , nDi
         }else{
           nPerBatch <- floor(maxTmp / (nDiscPts * p))
         }
+
+        if(modelType == 'cubist'){
+### assume that all columns depend on d; could check, but would have to look in rule condits and regressors, so for now going to assume all
+          colsd <- seq(p)          
+        }else if(modelType == 'gam'){
+### look which columns have dIMidPts in names...
+          colsd <- which(grepl('dIMidPts' , modelX$namesX))
+        }else{
+          stop('Unknown model type in makeXvX!')
+        }
+        colsnod <- setdiff(seq(p) , colsd)
 
         if(nPerBatch < 1){ 
           nPerBatch <- 1 
@@ -336,54 +369,71 @@ makeXvX <- function(covData = NA , dI , modelX , allKnotsd = c() , iU = NA , nDi
 
         for (iBatch in 1:nBatches){
 
- #         print(paste0('Making X for Batch ' , iBatch , ' of ' , nBatches))
-
           if(iBatch < nBatches){ 
             i <- seq((iBatch-1)*nPerBatch+1 , iBatch*nPerBatch) 
           }else{ 
             i <- seq((iBatch-1)*nPerBatch+1 , n) 
           }
 
-          if(iBatch == 1){
-             i4Apply <- matrix(seq(nDiscPts * length(i)) , nDiscPts , length(i))
-          }else if(iBatch == nBatches){
-            i4Apply <- matrix(seq(nDiscPts * length(i)) , nDiscPts , length(i))
-          }else{} # in between 1 and nBatches, no need to update it. 
+          if(length(colsd) > 0){
+          
+            if(iBatch == 1){
+              i4Apply <- matrix(seq(nDiscPts * length(i)) , nDiscPts , length(i))
+            }else if(iBatch == nBatches){
+              i4Apply <- matrix(seq(nDiscPts * length(i)) , nDiscPts , length(i))
+            }else{} # in between 1 and nBatches, no need to update it. 
    
-          linTmp <- seq(0 , 1 , 1 / (nDiscPts-1))
-          iRep <- rep(i , each = nDiscPts)
+            linTmp <- seq(0 , 1 , 1 / (nDiscPts-1))
+            iRep <- rep(i , each = nDiscPts)
           
-          if(nDiscPts > 1){
-            dDiscPts <- dI[iRep,1] + rep(linTmp , length(i)) * (dI[iRep,2] - dI[iRep,1])
-          }else{
-            dDiscPts <- 0.5 * (dI[i,1] + dI[i,2])
-          }          
+            if(nDiscPts > 1){
+              dDiscPts <- dI[iRep,1] + rep(linTmp , length(i)) * (dI[iRep,2] - dI[iRep,1])
+            }else{
+              dDiscPts <- 0.5 * (dI[i,1] + dI[i,2])
+            }          
 
-          covDataThis <- covData[iRep,,drop=FALSE]
-          covDataThis$dIMidPts <- dDiscPts
+            covDataThis <- covData[iRep,,drop=FALSE]
+            covDataThis$dIMidPts <- dDiscPts
           
-          XTmp <- cubist2X(cubistModel = modelX , dataFit = covDataThis , allKnotsd = allKnotsd)
-          XTmp <- XTmp$X
+            if(modelType == 'cubist'){
+              XTmp <- cubist2X(cubistModel = modelX , dataFit = covDataThis , allKnotsd = allKnotsd)
+            }else if(modelType == 'gam'){
+### allKnotsd should be attached to gam model already.              
+              XTmp <- gam2X(gamModel = modelX , dataFit = covDataThis)
+            }else{
+              stop('Unknown model type in makeXvX!')
+            }
+            XTmp <- XTmp$X
 
-          # XTmp <- cubist2X(cubistModel = modelX , dataFit = covDataThis , incdSpline = incdSpline)
-          # XTmp <- XTmp$X
-          # if(length(allKnotsd) > 0){
-          #     XTmp <- cbind(XTmp , bs(x = dDiscPts , knots = intKnots , degree = 3 , intercept = F , Boundary.knots = c(allKnotsd[1] , allKnotsd[length(allKnotsd)])) )
-          # }else{}
-
-          if(setXLims){
-            XLims[1,] <- apply(rbind(XTmp , XLims[1,]) , 2 , minNonZero)
-            XLims[2,] <- apply(rbind(XTmp , XLims[2,]) , 2 , maxNonZero)
-          }else{
+            if(setXLims){
+              XLims[1,] <- apply(rbind(XTmp , XLims[1,]) , 2 , minNonZero)
+              XLims[2,] <- apply(rbind(XTmp , XLims[2,]) , 2 , maxNonZero)
+            }else{
+              if(!infBnds){
 ### apply the given constraints to the point-support design matrix...
-            XTmp <- matrix(mapply(replaceLT , x = t(XTmp) , llim = XLims[1,] , replaceZeros = FALSE , SIMPLIFY = TRUE) , nrow = nrow(XTmp) , ncol = ncol(XTmp) , byrow = TRUE)
-            XTmp <- matrix(mapply(replaceGT , x = t(XTmp) , ulim = XLims[2,] , replaceZeros = FALSE , SIMPLIFY = TRUE) , nrow = nrow(XTmp) , ncol = ncol(XTmp) , byrow = TRUE)
-          }
+                XTmp <- matrix(mapply(replaceLT , x = t(XTmp) , llim = XLims[1,] , replaceZeros = FALSE , SIMPLIFY = TRUE) , nrow = nrow(XTmp) , ncol = ncol(XTmp) , byrow = TRUE)
+                XTmp <- matrix(mapply(replaceGT , x = t(XTmp) , ulim = XLims[2,] , replaceZeros = FALSE , SIMPLIFY = TRUE) , nrow = nrow(XTmp) , ncol = ncol(XTmp) , byrow = TRUE)
+              }else{}
+            }
 
-          mXTmp <- t(apply(i4Apply , 2 , fnMeanApply , X4Apply = XTmp))
+            mXTmp <- t(apply(i4Apply , 2 , fnMeanApply , X4Apply = XTmp))
+          }else{
+### no columns with depth in, so no averaging required...             
+            covDataThis <- covData[i,,drop=FALSE]
+            covDataThis$dIMidPts <- rowMeans(dI[i,,drop=FALSE]) # because gam doesn't like NA
+            if(modelType == 'cubist'){
+              XTmp <- cubist2X(cubistModel = modelX , dataFit = covDataThis , allKnotsd = allKnotsd)
+            }else if(modelType == 'gam'){
+### allKnotsd should be attached to gam model already.              
+              XTmp <- gam2X(gamModel = modelX , dataFit = covDataThis)
+            }else{
+              stop('Unknown model type in makeXvX!')
+            }
+            mXTmp <- XTmp$X
+          }
           X[i,] <- as.matrix(mXTmp)
 
-          if(lnTfmdData){ 
+          if(lnTfmdData & (length(colsd) > 0)){ 
 ### remove means from XTmp...
             XTmp <- XTmp - X[iRep,,drop=FALSE] 
             
@@ -399,7 +449,9 @@ makeXvX <- function(covData = NA , dI , modelX , allKnotsd = c() , iU = NA , nDi
 ### all variables within Cubist rules are continuous, so...
         pX <- 1 + integer(p)
 
-    }else{}
+    }else{
+      stop('Unknown model type!')
+    }
 
 
 ###############################################
