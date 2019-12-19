@@ -2,8 +2,8 @@
 ### source('/export/home/ortont/scripts/iakTests/egEdgeroi.R')
 ### source('U://scripts/iakTests/egEdgeroi.R')
 ##############################################################
-rm(list=ls())
-assign("last.warning", NULL, envir = baseenv())
+# rm(list=ls())
+# assign("last.warning", NULL, envir = baseenv())
 
 ##############################################################
 ### full model selection took ~ 19 hours.
@@ -20,7 +20,7 @@ mapNow <- FALSE
 ##############################################################
 library(sp)
 library(raster)
-rasterOptions(tmpdir="/scratch/tmp/")
+# rasterOptions(tmpdir="/scratch/tmp/")
 library(rgdal)
 library(Cubist)
 library(mgcv)
@@ -34,6 +34,7 @@ library(lme4)
 library(aqp)
 library(GSIF)
 library(ithir)
+library(parallel)
 
 # wDir <- '/export/home/ortont/scripts/'
 # iakDir <- '/export/home/ortont/scripts/iakTests'
@@ -54,9 +55,11 @@ source(paste0(iakDir , '/nrUpdatesIAK3DlnN.R'))
 source(paste0(iakDir , '/makeXvX.R'))
 source(paste0(iakDir , '/optifix.R'))
 source(paste0(iakDir , '/cubist2XIAK3D.R')) 
+source(paste0(iakDir , '/gam2XIAK3D.R')) 
 source(paste0(iakDir , '/predictIAK3D.R')) 
 source(paste0(iakDir , '/modelSelectIAK3D.R')) 
 source(paste0(iakDir , '/compositeLikIAK3D.R')) 
+source(paste0(iakDir , '/mpspline.source.R')) 
 source(paste0(iakDir , '/getEdgeroiData.R')) 
 source(paste0(lmm2Dir , '/fLMM2.R')) 
 
@@ -70,7 +73,7 @@ crsLongLat <- CRS('+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
 ##########################################################
 nRules <- 5 # number of rules for Cubist model. If NA, then a x val routine to select nRules will be used. 
 
-refineCubistModel <- FALSE # use a stepwise algorithm (refineXIAK3D in cubist2XIAK3D.R) to remove predictors from the fitted Cubist model? # If NA, a x val routine will be used to select T/F
+refineCubistModel <- TRUE # use a stepwise algorithm (refineXIAK3D in cubist2XIAK3D.R) to remove predictors from the fitted Cubist model? # If NA, a x val routine will be used to select T/F
 
 constrainX4Pred <- FALSE # use the limits of each column of X (non-zeros only) from the fitting data to constrain the columns of X for prediction?
 
@@ -89,8 +92,8 @@ rqrBTfmdPreds <- FALSE # only relevant if data were log-transformed - back trans
 useReml <- TRUE
 #useReml <- FALSE
 
-# allKnotsd <- c() # use this to have no d spline, d sum component will be included in cov model then 
-allKnotsd <- c(0 , 0.3 , 1 , 7.13) # final is the max lower depth. d component will not be included in cov model in this case
+allKnotsd <- c() # use this to have no d spline, d sum component will be included in cov model then
+# allKnotsd <- c(0 , 0.3 , 1 , 7.13) # final is the max lower depth. d component will not be included in cov model in this case
 if(length(allKnotsd) > 0){ incdSpline <- TRUE }else{ incdSpline <- FALSE }
 
 if(length(allKnotsd) == 0){
@@ -178,7 +181,7 @@ if(fitModelNow){
 
 ### this bit can be run to do the model selection - took around 19 hours. Could be set up to be done in parallel though.
   # start_time <- Sys.time()
-  # modSelectOutput <- selectCovIAK3D(x = cFit , dI = dIFit , z = zFit , covs = covsFit , modelX = cmFit , modelx = 'matern' , nud = nud , 
+  # modSelectOutput <- selectCovIAK3D(xData = cFit , dIData = dIFit , zData = zFit , covsData = covsFit , modelX = cmFit , modelx = 'matern' , nud = nud , 
   #                                   sdfdTypeANDcmeInit = sdfdTypeANDcmeInit , allKnotsd = allKnotsd , prodSum = prodSum , lnTfmdData = lnTfmdData , 
   #                                   useReml = useReml , compLikMats = compLikMats , rqrBTfmdPreds = rqrBTfmdPreds , dirPlot = dataDir)
   # sdfdTypeANDcmeInit <- modSelectOutput$sdfdTypeANDcmeOptSelected
@@ -200,7 +203,7 @@ if(fitModelNow){
 ### refit cubist model as lmm...if selectCovIAK3D was run don't need to do this bit
   start_time <- Sys.time()
   
-  tmp <- fitIAK3D(x = cFit , dI = dIFit , z = zFit , covs = covsFit , modelX = cmFit , modelx = 'matern' , nud = nud , allKnotsd = allKnotsd , 
+  tmp <- fitIAK3D(xData = cFit , dIData = dIFit , zData = zFit , covsData = covsFit , modelX = cmFit , modelx = 'matern' , nud = nud , allKnotsd = allKnotsd , 
                     sdfdType_cd1 = sdfdTypeANDcmeInit[1] , sdfdType_cxd0 = sdfdTypeANDcmeInit[2] , sdfdType_cxd1 = sdfdTypeANDcmeInit[3] , 
                     cmeOpt = sdfdTypeANDcmeInit[4] , prodSum = prodSum , lnTfmdData = lnTfmdData , useReml = useReml , compLikMats = compLikMats ,
                     namePlot = nmplt , rqrBTfmdPreds = rqrBTfmdPreds) 
@@ -221,13 +224,10 @@ if(fitModelNow){
 ### some plots of the fitted covariance model...
 ###########################################################################
 if(plotVargiogramFit){
-  source(paste0(iakDir , '/iaCovMatern.R'))
-  
-  dIPlot <- data.frame('dU' = c(0 , 10 , 25 , 55)/100 , 'dL' = c(10 , 25 , 55 , 100)/100)
-  hx <- seq(0 , 25 , 5)
-  hx <- seq(0 , 15 , 1)
+  dIPlot <- data.frame('dU' = c(0 , 20 , 50 , 90)/100 , 'dL' = c(10 , 30 , 60 , 100)/100)
+  hx <- seq(0 , 20 , 1)
   pdf(file = paste0(dataDir , '/varioFit.pdf'))
-  tmp <- plotCovx(lmm.fit = lmm.fit.selected , hx = hx , dIPlot = dIPlot , addExpmntlV = TRUE , hzntlUnits = 'km' , roundTo = 0.05)
+  tmp <- plotCovx(lmm.fit = lmm.fit.selected , hx = hx , dIPlot = dIPlot , addExpmntlV = TRUE , hzntlUnits = 'km')
   dev.off()
   
   hdPlot <- seq(0 , 2 , 0.01)
@@ -235,23 +235,10 @@ if(plotVargiogramFit){
   qwe <- plotCord(lmm.fit = lmm.fit.selected , hdPlot = hdPlot, vrtclUnits = 'm')
   dev.off()
   
-  ### this plot only shows for the model covariances (not experimental covariances) with Edgeroi data - not enough data from same depth intervals
-  dTmp <- seq(0 , 2 , 0.05)
+  dTmp <- seq(0 , 2 , 0.1)
   dIPlot <- data.frame('dU' = dTmp[-length(dTmp)] , 'dL' = dTmp[-1])
   pdf(file = paste0(dataDir , '/covardFit.pdf'))
-  qwe <- plotCovd(lmm.fit = lmm.fit.selected , dIPlot = dIPlot , vrtclUnits = 'm' , roundTo = 0.05)
-  dev.off()
-  
-  ### plot of variox and variod next to each ofther for paper...  
-  pdf(file = paste0(dataDir , '/variosxd.pdf') , width = 12 , height = 6.5)
-  par(mfrow = c(1,2))
-  
-  dIPlot <- data.frame('dU' = c(0 , 10 , 25 , 55)/100 , 'dL' = c(10 , 25 , 55 , 100)/100)
-  tmp <- plotCovx(lmm.fit = lmm.fit.selected , hx = hx , dIPlot = dIPlot , addExpmntlV = TRUE , hzntlUnits = 'km' , roundTo = 0.05)
-  
-  dTmp <- seq(0 , 2 , 0.05)
-  dIPlot <- data.frame('dU' = dTmp[-length(dTmp)] , 'dL' = dTmp[-1])
-  qwe <- plotCovd(lmm.fit = lmm.fit.selected , dIPlot = dIPlot , vrtclUnits = 'm' , roundTo = 0.05)
+  qwe <- plotCovd(lmm.fit = lmm.fit.selected , dIPlot = dIPlot , vrtclUnits = 'm')
   dev.off()
   
   ### plot of the variances...
@@ -297,7 +284,7 @@ if(valNow){
   valStatsAllLayers <- tmp$valStatsAllLayers 
   valStatsTot <- tmp$valStatsTot
   
-  tmp <- plotProfilesIAK3D(namePlot = namePlot , x = cVal , dI = dIVal , z = zVal , 
+  tmp <- plotProfilesIAK3D(namePlot = namePlot , xData = cVal , dIData = dIVal , zData = zVal , 
                   xPred = cValU , dIPred = dIPred , zPred = zkProfPred , pi90LPred = pi90LkProfPred , pi90UPred = pi90UkProfPred , 
                   zhatxv = zkVal , pi90Lxv = zkVal - 1.64 * sqrt(vkVal) , pi90Uxv = zkVal + 1.64 * sqrt(vkVal)) 
 
@@ -366,7 +353,7 @@ if(val4PlotNow){
 
   namePlot = paste0(dataDir , '/plotVal4Plot.pdf')
 
-  tmp <- plotProfilesIAK3D(namePlot = namePlot , x = cVal4Plot , dI = dIVal4Plot , z = zVal4Plot_PLOT , 
+  tmp <- plotProfilesIAK3D(namePlot = namePlot , xData = cVal4Plot , dIData = dIVal4Plot , zData = zVal4Plot_PLOT , 
                   xPred = cVal4PlotU , dIPred = dIPred , zPred = zkProfPred_PLOT , pi90LPred = pi90LkProfPred_PLOT , pi90UPred = pi90UkProfPred_PLOT , 
                   zhatxv = zkVal4Plot_PLOT , pi90Lxv = pi90LkVal4Plot_PLOT , pi90Uxv = pi90UkVal4Plot_PLOT , 
                   profNames = paste0('Profile ' , rand6ForPlot) , xlim = xlim , xlab = xlab) 
