@@ -2,20 +2,22 @@ fitLMM2 <- function(pars , c , z , X , D , covModel , nSpatStructs , returnAll ,
 
   DFit <- xyDist(cTmp[iFit,] , cTmp[iFit,])
 
-useML <- FALSE
+  useML <- FALSE
 ### note parameterisation in fLMM2 fn for exp model is with a = range (not 3a = range)
-mina <- min(DFit[DFit > 0])
-maxa <- max(DFit) / 2
+  mina <- min(DFit[DFit > 0])
+  maxa <- max(DFit) / 2
 
-parInit <- c(0.3 , 1 , 0.3 , 50)
+  parInit <- c(0.3 , 1 , 0.3 , 50)
 
 #fLMM2 <- function(pars , c , z , X , D , covModel , nSpatStructs , returnAll , optionML , verbose , forCompLik = FALSE , mina = NULL , maxa = NULL , badNll = 9E99){
 
-ftLMM2Init <- fLMM2(pars = parInit , c = cTmp[iFit,] , z = yTmp[iFit] , X = XFit , D = DFit , 
+  ftLMM2Init <- fLMM2(pars = parInit , c = cTmp[iFit,] , z = yTmp[iFit] , X = XFit , D = DFit , 
                     covModel = 'exponential' , nSpatStructs = 2 , returnAll = FALSE , optionML = useML , 
                     verbose = TRUE , forCompLik = FALSE , mina = mina , maxa = maxa)
     
-#badNll <- ftLMM2Init + 100
+#  badNll <- ftLMM2Init + 100
+#  
+#  print(badNll)
     
 #####################################################    
 ### fit model with temporal correlation accounted for...
@@ -78,17 +80,34 @@ fLMM2 <- function(pars , c , z , X , D , covModel , nSpatStructs , returnAll , o
         C <- defineCLMM2(c0 = s0 , c1 = s1 , a1 = a1 , c2 = s2 , a2 = a2 , D = D , covModel = covModel , nSpatStructs = nSpatStructs)
         
         oneszX <- cbind(matrix(1 , N , 1) , z , X)
-        tmp <- lndetANDinvCb(C , oneszX)
 
-        if(returnAll){ cholA <- tmp$cholC }else{}
+        # return(list(C,oneszX))
+        
+        # tmp <- lndetANDinvCb(C , oneszX)
+        # 
+        # if(returnAll){ cholA <- tmp$cholC }else{}
+        # 
+        # lndetC <- tmp$lndetC
+        # if(is.na(lndetC)){             
+        #     printNll(nll = NA , parsOut = parsOut , verbose = verbose)
+        #     return(listOut) 
+        # }else{}
 
-        lndetC <- tmp$lndetC
-        if(is.na(lndetC)){             
-            printNll(nll = NA , parsOut = parsOut , verbose = verbose)
-            return(listOut) 
+        iConeszX <- try(solve(C , oneszX) , silent = TRUE)
+        if(is.character(iConeszX)){
+          printNll(nll = NA , parsOut = parsOut , verbose = verbose)
+          return(listOut) 
         }else{}
-
-        oneszXinvConeszX <- t(oneszX) %*% tmp$invCb
+        if(returnAll){ cholA <- try(chol(C) , silent = TRUE) }else{}
+        
+        lndetC <- determinant(C)
+        if(lndetC$sign <= 0){             
+          printNll(nll = NA , parsOut = parsOut , verbose = verbose)
+          return(listOut) 
+        }else{}
+        lndetC <- as.numeric(lndetC$modulus)
+        
+        oneszXinvConeszX <- t(oneszX) %*% iConeszX
         
         onesinvCones <- oneszXinvConeszX[1,1 , drop = FALSE]
         onesinvCz <- oneszXinvConeszX[1,2 , drop = FALSE]
@@ -100,10 +119,10 @@ fLMM2 <- function(pars , c , z , X , D , covModel , nSpatStructs , returnAll , o
 
         if(forCompLik){
             if(returnAll){
-                invCX <- tmp$invCb[,-c(1,2) , drop = FALSE]
-                invCz <- tmp$invCb[,2 , drop = FALSE]
+                invCX <- iConeszX[,-c(1,2) , drop = FALSE]
+                invCz <- iConeszX[,2 , drop = FALSE]
                 return(list('zinvAz' = zinvCz , 'zinvAX' = zinvCX , 'XinvAX' = XinvCX , 'lndetA' = lndetC , 'parsOut' = parsOut , 
-                        'invAX' = invCX , 'invAz' = invCz , 'iA' = chol2inv(tmp$cholC) , 
+                        'invAX' = invCX , 'invAz' = invCz , 'iA' = chol2inv(cholA) , 
                         'onesinvAones' = onesinvCones , 'onesinvAz' = onesinvCz , 'onesinvAX' = onesinvCX))        
             }else{
                 return(list('zinvAz' = zinvCz , 'zinvAX' = zinvCX , 'XinvAX' = XinvCX , 'lndetA' = lndetC , 'parsOut' = parsOut , 
@@ -111,14 +130,27 @@ fLMM2 <- function(pars , c , z , X , D , covModel , nSpatStructs , returnAll , o
             }
         }else{}
         
-        tmp <- lndetANDinvCb(XinvCX , t(zinvCX))
-        lndetXinvCX <- tmp$lndetC
-        if(is.na(lndetXinvCX)){     
-            printNll(nll = NA , parsOut = parsOut , verbose = verbose)
-            return(listOut) 
+        # tmp <- lndetANDinvCb(XinvCX , t(zinvCX))
+        # lndetXinvCX <- tmp$lndetC
+        # if(is.na(lndetXinvCX)){     
+        #   printNll(nll = NA , parsOut = parsOut , verbose = verbose)
+        #   return(listOut) 
+        # }else{}
+        # betahat <- tmp$invCb
+        
+        betahat <- try(solve(XinvCX , t(zinvCX)) , silent = TRUE)
+        if(is.character(betahat)){     
+          printNll(nll = NA , parsOut = parsOut , verbose = verbose)
+          return(listOut) 
         }else{}
-
-        betahat <- tmp$invCb
+        lndetXinvCX <- determinant(XinvCX)
+        if(lndetXinvCX$sign <= 0){             
+          printNll(nll = NA , parsOut = parsOut , verbose = verbose)
+          return(listOut) 
+        }else{}
+        lndetXinvCX <- as.numeric(lndetXinvCX$modulus)
+        
+        
         resiCres <- as.numeric(zinvCz - 2 * zinvCX %*% betahat + t(betahat) %*% XinvCX %*% betahat)
         
         if (optionML){
@@ -130,7 +162,7 @@ fLMM2 <- function(pars , c , z , X , D , covModel , nSpatStructs , returnAll , o
             lndetXinvCX <- lndetXinvCX - np * log(sigma2hat)
         }        
 
-        if(returnAll){ vbetahat <- sigma2hat * chol2inv(tmp$cholC) }else{}
+        if(returnAll){ vbetahat <- sigma2hat * chol2inv(chol(XinvCX)) }else{}
         lndetC <- lndetC + N * log(sigma2hat)
         resiCres <- resiCres / sigma2hat
         
@@ -373,7 +405,11 @@ krigingLMM2 <- function(ck , Xk , c , z , X , D , covModel , nSpatStructs , covP
     print(paste0('c0 = ' , c0))
     print(paste0('c1 = ' , c1))
     print(paste0('a1 = ' , a1))
-
+    if (nSpatStructs == 2){
+      print(paste0('c2 = ' , c2))
+      print(paste0('a2 = ' , a2))
+    }else{}
+    
     C <- defineCLMM2(c0 = c0 , c1 = c1 , a1 = a1 , c2 = c2 , a2 = a2 , D = D , covModel = covModel , nSpatStructs = nSpatStructs)
 
     zX <- cbind(z , X)
