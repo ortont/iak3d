@@ -48,7 +48,7 @@ optifix <- function(par, fixed, fn, gr = NULL, ...,
 	}else{ 
 		.gr <- NULL 
 	} 
-
+	
 #	.opt = optim(.parStart,.fn,.gr,...,
 #			method=method,lower=lower,control=control,hessian=hessian) 
 ### TO update (22/12/17) to subset lower/upper and to pass on upper...
