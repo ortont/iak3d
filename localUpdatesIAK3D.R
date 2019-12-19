@@ -12,10 +12,10 @@ lmmUpdateLocal <- function(lmmFit , xLocal = NULL , dILocal = NULL , zLocal = NU
     zLocal <- zLocal[iKeep]
     covsLocal <- covsLocal[iKeep,,drop=FALSE]
   
-    lmmFit$x <- rbind(lmmFit$x , xLocal)
-    lmmFit$dI <- rbind(lmmFit$dI , dILocal)
-    lmmFit$z <- c(lmmFit$z , zLocal)
-    lmmFit$covs <- rbind(lmmFit$covs , covsLocal)
+    lmmFit$xData <- rbind(lmmFit$xData , xLocal)
+    lmmFit$dIData <- rbind(lmmFit$dIData , dILocal)
+    lmmFit$zData <- c(lmmFit$zData , zLocal)
+    lmmFit$covsData <- rbind(lmmFit$covsData , covsLocal)
   
 ### only do for new data...
     if (is.element('iU' , names(lmmFit))){
@@ -24,12 +24,12 @@ lmmUpdateLocal <- function(lmmFit , xLocal = NULL , dILocal = NULL , zLocal = NU
       iUUpdate <- NA
     }
         
-    XLims <- matrix(NA , 2 , ncol(lmmFit$X))
+    XLims <- matrix(NA , 2 , ncol(lmmFit$XData))
     XLims[1,] <- Inf
     XLims[2,] <- -Inf
  
-    tmp <- makeXvX(covData = covsLocal , dI = dILocal , modelX = lmmFit$modelX , allKnotsd = lmmFit$allKnotsd , iU = iUUpdate , nDiscPts = 1000 , lnTfmdData = lmmFit$lnTfmdData , XLims = XLims)
-    XUpdate <- rbind(lmmFit$X , tmp$X)
+    tmp <- makeXvX(covData = covsLocal , dIData = dILocal , modelX = lmmFit$modelX , allKnotsd = lmmFit$allKnotsd , iU = iUUpdate , nDiscPts = 1000 , lnTfmdData = lmmFit$lnTfmdData , XLims = XLims)
+    XUpdate <- rbind(lmmFit$XData , tmp$X)
     if (is.element('vXU' , names(lmmFit))){
       vXUUpdate <- rbind(lmmFit$vXU , tmp$vXU)
     }else{
@@ -43,7 +43,7 @@ lmmUpdateLocal <- function(lmmFit , xLocal = NULL , dILocal = NULL , zLocal = NU
       vcentres <- matrix(NA , length(lmmFit$compLikMats$listBlocks) , ncol(lmmFit$compLikMats$listBlocks[[1]]$centroid))
       for (i in 1:length(lmmFit$compLikMats$listBlocks)){ vcentres[i,] <- lmmFit$compLikMats$listBlocks[[i]]$centroid }
       optnTmp <- lmmFit$compLikMats$compLikOptn
-      lmmFit$compLikMats <- setVoronoiBlocks(x = lmmFit$x , nPerBlock = NA , plotVor = F , vcentres = vcentres)
+      lmmFit$compLikMats <- setVoronoiBlocks(x = lmmFit$xData , nPerBlock = NA , plotVor = F , vcentres = vcentres)
       lmmFit$compLikMats$compLikOptn <- optnTmp
     }else{}
 
@@ -52,18 +52,18 @@ lmmUpdateLocal <- function(lmmFit , xLocal = NULL , dILocal = NULL , zLocal = NU
 ### could be speeded up in future to just update the matrices rather than remake them.
 ###################################
     if (lmmFit$compLikMats$compLikOptn == 0){
-        lmmFit$setupMats <- setupIAK3D(lmmFit$x , lmmFit$dI , nDscPts = 0)
+        lmmFit$setupMats <- setupIAK3D(lmmFit$xData , lmmFit$dIData , nDscPts = 0)
     }else{
         lmmFit$setupMats <- list()
 ### order is all adj subset pairs, then all individual subsets (which can be used to get non-adj subset pairs)
         for (i in 1:nrow(lmmFit$compLikMats$subsetPairsAdj)){
           iThis <- c(lmmFit$compLikMats$listBlocks[[lmmFit$compLikMats$subsetPairsAdj[i,1]]]$i , lmmFit$compLikMats$listBlocks[[lmmFit$compLikMats$subsetPairsAdj[i,2]]]$i)
-          lmmFit$setupMats[[i]] <- setupIAK3D(lmmFit$x[iThis,,drop = FALSE] , lmmFit$dI[iThis,,drop = FALSE] , nDscPts = 0)
+          lmmFit$setupMats[[i]] <- setupIAK3D(lmmFit$xData[iThis,,drop = FALSE] , lmmFit$dIData[iThis,,drop = FALSE] , nDscPts = 0)
         }
 ### now all individual subsets...      
         for (i in 1:length(lmmFit$compLikMats$listBlocks)){
           iThis <- lmmFit$compLikMats$listBlocks[[i]]$i
-          lmmFit$setupMats[[nrow(lmmFit$compLikMats$subsetPairsAdj)+i]] <- setupIAK3D(lmmFit$x[iThis,,drop = FALSE] , lmmFit$dI[iThis,,drop = FALSE] , nDscPts = 0)
+          lmmFit$setupMats[[nrow(lmmFit$compLikMats$subsetPairsAdj)+i]] <- setupIAK3D(lmmFit$xData[iThis,,drop = FALSE] , lmmFit$dIData[iThis,,drop = FALSE] , nDscPts = 0)
         }
     }
   
@@ -73,11 +73,11 @@ lmmUpdateLocal <- function(lmmFit , xLocal = NULL , dILocal = NULL , zLocal = NU
 ### this will probably update beta - which I don't think I really want to do (though could do)
 ### probably just want to update list iCX things?
     if (lmmFit$compLikMats$compLikOptn == 0){
-      lmmFitUpdate <- nllIAK3D(pars = lmmFit$pars , z = lmmFit$z , X = XUpdate , vXU = vXUUpdate , iU = iUUpdate , modelx = lmmFit$modelx , nud = lmmFit$nud , 
+      lmmFitUpdate <- nllIAK3D(pars = lmmFit$pars , zData = lmmFit$zData , XData = XUpdate , vXU = vXUUpdate , iU = iUUpdate , modelx = lmmFit$modelx , nud = lmmFit$nud , 
                   sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , 
                   cmeOpt = lmmFit$cmeOpt , prodSum = lmmFit$prodSum , setupMats = lmmFit$setupMats , parBnds = lmmFit$parBnds , useReml = lmmFit$useReml , lnTfmdData = lmmFit$lnTfmdData , rtnAll = T)	
     }else{
-      lmmFitUpdate <- nllIAK3D_CL(pars = lmmFit$pars , z = lmmFit$z , X = XUpdate , modelx = lmmFit$modelx , nud = lmmFit$nud , 
+      lmmFitUpdate <- nllIAK3D_CL(pars = lmmFit$pars , zData = lmmFit$zData , XData = XUpdate , modelx = lmmFit$modelx , nud = lmmFit$nud , 
                   sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , 
                   cmeOpt = lmmFit$cmeOpt , prodSum = lmmFit$prodSum , setupMats = lmmFit$setupMats , parBnds = lmmFit$parBnds , useReml = lmmFit$useReml , compLikMats = lmmFit$compLikMats , rtnAll = T)	
     }
@@ -122,10 +122,10 @@ updateCubistModel <- function(lmmFit){
       }
     }else{}
     if(!is.element('namesDataFit' , names(lmmFit$modelX))){
-      lmmFit$modelX$namesDataFit <- names(lmmFit$covs)
+      lmmFit$modelX$namesDataFit <- names(lmmFit$covsData)
     }else{}
     
-    cmTmp <- cubist2X(cubistModel = lmmFit$modelX , dataFit = lmmFit$covs , zFit = lmmFit$z , allKnotsd = lmmFit$allKnotsd)
+    cmTmp <- cubist2X(cubistModel = lmmFit$modelX , dataFit = lmmFit$covsData , zFit = lmmFit$zData , allKnotsd = lmmFit$allKnotsd)
     lmmFit$modelX <- cmTmp$cubistModel
 
     if(!is.element('namesX' , names(lmmFit$modelX))){
