@@ -3,10 +3,10 @@
 ### non-adjacent subsets included but with cov[subset i , subset j] = 0
 ### should have no depth sum component in cov model (include via spline instead)
 ###################################################################
-nllIAK3D_CL <- function(pars , z , X , modelx , nud ,  
+nllIAK3D_CL <- function(pars , zData , XData , modelx , nud ,  
                      sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1 , cmeOpt , prodSum , setupMats , parBnds , useReml , compLikMats , rtnAll = F){
 
-    if(printnllTime){
+    if(exists("printnllTime") && printnllTime){
       ptm <- proc.time()
     }else{}
 
@@ -27,16 +27,16 @@ nllIAK3D_CL <- function(pars , z , X , modelx , nud ,
     badnll <- 9E99
     cxdhat <- NA
        
-    n <- length(z)
-    p <- ncol(X)
+    n <- length(zData)
+    p <- ncol(XData)
 
-    XziAXz_SUM <- matrix(0 , ncol(X)+1 , ncol(X)+1)
+    XziAXz_SUM <- matrix(0 , ncol(XData)+1 , ncol(XData)+1)
     lndetA_SUM <- n_SUM <- 0
     if(rtnAll){ listiCkl_kl <- listCkl_kl <- listiAXkl_kl <- listiAzkl_kl <- list() }else{}
 
     for(i in 1:nrow(compLikMats$subsetPairsAdj)){
       iThis <- c(compLikMats$listBlocks[[compLikMats$subsetPairsAdj[i,1]]]$i , compLikMats$listBlocks[[compLikMats$subsetPairsAdj[i,2]]]$i)
-      tmp <- nllIAK3D(pars = pars , z = z[iThis] , X = X[iThis,,drop = FALSE] , vXU = NA , iU = NA , modelx = modelx , nud = nud , 
+      tmp <- nllIAK3D(pars = pars , zData = zData[iThis] , XData = XData[iThis,,drop = FALSE] , vXU = NA , iU = NA , modelx = modelx , nud = nud , 
             sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , 
             cmeOpt = cmeOpt , prodSum = prodSum , setupMats = setupMats[[i]] , parBnds = parBnds , useReml = useReml , lnTfmdData = lnTfmdData , rtnAll = TRUE , forCompLik = TRUE)	      
       XziAXz_SUM <- XziAXz_SUM + tmp$WiAW
@@ -47,7 +47,8 @@ nllIAK3D_CL <- function(pars , z , X , modelx , nud ,
 
       if(rtnAll){ 
         listCkl_kl[[i]] <- tmp$A
-        listiCkl_kl[[i]] <- lndetANDinvCb(tmp$A)$invCb
+#        listiCkl_kl[[i]] <- lndetANDinvCb(tmp$A)$invCb
+        listiCkl_kl[[i]] <- chol2inv(chol(tmp$A)) # should make code better as already solved a system in nll function.
         listiAXkl_kl[[i]] <- tmp$iAW[,1:p,drop=FALSE]
         listiAzkl_kl[[i]] <- tmp$iAW[,p+1,drop=FALSE]
       }else{}
@@ -62,14 +63,15 @@ nllIAK3D_CL <- function(pars , z , X , modelx , nud ,
         lndetA_BLOCKS <- NA * numeric(length(compLikMats$listBlocks))
         for(i in 1:length(compLikMats$listBlocks)){
           iThis <- compLikMats$listBlocks[[i]]$i
-          tmp <- nllIAK3D(pars = pars , z = z[iThis] , X = X[iThis,,drop = FALSE] , vXU = NA , iU = NA , modelx = modelx , nud = nud , 
+          tmp <- nllIAK3D(pars = pars , zData = zData[iThis] , XData = XData[iThis,,drop = FALSE] , vXU = NA , iU = NA , modelx = modelx , nud = nud , 
                 sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , 
                 cmeOpt = cmeOpt , prodSum = prodSum , setupMats = setupMats[[i+nadjSubsets]] , parBnds = parBnds , useReml = useReml , lnTfmdData = lnTfmdData , rtnAll = TRUE , forCompLik = TRUE)	      
           XziAXz_BLOCKS[[i]] <- tmp$WiAW
           lndetA_BLOCKS[i] <- tmp$lndetA
           if(rtnAll){ # these ones are for a single block, not for a pair 
             listCkl_kl[[i+nadjSubsets]] <- tmp$A
-            listiCkl_kl[[i+nadjSubsets]] <- lndetANDinvCb(tmp$A)$invCb
+#            listiCkl_kl[[i+nadjSubsets]] <- lndetANDinvCb(tmp$A)$invCb
+            listiCkl_kl[[i+nadjSubsets]] <- chol2inv(chol(tmp$A))
             listiAXkl_kl[[i+nadjSubsets]] <- tmp$iAW[,1:p,drop=FALSE]
             listiAzkl_kl[[i+nadjSubsets]] <- tmp$iAW[,p+1,drop=FALSE]
           }else{}
@@ -103,13 +105,16 @@ nllIAK3D_CL <- function(pars , z , X , modelx , nud ,
     }
         
     if(p > 0){
-      tmp <- lndetANDinvCb(XziAXz[1:p,1:p,drop = FALSE] , XziAXz[1:p,p+1,drop = FALSE])
-      if(is.character(tmp$cholC)){
+#      tmp <- lndetANDinvCb(XziAXz[1:p,1:p,drop = FALSE] , XziAXz[1:p,p+1,drop = FALSE])
+#      if(is.character(tmp$cholC)){
+      betahat <- try(solve(XziAXz[1:p,1:p,drop = FALSE] , XziAXz[1:p,p+1,drop = FALSE]) , silent = TRUE)
+      if(is.character(betahat)){
         return(badnll)
       }else{}
 
-      betahat <- tmp$invCb
-      lndetXiAX <- tmp$lndetC
+#      betahat <- tmp$invCb
+#      lndetXiAX <- tmp$lndetC
+      lndetXiAX <- as.numeric(determinant(XziAXz[1:p,1:p,drop = FALSE] , logarithm = TRUE)$modulus)
     }else{
       betahat <- c()
       lndetXiAX <- c()
@@ -176,7 +181,7 @@ nllIAK3D_CL <- function(pars , z , X , modelx , nud ,
       print(txtOut)    
     }else{}
 
-    if(printnllTime){
+    if(exists("printnllTime") && printnllTime){
       print('time for nll complik evaluation was:')
       print(proc.time() - ptm)
     }else{}
@@ -191,17 +196,17 @@ nllIAK3D_CL <- function(pars , z , X , modelx , nud ,
 
     if(rtnAll){ 
     	return(list('nll' = nll , 'pars' = pars , 'parsBTfmd' = parsBTfmd , 'betahat' = betahat , 'vbetahat' = vbetahat , 'cxdhat' = cxdhat , 
-                  'sigma2Vec' = sigma2Vec , 'X' = X , 'listCkl_kl' = listCkl_kl , 'listiCkl_kl' = listiCkl_kl))
+                  'sigma2Vec' = sigma2Vec , 'XData' = XData , 'listCkl_kl' = listCkl_kl , 'listiCkl_kl' = listiCkl_kl))
     }else{
     	return(nll)
     }
 }
 
 
-predMatsIAK3D_CL <- function(z_muhat , X , xMap , dIMap , iData = seq(length(z_muhat)) , lmmFit){
+predMatsIAK3D_CL <- function(z_muhat , XData , xMap , dIMap , iData = seq(length(z_muhat)) , lmmFit){
 
     n <- length(z_muhat)
-    p <- ncol(X)
+    p <- ncol(XData)
     nxMap <- nrow(xMap)
 
     diagCkhiCChk_SUM <- matrix(0 , nxMap , 1)
@@ -215,7 +220,7 @@ predMatsIAK3D_CL <- function(z_muhat , X , xMap , dIMap , iData = seq(length(z_m
         iThis <- intersect(iThis , iData)
       }else{}
 
-      setupMatsMap <- setupIAK3D(x = rbind(lmmFit$x[iThis,,drop=FALSE] , xMap) , dI = rbind(as.matrix(lmmFit$dI[iThis,,drop=FALSE]) , dIMap) , nDscPts = 0)
+      setupMatsMap <- setupIAK3D(x = rbind(lmmFit$xData[iThis,,drop=FALSE] , xMap) , dIData = rbind(as.matrix(lmmFit$dIData[iThis,,drop=FALSE]) , dIMap) , nDscPts = 0)
         
       tmp <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx , 
               sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , 
@@ -226,11 +231,13 @@ predMatsIAK3D_CL <- function(z_muhat , X , xMap , dIMap , iData = seq(length(z_m
       ChkThis <- tmp$C[1:length(iThis),(length(iThis)+1):(length(iThis)+nxMap),drop = FALSE]
       ChThis <- tmp$C[1:length(iThis),1:length(iThis),drop = FALSE]
 
-      tmp <- lndetANDinvCb(ChThis , ChkThis)
-      iCChkThis <- tmp$invCb
+#      tmp <- lndetANDinvCb(ChThis , ChkThis)
+#      iCChkThis <- tmp$invCb
+      iCChkThis <- solve(ChThis , ChkThis)
+      
       diagCkhiCChk_SUM <- diagCkhiCChk_SUM + matrix(colSums(ChkThis * iCChkThis) , ncol = 1)
 
-      CkhiCX_SUM <- CkhiCX_SUM + t(iCChkThis) %*% X[iThis,,drop=FALSE]
+      CkhiCX_SUM <- CkhiCX_SUM + t(iCChkThis) %*% XData[iThis,,drop=FALSE]
       CkhiCz_muhat_SUM <- CkhiCz_muhat_SUM + t(iCChkThis) %*% z_muhat[iThis]
     }
 
@@ -245,7 +252,7 @@ predMatsIAK3D_CL <- function(z_muhat , X , xMap , dIMap , iData = seq(length(z_m
         iThis <- intersect(iThis , iData)
       }else{}
 
-      setupMatsMap <- setupIAK3D(x = rbind(lmmFit$x[iThis,,drop=FALSE] , xMap) , dI = rbind(as.matrix(lmmFit$dI[iThis,,drop=FALSE]) , dIMap) , nDscPts = 0)
+      setupMatsMap <- setupIAK3D(x = rbind(lmmFit$xData[iThis,,drop=FALSE] , xMap) , dIData = rbind(as.matrix(lmmFit$dIData[iThis,,drop=FALSE]) , dIMap) , nDscPts = 0)
         
       tmp <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx , 
               sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , 
@@ -254,11 +261,13 @@ predMatsIAK3D_CL <- function(z_muhat , X , xMap , dIMap , iData = seq(length(z_m
       ChkThis <- tmp$C[1:length(iThis),(length(iThis)+1):(length(iThis)+nxMap),drop = FALSE]
       ChThis <- tmp$C[1:length(iThis),1:length(iThis),drop = FALSE]
 
-      tmp <- lndetANDinvCb(ChThis , ChkThis)
-      iCChkThis <- tmp$invCb
+#      tmp <- lndetANDinvCb(ChThis , ChkThis)
+#      iCChkThis <- tmp$invCb
+      iCChkThis <- solve(ChThis , ChkThis)
+      
       diagCkhiCChk_BLOCKS[,i] <- matrix(colSums(ChkThis * iCChkThis), ncol = 1)
 
-      CkhiCX_BLOCKS[[i]] <- t(iCChkThis) %*% X[iThis,,drop=FALSE]
+      CkhiCX_BLOCKS[[i]] <- t(iCChkThis) %*% XData[iThis,,drop=FALSE]
       CkhiCz_muhat_BLOCKS[,i] <- matrix(t(iCChkThis) %*% z_muhat[iThis] , ncol = 1)
     }
 
@@ -279,7 +288,7 @@ predMatsIAK3D_CL <- function(z_muhat , X , xMap , dIMap , iData = seq(length(z_m
     return(list('diagCkk' = diagCkk , 'diagCkhiCChk' = diagCkhiCChk , 'CkhiCX' = CkhiCX , 'CkhiCz_muhat' = CkhiCz_muhat))
 }
 
-predMatsIAK3D_CL_ByBlock <- function(z_muhat , X , xMap , dIMap , iData = seq(length(z_muhat)) , lmmFit , listCkl_kl , listiCkl_kl){
+predMatsIAK3D_CL_ByBlock <- function(z_muhat , XData , xMap , dIMap , iData = seq(length(z_muhat)) , lmmFit , listCkl_kl , listiCkl_kl){
 
 ### get the blocks for the prediction locations...
   nBlocks <- length(lmmFit$compLikMats$listBlocks)
@@ -293,7 +302,7 @@ predMatsIAK3D_CL_ByBlock <- function(z_muhat , X , xMap , dIMap , iData = seq(le
   nxMap <- length(blockMap)
   
   n <- length(z_muhat)
-  p <- ncol(X)
+  p <- ncol(XData)
   
   A0 <- b0 <- matrix(NA , nxMap , 1)
 #  diagCkk <- diagCkhiCChk <- CkhiCX <- CkhiCz_muhat <- list()
@@ -343,7 +352,7 @@ predMatsIAK3D_CL_ByBlock <- function(z_muhat , X , xMap , dIMap , iData = seq(le
         iThis <- c(iDatak , iDatal)
 
 ### note different order to other stuff (preds first here) for consistency with Eidsvik...
-        setupMatsMap <- setupIAK3D(x = rbind(xMapThis , lmmFit$x[iThis,,drop=FALSE]) , dI = rbind(dIMapThis , as.matrix(lmmFit$dI[iThis,,drop=FALSE])) , nDscPts = 0)
+        setupMatsMap <- setupIAK3D(x = rbind(xMapThis , lmmFit$xData[iThis,,drop=FALSE]) , dIData = rbind(dIMapThis , as.matrix(lmmFit$dIData[iThis,,drop=FALSE])) , nDscPts = 0)
         
         tmp <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx , 
                 sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , 
@@ -355,13 +364,14 @@ predMatsIAK3D_CL_ByBlock <- function(z_muhat , X , xMap , dIMap , iData = seq(le
         ChkThis <- tmp$C[(nxMapThis+1):(nxMapThis+length(iThis)),1:nxMapThis,drop = FALSE]
         ChThis <- tmp$C[(nxMapThis+1):(nxMapThis+length(iThis)),(nxMapThis+1):(nxMapThis+length(iThis)),drop = FALSE]
 
-        tmp <- lndetANDinvCb(ChThis , ChkThis)
-        iCChkThis <- tmp$invCb
+#        tmp <- lndetANDinvCb(ChThis , ChkThis)
+#        iCChkThis <- tmp$invCb
+        iCChkThis <- solve(ChThis , ChkThis)
         
         diagCkhiCChkThis <- matrix(colSums(ChkThis * iCChkThis) , ncol = 1)
         
         diagCkhiCChk_SUM <- diagCkhiCChk_SUM + diagCkhiCChkThis
-        CkhiCX_SUM <- CkhiCX_SUM + t(iCChkThis) %*% X[iThis,,drop=FALSE]
+        CkhiCX_SUM <- CkhiCX_SUM + t(iCChkThis) %*% XData[iThis,,drop=FALSE]
         CkhiCz_muhat_SUM <- CkhiCz_muhat_SUM + t(iCChkThis) %*% z_muhat[iThis]
       }
 
@@ -375,7 +385,7 @@ predMatsIAK3D_CL_ByBlock <- function(z_muhat , X , xMap , dIMap , iData = seq(le
   return(list('diagCkk' = diagCkk , 'diagCkhiCChk' = diagCkhiCChk , 'CkhiCX' = CkhiCX , 'CkhiCz_muhat' = CkhiCz_muhat))
 }
 
-predMatsIAK3D_CLEV_ByBlock <- function(z_muhat , X , xMap , dIMap , iData = seq(length(z_muhat)) , lmmFit){
+predMatsIAK3D_CLEV_ByBlock <- function(z_muhat , XData , xMap , dIMap , iData = seq(length(z_muhat)) , lmmFit){
 
 ### get the blocks for the prediction locations...
   nBlocks <- length(lmmFit$compLikMats$listBlocks)
@@ -389,7 +399,7 @@ predMatsIAK3D_CLEV_ByBlock <- function(z_muhat , X , xMap , dIMap , iData = seq(
   nxMap <- length(blockMap)
   
   n <- length(z_muhat)
-  p <- ncol(X)
+  p <- ncol(XData)
   
   zk <- vk <- matrix(NA , nxMap , 1)
 
@@ -439,7 +449,7 @@ predMatsIAK3D_CLEV_ByBlock <- function(z_muhat , X , xMap , dIMap , iData = seq(
 
       iThis <- c(iDatak , iDatalAll)
 ### note different order to other stuff (preds first here) for consistency with Eidsvik...
-      setupMatsMap <- setupIAK3D(x = rbind(xMapThis , lmmFit$x[iThis,,drop=FALSE]) , dI = rbind(dIMapThis , as.matrix(lmmFit$dI[iThis,,drop=FALSE])) , nDscPts = 0)
+      setupMatsMap <- setupIAK3D(x = rbind(xMapThis , lmmFit$xData[iThis,,drop=FALSE]) , dIData = rbind(dIMapThis , as.matrix(lmmFit$dIData[iThis,,drop=FALSE])) , nDscPts = 0)
 
       tmp <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx , 
                 sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , 
@@ -478,14 +488,16 @@ predMatsIAK3D_CLEV_ByBlock <- function(z_muhat , X , xMap , dIMap , iData = seq(
           if(loadFromFit){
             iCkl_kl_Ckl_0This <- iCkl_klThis %*% Ckl_0This
           }else{
-            iCkl_kl_Ckl_0This <- lndetANDinvCb(Ckl_klThis , Ckl_0This)$invCb 
+#            iCkl_kl_Ckl_0This <- lndetANDinvCb(Ckl_klThis , Ckl_0This)$invCb 
+            iCkl_kl_Ckl_0This <- solve(Ckl_klThis , Ckl_0This)
           }
 
           C0IFklThis <- C0k_0k[i0,i0,drop=FALSE] - C0klAll[i0 , c(i1,i2) , drop = FALSE] %*% iCkl_kl_Ckl_0This
 ### ensure it is symmetric...          
           C0IFklThis <- 0.5 * (C0IFklThis + t(C0IFklThis))
 
-          iC0IFklThis <- lndetANDinvCb(C0IFklThis)$invCb
+#          iC0IFklThis <- lndetANDinvCb(C0IFklThis)$invCb
+          iC0IFklThis <- chol2inv(chol(C0IFklThis))
           Q0klThis_i0_i12 <- -iC0IFklThis %*% t(iCkl_kl_Ckl_0This)
 
           Q0klThis_i0_i0 <- iC0IFklThis
@@ -509,7 +521,8 @@ predMatsIAK3D_CLEV_ByBlock <- function(z_muhat , X , xMap , dIMap , iData = seq(
         if(loadFromFit){
           iCk_k <- lmmFit$listiCkl_kl[[nadjSubsets+iBlock]]
         }else{
-          iCk_k <- lndetANDinvCb(C0k_0k[i1,i1,drop=FALSE])$invCb # could load this from saved objects.
+#          iCk_k <- lndetANDinvCb(C0k_0k[i1,i1,drop=FALSE])$invCb # could load this from saved objects.
+          iCk_k <- chol2inv(chol(C0k_0k[i1,i1,drop=FALSE])) # could load this from saved objects.
         }
         C0_kiCk_k <- C0k_0k[i0,i1,drop=FALSE] %*% iCk_k 
 
@@ -517,7 +530,8 @@ predMatsIAK3D_CLEV_ByBlock <- function(z_muhat , X , xMap , dIMap , iData = seq(
 ### to ensure C0_0_IF_k is symmetric (possibly not due to numerical errors)...
         C0_0_IF_k <- 0.5 * (C0_0_IF_k + t(C0_0_IF_k))
 
-        iC0_0_IF_k <- lndetANDinvCb(C0_0_IF_k)$invCb
+#        iC0_0_IF_k <- lndetANDinvCb(C0_0_IF_k)$invCb
+        iC0_0_IF_k <- chol2inv(chol(C0_0_IF_k))
         iC0_0_IF_k_C0_kiCk_k <- iC0_0_IF_k %*% C0_kiCk_k
         
         A0_SUM <- A0_SUM + nnonadjBlocks * iC0_0_IF_k
@@ -542,7 +556,8 @@ predMatsIAK3D_CLEV_ByBlock <- function(z_muhat , X , xMap , dIMap , iData = seq(
       A0_SUM <- 0.5 * (A0_SUM + t(A0_SUM))
       J0_SUM <- 0.5 * (J0_SUM + t(J0_SUM))
 
-      invA0 <- lndetANDinvCb(A0_SUM)$invCb
+#      invA0 <- lndetANDinvCb(A0_SUM)$invCb
+      invA0 <- chol2inv(chol(A0_SUM))
 
       zk[iMapThis,1] <- matrix(invA0 %*% b0_SUM , ncol = 1)
 
