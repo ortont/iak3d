@@ -1,4 +1,4 @@
-makeXvX <- function(covData = NA , dI , modelX , allKnotsd = c() , iU = NA , nDiscPts = 100 , lnTfmdData = FALSE , XLims = NULL){
+makeXvX <- function(covData = NA , dIData , modelX , allKnotsd = c() , iU = NA , nDiscPts = 100 , lnTfmdData = FALSE , XLims = NULL){
 ###########################################################################
 ### name convention...
 ###########################################################################
@@ -18,7 +18,7 @@ makeXvX <- function(covData = NA , dI , modelX , allKnotsd = c() , iU = NA , nDi
 ### if modelX is a cubist model...
 ### 	then use the cubist splits and rules to set design matrices
 ###########################################################################
-    n <- dim(dI)[[1]]
+    n <- dim(dIData)[[1]]
     if((length(covData) == 1) && is.na(covData)){
         nCovs <- 0
     }else{
@@ -242,9 +242,9 @@ makeXvX <- function(covData = NA , dI , modelX , allKnotsd = c() , iU = NA , nDi
           for(i in 1:n){
             XTmp <- kronecker(matrix(X_d[i,] , nrow = 1) , matrix(1 , nDiscPts , 1))
             if(nDiscPts > 1){
-              dDiscPts <- seq(dI[i,1] , dI[i,2] , (dI[i,2] - dI[i,1]) / (nDiscPts - 1))
+              dDiscPts <- seq(dIData[i,1] , dIData[i,2] , (dIData[i,2] - dIData[i,1]) / (nDiscPts - 1))
             }else{
-              dDiscPts <- 0.5 * (dI[i,1] + dI[i,2])
+              dDiscPts <- 0.5 * (dIData[i,1] + dIData[i,2])
             }
             if(length(id) > 0){ XTmp[,id] <- XTmp[,id] * dDiscPts }else{}
             if(length(id2) > 0){ XTmp[,id2] <- XTmp[,id2] * (dDiscPts ^ 2) }else{}
@@ -278,17 +278,17 @@ makeXvX <- function(covData = NA , dI , modelX , allKnotsd = c() , iU = NA , nDi
           X[,iNod] <- X_d[,iNod,drop=FALSE]
           id1Tmp <- c(id , idInt)
           if(length(id1Tmp) > 0){
-            EdTmp <- rowMeans(dI)
+            EdTmp <- rowMeans(dIData)
             X[,id1Tmp] <- X_d[,id1Tmp,drop=FALSE] * matrix(EdTmp , N , length(id1Tmp))
           }else{}
           id2Tmp <- c(id2 , id2Int)
           if(length(id2Tmp) > 0){
-            Ed2Tmp <- dI[,1]^2 + dI[,1] * dI[,2] + dI[,2]^2
+            Ed2Tmp <- dIData[,1]^2 + dIData[,1] * dIData[,2] + dIData[,2]^2
             X[,id2Tmp] <- X_d[,id2Tmp,drop=FALSE] * matrix(Ed2Tmp , N , length(id2Tmp))
           }else{}
           id3Tmp <- c(id3 , id3Int)
           if(length(id3Tmp) > 0){
-            Ed3Tmp <- dI[,1]^3 + (dI[,1]^2)*dI[,2] + dI[,1]*(dI[,2]^2) + dI[,2]^3
+            Ed3Tmp <- dIData[,1]^3 + (dIData[,1]^2)*dIData[,2] + dIData[,1]*(dIData[,2]^2) + dIData[,2]^3
             X[,id3Tmp] <- X_d[,id3Tmp,drop=FALSE] * matrix(Ed3Tmp , N , length(id3Tmp))
           }else{}
 
@@ -310,9 +310,9 @@ makeXvX <- function(covData = NA , dI , modelX , allKnotsd = c() , iU = NA , nDi
           if(length(idSpline) > 0){ 
             for(i in 1:n){
               if(nDiscPts > 1){
-                dDiscPts <- seq(dI[i,1] , dI[i,2] , (dI[i,2] - dI[i,1]) / (nDiscPts - 1))
+                dDiscPts <- seq(dIData[i,1] , dIData[i,2] , (dIData[i,2] - dIData[i,1]) / (nDiscPts - 1))
               }else{
-                dDiscPts <- 0.5 * (dI[i,1] + dI[i,2])
+                dDiscPts <- 0.5 * (dIData[i,1] + dIData[i,2])
               }
               XTmp <- bs(x = dDiscPts , knots = intKnots , degree = 3 , intercept = F , Boundary.knots = bdryKnots) 
               if(setXLims){
@@ -338,7 +338,8 @@ makeXvX <- function(covData = NA , dI , modelX , allKnotsd = c() , iU = NA , nDi
 
 #n x p x nDiscPts <= maxTmp
 
-        maxTmp <- 10000000
+#        maxTmp <- 10000000
+        maxTmp <- 1000000
 
         if(lnTfmdData){ 
           nPerBatch <- floor(maxTmp / (nDiscPts * p * p))
@@ -387,9 +388,9 @@ makeXvX <- function(covData = NA , dI , modelX , allKnotsd = c() , iU = NA , nDi
             iRep <- rep(i , each = nDiscPts)
           
             if(nDiscPts > 1){
-              dDiscPts <- dI[iRep,1] + rep(linTmp , length(i)) * (dI[iRep,2] - dI[iRep,1])
+              dDiscPts <- dIData[iRep,1] + rep(linTmp , length(i)) * (dIData[iRep,2] - dIData[iRep,1])
             }else{
-              dDiscPts <- 0.5 * (dI[i,1] + dI[i,2])
+              dDiscPts <- 0.5 * (dIData[i,1] + dIData[i,2])
             }          
 
             covDataThis <- covData[iRep,,drop=FALSE]
@@ -420,7 +421,7 @@ makeXvX <- function(covData = NA , dI , modelX , allKnotsd = c() , iU = NA , nDi
           }else{
 ### no columns with depth in, so no averaging required...             
             covDataThis <- covData[i,,drop=FALSE]
-            covDataThis$dIMidPts <- rowMeans(dI[i,,drop=FALSE]) # because gam doesn't like NA
+            covDataThis$dIMidPts <- rowMeans(dIData[i,,drop=FALSE]) # because gam doesn't like NA
             if(modelType == 'cubist'){
               XTmp <- cubist2X(cubistModel = modelX , dataFit = covDataThis , allKnotsd = allKnotsd)
             }else if(modelType == 'gam'){
