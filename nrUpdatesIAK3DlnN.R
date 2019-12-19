@@ -1,22 +1,31 @@
-nrUpdatesIAK3DlnN <- function(z , X , vXU , iU , C , sigma2Vec){
+nrUpdatesIAK3DlnN <- function(zData , XData , vXU , iU , C , sigma2Vec){
  
     printNrProgress <- F
 
     pU <- length(iU)
-    p <- dim(X)[[2]]
+    p <- dim(XData)[[2]]
     pK <- p - pU
-    n <- length(z)
+    n <- length(zData)
     iK <- setdiff(seq(p) , iU)
 
     if(pU > 0){
-        W <- cbind(X , z)          
+        W <- cbind(XData , zData)          
     }else{
-        W <- cbind(X , z - 0.5 * (sigma2Vec - diag(C)))
+        W <- cbind(XData , zData - 0.5 * (sigma2Vec - diag(C)))
     }
-  	tmp <- lndetANDinvCb(C , W)
-	lndetC <- tmp$lndetC
-	iCW <- tmp$invCb
-    iC <- chol2inv(tmp$cholC)
+
+#  	tmp <- lndetANDinvCb(C , W)
+#	lndetC <- tmp$lndetC
+#	iCW <- tmp$invCb
+#    iC <- chol2inv(tmp$cholC)
+
+	iC <- try(chol2inv(chol(C)) , silent = TRUE)
+    if(is.character(iC)){
+        return(list('betahatNew' = NA , 'nll' = NA , 'grad' = NA , 'hess' = NA  , 'fim' = NA, 
+                'noits' = 0 , 'errFlag' = -123))
+    }else{}
+	iCW <- matrix(iC %*% W , ncol = p+1)
+	lndetC <- as.numeric(determinant(C , logarithm = TRUE)$modulus)
 
     WiCW <- t(W) %*% iCW
 	WiCW  <- 0.5 * (WiCW + t(WiCW))
@@ -26,10 +35,11 @@ nrUpdatesIAK3DlnN <- function(z , X , vXU , iU , C , sigma2Vec){
 	ziCz <- as.numeric(WiCW[p+1 , p+1,drop = FALSE])
 
     if(pU == 0){
-     	tmp <- lndetANDinvCb(XiCX , XiCz) # the z here already is z - 0.5 * (sigma2 - diagC), and note that betavXUbeta = 0
-	    betahatNew <- tmp$invCb
+#     	tmp <- lndetANDinvCb(XiCX , XiCz) # the zData here already is zData - 0.5 * (sigma2 - diagC), and note that betavXUbeta = 0
+#	    betahatNew <- tmp$invCb
+     	betahatNew <- solve(XiCX , XiCz) # the zData here already is zData - 0.5 * (sigma2 - diagC), and note that betavXUbeta = 0
    		fimNew <- -XiCX
-        hessNew <- gradNew <- NA # not needed, but hess = fim and grad = t(X) iC (z - X beta - 0.5 *(sigma2 - diagC  + betavXbeta)), with betavXbeta = 0
+        hessNew <- gradNew <- NA # not needed, but hess = fim and grad = t(XData) iC (zData - XData beta - 0.5 *(sigma2 - diagC  + betavXbeta)), with betavXbeta = 0
         resiCres <- ziCz - 2 * t(betahatNew) %*% XiCz + t(betahatNew) %*% XiCX %*% betahatNew 
         
         nllNew <- 0.5 * (n * log(2 * pi) + lndetC + resiCres) 
@@ -42,8 +52,10 @@ nrUpdatesIAK3DlnN <- function(z , X , vXU , iU , C , sigma2Vec){
 ###################################
 ### define initial parameters...
 ###################################
-  	tmp <- lndetANDinvCb(XiCX , XiCz)
-	betaUNew <- tmp$invCb[iU]
+#  	tmp <- lndetANDinvCb(XiCX , XiCz)
+#	betaUNew <- tmp$invCb[iU]
+
+  	betaUNew <- matrix(solve(XiCX , XiCz)[iU] , ncol = 1)
 
     if(pK > 0){
         XKiCXK <- WiCW[iK,iK,drop = FALSE]
@@ -58,7 +70,7 @@ nrUpdatesIAK3DlnN <- function(z , X , vXU , iU , C , sigma2Vec){
 ###################################
 ### calc grad, hess and nll at inits...
 ###################################
-    tmp <- gradHessIAK3DlnN(z = z , X = X , vXU = vXU , iU = iU , betaU = betaUNew , 
+    tmp <- gradHessIAK3DlnN(zData = zData , XData = XData , vXU = vXU , iU = iU , betaU = betaUNew , 
                             C = C , lndetC = lndetC , TK = TK , iXKiCXKXKiC = iXKiCXKXKiC , sigma2Vec = sigma2Vec)
 
     nllNew <- tmp$nll
@@ -86,23 +98,28 @@ nrUpdatesIAK3DlnN <- function(z , X , vXU , iU , C , sigma2Vec){
 ### check current hess (or fim)...
         if (noits < 2){
 ### at least 2 fisher scoring updates...        
-            checkHess <- lndetANDinvCb(fimNew , gradNew)
+#            checkHess <- lndetANDinvCb(fimNew , gradNew)
+            checkHess <- try(solve(fimNew , gradNew) , silent = TRUE)
             if(printNrProgress){ print('Fisher-scoring update...') }else{}
         }else{
-            checkHess <- lndetANDinvCb(hessNew , gradNew)
+#            checkHess <- lndetANDinvCb(hessNew , gradNew)
+            checkHess <- try(solve(hessNew , gradNew) , silent = TRUE)
             if(is.character(checkHess$cholC)){
 ### try another fisher-scoring update...            
                 if(printNrProgress){ print('Fisher-scoring update...') }else{}
-                checkHess <- lndetANDinvCb(fimNew , gradNew)
+#                checkHess <- lndetANDinvCb(fimNew , gradNew)
+                checkHess <- try(solve(fimNew , gradNew) , silent = TRUE)
             }else{
                 if(printNrProgress){ print('Newton-Raphson update...') }else{}
             }
         }
         
-        if(!is.character(checkHess$cholC)){
-            betaUNew <- betaUNew - checkHess$invCb
+#        if(!is.character(checkHess$cholC)){
+        if(!is.character(checkHess)){
+#            betaUNew <- betaUNew - checkHess$invCb
+            betaUNew <- betaUNew - checkHess
             
-            tmp <- gradHessIAK3DlnN(z = z , X = X , vXU = vXU , iU = iU , betaU = betaUNew , 
+            tmp <- gradHessIAK3DlnN(zData = zData , XData = XData , vXU = vXU , iU = iU , betaU = betaUNew , 
                             C = C , lndetC = lndetC , TK = TK , iXKiCXKXKiC = iXKiCXKXKiC , sigma2Vec = sigma2Vec)
 
             nllNew <- tmp$nll
@@ -150,30 +167,30 @@ nrUpdatesIAK3DlnN <- function(z , X , vXU , iU , C , sigma2Vec){
 }
 
 
-gradHessIAK3DlnN <- function(z , X , vXU , iU , betaU , C , lndetC , TK , iXKiCXKXKiC , sigma2Vec){
+gradHessIAK3DlnN <- function(zData , XData , vXU , iU , betaU , C , lndetC , TK , iXKiCXKXKiC , sigma2Vec){
 ###############################################################
-### U represents the columns of X that vary in the sample supports
+### U represents the columns of XData that vary in the sample supports
 ### betaU the current values of these parameters
 ### vXU has the covariances of these covariates in their supports
-### K represents the colums of X that are always constant in the sample supports
+### K represents the colums of XData that are always constant in the sample supports
 ### TK = iC - iC XK inv(XK iC XK) XK iC is the usual T matrix, 
-### but defined with XK rather than the full X
+### but defined with XK rather than the full XData
 ### iXKiCXKXKiC is inv(XK iC XK) XK iC
 ###############################################################
     pU <- length(iU)
-    p <- dim(X)[[2]]
+    p <- dim(XData)[[2]]
     pK <- p - pU
-    n <- length(z)
+    n <- length(zData)
     iK <- setdiff(seq(p) , iU)
     
     betavXbeta <- calcbetavXbeta(vXU , betaU)
 
     if(length(iU) > 1){
-        XbetaU <- X[,iU] %*% betaU 
+        XbetaU <- XData[,iU] %*% betaU 
     }else{
-        XbetaU <- X[,iU] * betaU 
+        XbetaU <- XData[,iU] * betaU 
     } 
-    resU <- z - XbetaU - 0.5 * (sigma2Vec - diag(C) + betavXbeta)
+    resU <- zData - XbetaU - 0.5 * (sigma2Vec - diag(C) + betavXbeta)
 
     betahat <- matrix(NA , p , 1)
     if(pU > 0){ betahat[iU] <- as.numeric(betaU) }else{}
@@ -188,7 +205,7 @@ gradHessIAK3DlnN <- function(z , X , vXU , iU , betaU , C , lndetC , TK , iXKiCX
     vXUbetaU <- rowSums(vXU * kronecker(matrix(1 , n * pU , 1) , matrix(betaU , nrow = 1)))
     dbetavXbeta = matrix(vXUbetaU , n , pU , byrow = T)
 
-    XUPLUSdbetavXbeta <- X[,iU,drop = FALSE] + dbetavXbeta
+    XUPLUSdbetavXbeta <- XData[,iU,drop = FALSE] + dbetavXbeta
 
     tmp <- TK %*% cbind(resU , XUPLUSdbetavXbeta)
     TKresU <- tmp[,1,drop = FALSE]
