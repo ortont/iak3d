@@ -35,27 +35,33 @@ nrUpdatesIAK3D <- function(dA , lnvParInits , W , smallV = NA){
 ### check current hess (or fim)...
         if (noits < 2){
 ### at least 2 fisher scoring updates...        
-            checkHess <- lndetANDinvCb(fimNew , gradNew)
+#            checkHess <- lndetANDinvCb(fimNew , gradNew)
+            checkHess <- try(solve(fimNew , gradNew) , silent = TRUE)
             if(printNrProgress){ print('Fisher-scoring update...') }else{}
         }else{
-            checkHess <- lndetANDinvCb(hessNew , gradNew)
+#            checkHess <- lndetANDinvCb(hessNew , gradNew)
+            checkHess <- try(solve(hessNew , gradNew) , silent = TRUE)
             if(is.character(checkHess$cholC)){
 ### try another fisher-scoring update...            
                 if(printNrProgress){ print('Fisher-scoring update...') }else{}
-                checkHess <- lndetANDinvCb(fimNew , gradNew)
+#                checkHess <- lndetANDinvCb(fimNew , gradNew)
+                checkHess <- try(solve(fimNew , gradNew) , silent = TRUE)
             }else{
                 if(printNrProgress){ print('Newton-Raphson update...') }else{}
             }
         }
         
-        if(!is.character(checkHess$cholC)){
+#        if(!is.character(checkHess$cholC)){
+        if(!is.character(checkHess)){
 #################################################           
 ### updates of very small variances can be slow because of flat likelihood.
 ### speed this up by moving to -20 to compare... 
 #################################################           
-            iSmallV <- which((lnvPars < smallV) & (checkHess$invCb > 0))
+#            iSmallV <- which((lnvPars < smallV) & (checkHess$invCb > 0))
+            iSmallV <- which((lnvPars < smallV) & (checkHess > 0))
             
-            lnvPars <- lnvPars - checkHess$invCb
+#            lnvPars <- lnvPars - checkHess$invCb
+            lnvPars <- lnvPars - checkHess
             lnvPars[iSmallV] <- -20
             
             tmp <- gradHessIAK3D(dA , lnvPars , W)
@@ -135,18 +141,25 @@ gradHessIAK3D <- function(dA , lnvPars , W){
 
 #    return(list('dA' = dA , 'dC' = dC , 'lnvPars' = lnvPars , 'C' = C))
 
-	tmp <- lndetANDinvCb(C , W)
-    
-    if(is.character(tmp$cholC)){
+#	tmp <- lndetANDinvCb(C , W)
+#    if(is.character(tmp$cholC)){
+
+	iC <- try(chol2inv(chol(C)) , silent = TRUE)
+    if(is.character(iC)){
         return(list('nll' = NA , 'grad' = NA , 'hess' = NA , 'fim' = NA , 'C' = C))
     }else{}
     
-	lndetC <- tmp$lndetC
-	iCW <- tmp$invCb
+#	lndetC <- tmp$lndetC
+#	iCW <- tmp$invCb
+#
+#	iCX <- as.matrix(iCW[, 1:p])
+#	iCz <- as.matrix(iCW[, p+1])
+#    iC <- chol2inv(tmp$cholC)
 
+	iCW <- matrix(iC %*% W , ncol = p+1)
 	iCX <- as.matrix(iCW[, 1:p])
 	iCz <- as.matrix(iCW[, p+1])
-    iC <- chol2inv(tmp$cholC)
+	lndetC <- as.numeric(determinant(C , logarithm = TRUE)$modulus)
 
 	WiCW <- t(W) %*% iCW
 	WiCW  <- 0.5 * (WiCW + t(WiCW))
@@ -155,10 +168,17 @@ gradHessIAK3D <- function(dA , lnvPars , W){
 	XiCz <- WiCW[1:p , p+1]
 	ziCz <- as.numeric(WiCW[p+1 , p+1])
 
-	tmp <- lndetANDinvCb(XiCX , XiCz)
-	lndetXiCX <- tmp$lndetC
-	betahat <- tmp$invCb
-    iXiCX <- chol2inv(tmp$cholC)
+#	tmp <- lndetANDinvCb(XiCX , XiCz)
+#	lndetXiCX <- tmp$lndetC
+#	betahat <- tmp$invCb
+#    iXiCX <- chol2inv(tmp$cholC)
+
+	iXiCX <- try(chol2inv(chol(XiCX)) , silent = TRUE)
+    if(is.character(iXiCX)){
+        return(list('nll' = NA , 'grad' = NA , 'hess' = NA , 'fim' = NA , 'C' = C))
+    }else{}
+	betahat <- matrix(iXiCX %*% XiCz , ncol = 1)
+	lndetXiCX <- as.numeric(determinant(XiCX , logarithm = TRUE)$modulus)
 
     T <- iC - iCX %*% iXiCX %*% t(iCX)
 	Tz <- as.matrix(iCz - iCX %*% betahat)
