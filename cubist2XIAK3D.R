@@ -860,10 +860,14 @@ legalizeXIAK3D <- function(X , z){
   
   n <- length(z) 
   
-  tmp0 <- try(solve(XX , Xz) , silent = TRUE)
-  tmp <- lndetANDinvCb(XX, Xz)
+#  tmp0 <- try(solve(XX , Xz) , silent = TRUE)
+#  tmp <- lndetANDinvCb(XX, Xz)
+
+  iXXXz <- try(solve(XX , Xz) , silent = TRUE)
+
   nCols2Rmv <- 0
-  continueRemoving <- (is.na(tmp$lndet) | is.character(tmp0))
+#  continueRemoving <- (is.na(tmp$lndet) | is.character(tmp0))
+  continueRemoving <- (is.character(iXXXz))
   ipRemove <- c()
   while(continueRemoving){
     
@@ -1015,6 +1019,24 @@ refineXIAK3D <- function(X , z , profID , alpha = 0.5){
 }
 
 #############################################################################
+### function to make profID from coordinates...
+#############################################################################
+makeProfID <- function(cAll){
+  if(is.null(cAll)){
+    return(NULL)
+  }else{
+    cU <- cAll[which(!duplicated(cAll)),,drop=FALSE]
+    profID <- NA * numeric(nrow(cAll))
+    for (i in 1:nrow(cU)){
+      iThis <- which(cAll[,1] == cU[i,1] & cAll[,2] == cU[i,2])
+      profID[iThis] <- i
+    }
+  
+    return(profID)
+  }
+}
+
+#############################################################################
 ### function to do a xv routine with cFit to select best nRules and whether refineCubistModel = T/F is best
 ### xv is with full profiles removed/kept.
 #############################################################################
@@ -1027,13 +1049,8 @@ selectCubistOptsXV <- function(cFit , zFit , covsFit , allKnotsd = c() , nRulesV
   nXVReps <- 10
 
 ### use cFit to define profIDFit...    
-  cFitU <- cFit[which(!duplicated(cFit)),,drop=FALSE]
-  profIDFit <- NA * numeric(nrow(cFit))
-  for (i in 1:nrow(cFitU)){
-    iThis <- which(cFit[,1] == cFitU[i,1] & cFit[,2] == cFitU[i,2])
-    profIDFit[iThis] <- i
-  }
-
+  profIDFit <- makeProfID(cFit)
+  
   profIDUFit <- unique(profIDFit)
   nProfsFit <- length(profIDUFit)
   nProfsXVFit <- ceiling(prop4XVFit * nProfsFit)
