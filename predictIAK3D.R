@@ -20,35 +20,36 @@ predictIAK3D <- function(xMap , dIMap , covsMap , lmmFit , rqrBTfmdPreds = TRUE 
     for (i in 1:ncol(dIMap)){ dIMapCopy[,i] <- as.numeric(dIMap[,i]) }
     dIMap <- dIMapCopy
     remove(dIMapCopy)
-
-##############################################
-### make maps for depth intervals dIMap...
-### predict for all depths for all data locations 
-##############################################
+    
+    ##############################################
+    ### make maps for depth intervals dIMap...
+    ### predict for all depths for all data locations 
+    ##############################################
     dIMap <- round(dIMap , digits = 2)
     dIMap <- matrix(dIMap , ncol = 2)
     ndIMap <- nrow(dIMap)
- 
-############################################################
-### remove missing covariates after defining XMap, 
-### as perhaps XMap will not need all covariates...
-############################################################
-    ndimTmp <- ncol(lmmFit$x)
+    
+    ############################################################
+    ### remove missing covariates after defining XMap, 
+    ### as perhaps XMap will not need all covariates...
+    ############################################################
+    ndimTmp <- ncol(lmmFit$xData)
     if(is.null(ndimTmp)){ ndimTmp <- 1 }else{}
     
     xMap <- matrix(xMap , ncol = ndimTmp)
     nxMap <- nrow(xMap)
-
-### up to 5000 locations at a time?...
-    nxPerBatch <- 5000
+    
+    ### up to 5000 locations at a time?...
+    #    nxPerBatch <- 5000
+    nxPerBatch <- 2000
     nBatches <- ceiling(nxMap / nxPerBatch)
-
+    
     betahat <- lmmFit$betahat
     vbetahat <- lmmFit$vbetahat
-    nData <- length(lmmFit$z)
-    p <- ncol(lmmFit$X)
+    nData <- length(lmmFit$zData)
+    p <- ncol(lmmFit$XData)
     pU <- length(lmmFit$iU)
-
+    
     if(constrainX4Pred){
       XLims4Pred <- lmmFit$XLims
     }else{
@@ -58,42 +59,48 @@ predictIAK3D <- function(xMap , dIMap , covsMap , lmmFit , rqrBTfmdPreds = TRUE 
     }
     
     if(!lmmFit$lnTfmdData){
-      muhat <- lmmFit$X %*% betahat 
+      muhat <- lmmFit$XData %*% betahat 
     }else{
-      muhat <- setmuIAK3D(X = lmmFit$X , vXU = lmmFit$vXU , iU = lmmFit$iU , beta = betahat , diagC = diag(lmmFit$C) , sigma2Vec = lmmFit$sigma2Vec) 
+      muhat <- setmuIAK3D(XData = lmmFit$XData , vXU = lmmFit$vXU , iU = lmmFit$iU , beta = betahat , diagC = diag(lmmFit$C) , sigma2Vec = lmmFit$sigma2Vec) 
     }
     
     if(lmmFit$compLikMats$compLikOptn == 0){
-       if(is.element('iCX'  , names(lmmFit)) & is.element('iCz_muhat'  , names(lmmFit)) & is.element('iC'  , names(lmmFit))){
+      if(is.element('iCX'  , names(lmmFit)) & is.element('iCz_muhat'  , names(lmmFit)) & is.element('iC'  , names(lmmFit))){
         iCX <- lmmFit$iCX
         iCz_muhat <- lmmFit$iCz_muhat
         iC <- lmmFit$iC
       }else{
-        tmp <- lndetANDinvCb(lmmFit$C , cbind(lmmFit$X , lmmFit$z - muhat))
-        iCX <- tmp$invCb[,1:p,drop=FALSE]
-        iCz_muhat <- tmp$invCb[,p+1,drop=FALSE]
-        iC <- chol2inv(tmp$cholC)
+        #        tmp <- lndetANDinvCb(lmmFit$C , cbind(lmmFit$XData , lmmFit$zData - muhat))
+        #        iCX <- tmp$invCb[,1:p,drop=FALSE]
+        #        iCz_muhat <- tmp$invCb[,p+1,drop=FALSE]
+        #        iC <- chol2inv(tmp$cholC)
+        
+        iC <- chol2inv(chol(C))
+        iCXResTmp <- matrix(iC %*% cbind(lmmFit$XData , lmmFit$zData - muhat) , ncol = p+1)
+        iCX <- iCXResTmp[,1:p,drop=FALSE]
+        iCz_muhat <- iCXResTmp[,p+1,drop=FALSE]
+        remove(iCXResTmp)
       }
     }else{}
     
     print(paste0('Predicting for ' , ndIMap , ' depths and ' , nBatches , ' batches...'))
     ptm <- proc.time()
-
+    
     zMap <- vMap <- matrix(NA , ndIMap , nxMap)
     for (i in 1:ndIMap){
       for(iBatch in 1:nBatches){
         iThis <- ((iBatch - 1) * nxPerBatch + 1):(min(iBatch * nxPerBatch , nxMap))
         nxMapThis <- length(iThis)
-
+        
         dIMapThis <- kronecker(matrix(dIMap[i,,drop=FALSE] , 1 , 2) , matrix(1 , nxMapThis , 1))
-
-        tmp <- makeXvX(covData = covsMap[iThis,,drop = FALSE] , dI = dIMapThis , modelX = lmmFit$modelX , allKnotsd = lmmFit$allKnotsd , iU = lmmFit$iU , nDiscPts = 10 , lnTfmdData = lmmFit$lnTfmdData , XLims = XLims4Pred)
+        
+        tmp <- makeXvX(covData = covsMap[iThis,,drop = FALSE] , dIData = dIMapThis , modelX = lmmFit$modelX , allKnotsd = lmmFit$allKnotsd , iU = lmmFit$iU , nDiscPts = 10 , lnTfmdData = lmmFit$lnTfmdData , XLims = XLims4Pred)
         XMapThis <- as.matrix(tmp$X)
         vXUMapThis <- as.matrix(tmp$vXU)
-
+        
         iOKInThis <- which(!is.na(rowMeans(XMapThis)))
         nxMapThis <- length(iOKInThis)
-
+        
         zMapThis <- vMapThis <- NA * numeric(length(iThis))
         if(nxMapThis > 0){
           XMapThis <- XMapThis[iOKInThis,  , drop = FALSE]
@@ -102,56 +109,59 @@ predictIAK3D <- function(xMap , dIMap , covsMap , lmmFit , rqrBTfmdPreds = TRUE 
             iTmp <- kronecker(((iOKInThis - 1) * pU) , matrix(1 , pU , 1)) + kronecker(matrix(1 , nxMapThis , 1) , seq(pU))
             vXUMapThis <- vXUMapThis[iTmp, , drop = FALSE]
           }else{}
-
+          
           if(lmmFit$compLikMats$compLikOptn == 0){
-            setupMatsMap <- setupIAK3D(x = rbind(lmmFit$x , xMap[iThis[iOKInThis],,drop=FALSE]) , dI = rbind(as.matrix(lmmFit$dI) , dIMapThis[iOKInThis,,drop=FALSE]) , nDscPts = 0)
-        
+            setupMatsMap <- setupIAK3D(xData = rbind(lmmFit$xData , xMap[iThis[iOKInThis],,drop=FALSE]) , dIData = rbind(as.matrix(lmmFit$dIData) , dIMapThis[iOKInThis,,drop=FALSE]) , nDscPts = 0)
+            
             tmp <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx , 
-              sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , 
-              cmeOpt = lmmFit$cmeOpt , setupMats = setupMatsMap)
-
-            CTmp <- tmp$C
-
+                             sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , 
+                             cmeOpt = lmmFit$cmeOpt , setupMats = setupMatsMap)
+            rm(setupMatsMap) 
+            
             sigma2Vec <- tmp$sigma2Vec
             sigma2Veck <- sigma2Vec[(nData + 1):(nData + nxMapThis)]
-   
-            Ckh <- CTmp[(nData+1):(nData+nxMapThis),1:nData , drop = FALSE]  
-            Ckk <- diag(CTmp[(nData+1):(nData+nxMapThis),(nData+1):(nData+nxMapThis) , drop = FALSE])
-
+            
+            Ckh <- tmp$C[(nData+1):(nData+nxMapThis),1:nData , drop = FALSE]  
+            Ckk <- diag(tmp$C[(nData+1):(nData+nxMapThis),(nData+1):(nData+nxMapThis) , drop = FALSE])
+            
+            rm(tmp) 
+            
             Ckhtmp <- Ckh %*% cbind(iCX , iCz_muhat , iC)
             CkhiCX <- Ckhtmp[,1:p , drop = FALSE]
             CkhiCz_muhat <- Ckhtmp[,p+1 , drop = FALSE]
             CkhiC <- Ckhtmp[,(p+2):(dim(Ckhtmp)[[2]]) , drop = FALSE]
+            rm(Ckhtmp) 
+            
             CkhiCChk <- rowSums(CkhiC * Ckh)
           }else{
-### define stuff via CL method...          
+            ### define stuff via CL method...          
             if(lmmFit$compLikMats$compLikOptn == 2 || lmmFit$compLikMats$compLikOptn == 3){
-              tmp <- predMatsIAK3D_CLEV_ByBlock(z_muhat = lmmFit$z - muhat , X = lmmFit$X , 
-                    xMap = xMap[iThis[iOKInThis],,drop=FALSE] , dIMap = dIMapThis[iOKInThis,,drop=FALSE], lmmFit = lmmFit)
+              tmp <- predMatsIAK3D_CLEV_ByBlock(z_muhat = lmmFit$zData - muhat , XData = lmmFit$XData , 
+                                                xMap = xMap[iThis[iOKInThis],,drop=FALSE] , dIMap = dIMapThis[iOKInThis,,drop=FALSE], lmmFit = lmmFit)
               zkTmp <- tmp$zk
               vkTmp <- tmp$vk
             }else{
-              tmp <- predMatsIAK3D_CL_ByBlock(z_muhat = lmmFit$z - muhat , X = lmmFit$X , 
-                    xMap = xMap[iThis[iOKInThis],,drop=FALSE] , dIMap = dIMapThis[iOKInThis,,drop=FALSE], lmmFit = lmmFit)
-
+              tmp <- predMatsIAK3D_CL_ByBlock(z_muhat = lmmFit$zData - muhat , XData = lmmFit$XData , 
+                                              xMap = xMap[iThis[iOKInThis],,drop=FALSE] , dIMap = dIMapThis[iOKInThis,,drop=FALSE], lmmFit = lmmFit)
+              
               Ckk <- tmp$diagCkk 
               CkhiCChk <- tmp$diagCkhiCChk 
               CkhiCX <- tmp$CkhiCX 
               CkhiCz_muhat <- tmp$CkhiCz_muhat
             }
           }
-
+          
           if(!lmmFit$lnTfmdData){
             muhatMapThis <- XMapThis %*% betahat
           }else{
-            muhatMapThis <- setmuIAK3D(X = XMapThis , vXU = vXUMapThis , iU = lmmFit$iU , beta = betahat , diagC = Ckk , sigma2Vec = sigma2Veck)
+            muhatMapThis <- setmuIAK3D(XData = XMapThis , vXU = vXUMapThis , iU = lmmFit$iU , beta = betahat , diagC = Ckk , sigma2Vec = sigma2Veck)
           }
-
+          
           if(lmmFit$compLikMats$compLikOptn == 2 || lmmFit$compLikMats$compLikOptn == 3){
             zMapThis[iOKInThis] <- as.numeric(muhatMapThis) + as.numeric(zkTmp)     
             vMapThis[iOKInThis] <- as.numeric(vkTmp)
           }else{
-          
+            
             zMapThis[iOKInThis] <- as.numeric(muhatMapThis) + as.numeric(CkhiCz_muhat)     
             if(!lmmFit$lnTfmdData){
               tmp <- XMapThis - CkhiCX
@@ -161,18 +171,18 @@ predictIAK3D <- function(xMap , dIMap , covsMap , lmmFit , rqrBTfmdPreds = TRUE 
                 vMapThis[iOKInThis] <- Ckk - CkhiCChk #TEMP WITHOUT beta unc...
               }
             }else{
-### don't include uncerainty due to fixed effects as not correct formula in lognomral case. Could do as TS-FIM approx in future. 
+              ### don't include uncerainty due to fixed effects as not correct formula in lognomral case. Could do as TS-FIM approx in future. 
               vMapThis[iOKInThis] <- Ckk - CkhiCChk
             }
           }
           
         }else{}
-             
+        
         zMap[i,iThis] <- as.numeric(zMapThis)
         vMap[i,iThis] <- as.numeric(vMapThis)
         
         if((i == 1) & (iBatch == 1)){
-            tTmp <- proc.time() - ptm
+          tTmp <- proc.time() - ptm
             tTmp <- ceiling(tTmp[3] * nBatches * ndIMap / 60)
             print(paste0('...should take about ' , tTmp , ' minutes...'))
         }else{}
@@ -198,7 +208,7 @@ predictIAK3D <- function(xMap , dIMap , covsMap , lmmFit , rqrBTfmdPreds = TRUE 
 }
 
 
-profilePredictIAK3D <- function(xMap , dIMap , covsMap , iData = seq(length(lmmFit$z)) , lmmFit , rqrBTfmdPreds = TRUE , constrainX4Pred = FALSE){
+profilePredictIAK3D <- function(xMap , dIMap , covsMap , iData = seq(length(lmmFit$zData)) , lmmFit , rqrBTfmdPreds = TRUE , constrainX4Pred = FALSE){
 ########################################################
 ### if xMap or dIMap were dataframes, convert to matrices here.
 ### and make sure all are numeric...
@@ -232,7 +242,7 @@ profilePredictIAK3D <- function(xMap , dIMap , covsMap , iData = seq(length(lmmF
     betahat <- lmmFit$betahat
     vbetahat <- lmmFit$vbetahat
 
-    p <- dim(lmmFit$X)[[2]]
+    p <- dim(lmmFit$XData)[[2]]
     pU <- length(lmmFit$iU)
 
     if(constrainX4Pred){
@@ -244,21 +254,27 @@ profilePredictIAK3D <- function(xMap , dIMap , covsMap , iData = seq(length(lmmF
     }
     
     if(!lmmFit$lnTfmdData){
-      muhat <- lmmFit$X %*% betahat 
+      muhat <- lmmFit$XData %*% betahat 
     }else{
-      muhat <- setmuIAK3D(X = lmmFit$X , vXU = lmmFit$vXU , iU = lmmFit$iU , beta = betahat , diagC = diag(lmmFit$C) , sigma2Vec = lmmFit$sigma2Vec) 
+      muhat <- setmuIAK3D(XData = lmmFit$XData , vXU = lmmFit$vXU , iU = lmmFit$iU , beta = betahat , diagC = diag(lmmFit$C) , sigma2Vec = lmmFit$sigma2Vec) 
     }
  
     if(lmmFit$compLikMats$compLikOptn == 0){
-      if((length(iData) == length(lmmFit$z)) & is.element('iCX'  , names(lmmFit)) & is.element('iCz_muhat'  , names(lmmFit)) & is.element('iC'  , names(lmmFit))){
+      if((length(iData) == length(lmmFit$zData)) & is.element('iCX'  , names(lmmFit)) & is.element('iCz_muhat'  , names(lmmFit)) & is.element('iC'  , names(lmmFit))){
         iCX <- lmmFit$iCX
         iCz_muhat <- lmmFit$iCz_muhat
         iC <- lmmFit$iC
       }else{
-        tmp <- lndetANDinvCb(lmmFit$C[iData,iData,drop=FALSE] , cbind(lmmFit$X[iData,,drop=FALSE] , lmmFit$z[iData] - muhat[iData]))
-        iCX <- tmp$invCb[,1:p,drop=FALSE]
-        iCz_muhat <- tmp$invCb[,p+1,drop=FALSE]
-        iC <- chol2inv(tmp$cholC)
+#        tmp <- lndetANDinvCb(lmmFit$C[iData,iData,drop=FALSE] , cbind(lmmFit$XData[iData,,drop=FALSE] , lmmFit$zData[iData] - muhat[iData]))
+#        iCX <- tmp$invCb[,1:p,drop=FALSE]
+#        iCz_muhat <- tmp$invCb[,p+1,drop=FALSE]
+#        iC <- chol2inv(tmp$cholC)
+
+        iC <- chol2inv(chol(lmmFit$C[iData,iData,drop=FALSE]))
+        iCXResTmp <- matrix(iC %*% cbind(lmmFit$XData[iData,,drop=FALSE] , lmmFit$zData[iData] - muhat[iData]) , ncol = p+1)
+        iCX <- iCXResTmp[,1:p,drop=FALSE]
+        iCz_muhat <- iCXResTmp[,p+1,drop=FALSE]
+        remove(iCXResTmp)
       }
     }else{}
     
@@ -267,44 +283,47 @@ profilePredictIAK3D <- function(xMap , dIMap , covsMap , iData = seq(length(lmmF
     xMap <- xMap[integer(ndIMap) + 1,,drop=FALSE]
     covsMap <- covsMap[integer(ndIMap) + 1,,drop = FALSE]
 
-    tmp <- makeXvX(covData = covsMap , dI = dIMap , modelX = lmmFit$modelX , allKnotsd = lmmFit$allKnotsd , iU = lmmFit$iU , nDiscPts = 10 , lnTfmdData = lmmFit$lnTfmdData , XLims = XLims4Pred)
+    tmp <- makeXvX(covData = covsMap , dIData = dIMap , modelX = lmmFit$modelX , allKnotsd = lmmFit$allKnotsd , iU = lmmFit$iU , nDiscPts = 10 , lnTfmdData = lmmFit$lnTfmdData , XLims = XLims4Pred)
     XMap <- as.matrix(tmp$X)
     if(lmmFit$lnTfmdData){
       vXUMap <- as.matrix(tmp$vXU)
     }else{}
 
     if(lmmFit$compLikMats$compLikOptn == 0){
-      setupMatsMap <- setupIAK3D(x = rbind(lmmFit$x[iData,,drop=FALSE] , xMap) , dI = rbind(as.matrix(lmmFit$dI[iData,,drop=FALSE]) , dIMap) , nDscPts = 0)
+      setupMatsMap <- setupIAK3D(xData = rbind(lmmFit$xData[iData,,drop=FALSE] , xMap) , dIData = rbind(as.matrix(lmmFit$dIData[iData,,drop=FALSE]) , dIMap) , nDscPts = 0)
         
       tmp <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx , 
             sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , 
             cmeOpt = lmmFit$cmeOpt , setupMats = setupMatsMap)
-      CTmp <- tmp$C
+      rm(setupMatsMap) 
 
       sigma2Vec <- tmp$sigma2Vec
       sigma2Vech <- sigma2Vec[1:nData]
       sigma2Veck <- sigma2Vec[(nData + 1):(nData + ndIMap)]
 
-      Ckh <- CTmp[(nData+1):(nData+ndIMap),1:nData , drop = FALSE]  
-      Ckk <- diag(CTmp[(nData+1):(nData+ndIMap),(nData+1):(nData+ndIMap) , drop = FALSE])
+      Ckh <- tmp$C[(nData+1):(nData+ndIMap),1:nData , drop = FALSE]  
+      Ckk <- diag(tmp$C[(nData+1):(nData+ndIMap),(nData+1):(nData+ndIMap) , drop = FALSE])
+
+      rm(tmp) 
        
       Ckhtmp <- Ckh %*% cbind(iCX , iCz_muhat , iC)
       CkhiCX <- Ckhtmp[,1:p]
       CkhiCz_muhat <- Ckhtmp[,p+1]
       CkhiC <- Ckhtmp[,(p+2):(dim(Ckhtmp)[[2]])]
+      rm(Ckhtmp) ; gc()
       CkhiCChk <- rowSums(CkhiC * Ckh)
 
     }else{
 ### define stuff via CL method...          
       if(lmmFit$compLikMats$compLikOptn == 2 || lmmFit$compLikMats$compLikOptn == 3){
       
-        tmp <- predMatsIAK3D_CLEV_ByBlock(z_muhat = lmmFit$z - muhat , X = lmmFit$X , 
+        tmp <- predMatsIAK3D_CLEV_ByBlock(z_muhat = lmmFit$zData - muhat , XData = lmmFit$XData , 
               xMap = xMap , dIMap = dIMap , iData = iData , lmmFit = lmmFit)
         zkTmp <- tmp$zk
         vkTmp <- tmp$vk
       }else{
 ### define stuff via CL method...          
-        tmp <- predMatsIAK3D_CL_ByBlock(z_muhat = lmmFit$z - muhat , X = lmmFit$X , 
+        tmp <- predMatsIAK3D_CL_ByBlock(z_muhat = lmmFit$zData - muhat , XData = lmmFit$XData , 
                 xMap = xMap , dIMap = dIMap , iData = iData , lmmFit = lmmFit)
         Ckk <- tmp$diagCkk 
         CkhiCChk <- tmp$diagCkhiCChk 
@@ -316,7 +335,7 @@ profilePredictIAK3D <- function(xMap , dIMap , covsMap , iData = seq(length(lmmF
     if(!lmmFit$lnTfmdData){
         muhatMap <- XMap %*% betahat
     }else{
-        muhatMap <- setmuIAK3D(X = XMap , vXU = vXUMap , iU = lmmFit$iU , beta = betahat , diagC = Ckk , sigma2Vec = sigma2Veck)
+        muhatMap <- setmuIAK3D(XData = XMap , vXU = vXUMap , iU = lmmFit$iU , beta = betahat , diagC = Ckk , sigma2Vec = sigma2Veck)
     }
     
     if(lmmFit$compLikMats$compLikOptn == 2 || lmmFit$compLikMats$compLikOptn == 3){
@@ -363,13 +382,13 @@ xValIAK3D <- function(lmmFit , removeAllWithin = 0 , namePlot = 'xvPlots.pdf' , 
 ###
 ### rqrBTfmdPreds is just for the plots...
 ####################################################
-    iTmp <- which(!duplicated(lmmFit$x))
-    covsPred <- lmmFit$covs[iTmp,,drop = FALSE]
-    xPred <- lmmFit$x[iTmp,,drop = FALSE]
+    iTmp <- which(!duplicated(lmmFit$xData))
+    covsPred <- lmmFit$covsData[iTmp,,drop = FALSE]
+    xPred <- lmmFit$xData[iTmp,,drop = FALSE]
 
     nxPred <- dim(xPred)[[1]]
-    nData <- length(lmmFit$z)
-    p <- dim(lmmFit$X)[[2]]
+    nData <- length(lmmFit$zData)
+    p <- dim(lmmFit$XData)[[2]]
 
     dIPredPlot <- cbind(seq(0 , 1.98 , 0.02) , seq(0.02 , 2 , 0.02))
     ndIPredPlot <- dim(dIPredPlot)[[1]]
@@ -383,17 +402,17 @@ xValIAK3D <- function(lmmFit , removeAllWithin = 0 , namePlot = 'xvPlots.pdf' , 
         xPredThis <- matrix(xPred[i,] , nrow = 1)
         covsPredThis <- covsPred[i,,drop = FALSE]
 
-### get all the dI to be predicted for this location...
-        iPredThis <- which((lmmFit$x[,1] == xPredThis[1]) & (lmmFit$x[,2] == xPredThis[2]))
+### get all the dIData to be predicted for this location...
+        iPredThis <- which((lmmFit$xData[,1] == xPredThis[1]) & (lmmFit$xData[,2] == xPredThis[2]))
         dIPredThis <- as.matrix(lmmFit$dI[iPredThis,])
 
 ### get the prediction data, removing any locations closer than removeAllWithin 
-        DTmp <- xyDist(lmmFit$x , xPredThis)
+        DTmp <- xyDist(lmmFit$xData , xPredThis)
         DTmp[iPredThis] <- -999 # just to make sure they will be removed.
         iDataThis <- which(DTmp >= removeAllWithin)
 
 ### use the profilePredict function (call without back-transform, to get stdzd sqd errs on transformed scale)...
-### note that for xval, columns of X are not constrained. 
+### note that for xval, columns of XData are not constrained. 
         tmp <- profilePredictIAK3D(xMap = xPredThis , dIMap = rbind(matrix(dIPredPlot , ncol = 2) , matrix(dIPredThis , ncol = 2)) ,
                     covsMap = covsPredThis , iData = iDataThis , lmmFit = lmmFit , rqrBTfmdPreds = FALSE)
 
@@ -418,9 +437,9 @@ xValIAK3D <- function(lmmFit , removeAllWithin = 0 , namePlot = 'xvPlots.pdf' , 
 ##################################################
 ### copmute stdzd sqd errs on transformed scale for validating prediction variances...
 ##################################################
-    stdzdSqdErrs <- ((zhatxv - lmmFit$z) ^2) / vhatxv
+    stdzdSqdErrs <- ((zhatxv - lmmFit$zData) ^2) / vhatxv
 
-    z <- lmmFit$z
+    zData <- lmmFit$zData
 ##################################################
 ### back-transform predictions and 90% pis here, if rqd... 
 ##################################################
@@ -435,16 +454,16 @@ xValIAK3D <- function(lmmFit , removeAllWithin = 0 , namePlot = 'xvPlots.pdf' , 
       pi90UPlot <- exp(pi90UPlot)
       vhatPlot <- (exp(vhatPlot) - 1) * (zhatPlot ^ 2)
 
-      z <- exp(z)
+      zData <- exp(zData)
     }else{}
 
 #####################################################
 ### calculate the validation statistics to assess prediction quality...
 #####################################################
-    errs <- zhatxv - z
+    errs <- zhatxv - zData
     sqdErrs <- errs ^ 2
 
-    errs0 <- mean(z) - z
+    errs0 <- mean(zData) - zData
     sqdErrs0 <- errs0 ^ 2
 
 ############################
@@ -497,7 +516,7 @@ xValIAK3D <- function(lmmFit , removeAllWithin = 0 , namePlot = 'xvPlots.pdf' , 
 ########################################
 ### plot...
 ########################################
-    tmp <- plotProfilesIAK3D(namePlot = namePlot , x = lmmFit$x , dI = lmmFit$dI, z = z , 
+    tmp <- plotProfilesIAK3D(namePlot = namePlot , xData = lmmFit$xData , dIData = lmmFit$dIData, zData = lmmFit$zData , 
                 xPred = xPred , dIPred = dIPredPlot , zPred = zhatPlot , pi90LPred = pi90LPlot , pi90UPred = pi90UPlot , 
                 zhatxv = zhatxv , pi90Lxv = pi90Lxv , pi90Uxv = pi90Uxv)
 
@@ -508,7 +527,7 @@ xValIAK3D <- function(lmmFit , removeAllWithin = 0 , namePlot = 'xvPlots.pdf' , 
                 'zhatPlot' = zhatPlot , 'vhatPlot' = vhatPlot , 'pi90LPlot' = pi90LPlot  , 'pi90UPlot' = pi90UPlot)) 
 }
 
-plotProfilesIAK3D <- function(namePlot = 'profilePlots.pdf' , x , dI , z , xPred = NULL , dIPred = NULL , zPred = NULL  , pi90LPred = NULL , pi90UPred = NULL , 
+plotProfilesIAK3D <- function(namePlot = 'profilePlots.pdf' , xData , dIData , zData , xPred = NULL , dIPred = NULL , zPred = NULL  , pi90LPred = NULL , pi90UPred = NULL , 
                               zPredDistant = NA , zhatxv = NA , pi90Lxv = NA , pi90Uxv = NA , profNames = NULL , xlim = NULL , xlab = NULL){
 #################################################    
 ### make a pdf with the distant profile prediction (page 1) and all data profiles (6 per page thereafter)...
@@ -516,32 +535,32 @@ plotProfilesIAK3D <- function(namePlot = 'profilePlots.pdf' , x , dI , z , xPred
 ### also note, they are a bi-product of the method (ie you can use the method to predict at profiles where we have data), 
 ### not to be confused with the spline-then-krige type approach where similar plots may be produced in the first step of analysis
 ###
-### x, dI and z are the raw data (all horizons)
+### xData, dIData and zData are the raw data (all horizons)
 ### xPred, etc are unique locations and assciated profile predictions.
 #################################################    
 ########################################################
-### if x or dI were dataframes, convert to matrices here.
+### if xData or dIData were dataframes, convert to matrices here.
 ### and make sure all are numeric...
 ########################################################
-    if(!is.matrix(x)){
-        x <- as.matrix(x)
+    if(!is.matrix(xData)){
+        xData <- as.matrix(xData)
     }else{}
-    if(!is.matrix(dI)){
-        dI <- as.matrix(dI)
+    if(!is.matrix(dIData)){
+        dIData <- as.matrix(dIData)
     }else{}
 
-    xCopy <- matrix(NA , nrow(x) , ncol(x))
-    for (i in 1:ncol(x)){ xCopy[,i] <- as.numeric(x[,i]) }
-    x <- xCopy
+    xCopy <- matrix(NA , nrow(xData) , ncol(xData))
+    for (i in 1:ncol(xData)){ xCopy[,i] <- as.numeric(xData[,i]) }
+    xData <- xCopy
     remove(xCopy)
     
-    dICopy <- matrix(NA , nrow(dI) , ncol(dI))
-    for (i in 1:ncol(dI)){ dICopy[,i] <- as.numeric(dI[,i]) }
-    dI <- dICopy
+    dICopy <- matrix(NA , nrow(dIData) , ncol(dIData))
+    for (i in 1:ncol(dIData)){ dICopy[,i] <- as.numeric(dIData[,i]) }
+    dIData <- dICopy
     remove(dICopy)
 
 ########################################################
-### if x or dI were dataframes, convert to matrices here.
+### if xData or dIData were dataframes, convert to matrices here.
 ### and make sure all are numeric...
 ########################################################
     if(!is.null(xPred)){
@@ -566,17 +585,27 @@ plotProfilesIAK3D <- function(namePlot = 'profilePlots.pdf' , x , dI , z , xPred
     nPerPage <- 6
     
     if (is.null(xPred)){
-      xPred <- x[!duplicated(x) , ,drop = FALSE]
+      xPred <- xData[!duplicated(xData) , ,drop = FALSE]
       plotPreds <- FALSE
       zPredDistant <- NA
     }else{
       plotPreds <- TRUE
     }
     nPages <- ceiling(dim(xPred)[[1]] / nPerPage)
-    
-    maxd <- max(dI[,2])
+
+    if(plotPreds){
+      maxd <- max(dIPred[,2])
+    }else{
+      maxd <- max(dIData[,2])
+    }
     ylim  <- c(-maxd , 0)
-    if(maxd <= 2.0){
+    if(maxd <= 0.5){
+      yaxTck <- seq(-0.5 , 0 , 0.1)
+      yaxTckLbls <- c('0.5' , '0.4' , '0.3' , '0.2' , '0.1' , '0.0')
+    }else if(maxd <= 1.0){
+      yaxTck <- seq(-1 , 0 , 0.2)
+      yaxTckLbls <- c('1.0' , '0.8' , '0.6' , '0.4' , '0.2' , '0.0')
+    }else if(maxd <= 2.0){
       yaxTck <- seq(-2 , 0 , 0.5)
       yaxTckLbls <- c('2.0' , '1.5' , '1.0' , '0.5' , '0.0')
     }else if(maxd <= 5.0){
@@ -591,8 +620,8 @@ plotProfilesIAK3D <- function(namePlot = 'profilePlots.pdf' , x , dI , z , xPred
     }else{}
     
     if(is.null(xlim)){
-      rangez <- max(z) - min(z)
-      xlim <- c(min(z) - 0.01 * rangez , max(z) + 0.01 * rangez)
+      rangez <- max(zData) - min(zData)
+      xlim <- c(min(zData) - 0.01 * rangez , max(zData) + 0.01 * rangez)
     }else{}
     if(is.null(xlab)){
       xlab <- 'z'
@@ -600,11 +629,11 @@ plotProfilesIAK3D <- function(namePlot = 'profilePlots.pdf' , x , dI , z , xPred
     
     pdf(file = namePlot)
     if(!is.na(zPredDistant[1])[1]){
-      plot(zPredDistant , -rowMeans(dIPred) , xlim = xlim , type = 'l' , lwd = 2 , col = 'red' ,  
+      plot(zPredDistant , -rowMeans(dIPred) , xlim = xlim , ylim = ylim , type = 'l' , lwd = 2 , col = 'red' ,  
             xlab = xlab , ylab = 'depth, m' , yaxt = 'n' , main = 'Distant profile')
 ### add all data to this plot...                  
-      for (j in 1:length(z)){
-        lines(z[j] * c(1,1) , -dI[j,] , lty = 1 , lwd = 1 , col = 'black')
+      for (j in 1:length(zData)){
+        lines(zData[j] * c(1,1) , -dIData[j,] , lty = 1 , lwd = 1 , col = 'black')
       }
 ### re-add the prediction line to make it on top of the data in this case...
       lines(zPredDistant , -rowMeans(dIPred) , lwd = 2 , col = 'red')
@@ -624,20 +653,25 @@ plotProfilesIAK3D <- function(namePlot = 'profilePlots.pdf' , x , dI , z , xPred
           }      
           
           if(plotPreds){
-            plot(zPred[,iProfThis] , -rowMeans(dIPred) , xlim = xlim , type = 'l' , lwd = 2 , col = 'red' , 
+            plot(zPred[,iProfThis] , -rowMeans(dIPred) , xlim = xlim , ylim = ylim , type = 'l' , lwd = 2 , col = 'red' , 
               xlab = xlab , ylab = 'depth, m' , yaxt = 'n' , main = nameThis)
-            lines(pi90LPred[,iProfThis] , -rowMeans(dIPred) , lty = 2 , lwd = 1 , col = 'red')
-            lines(pi90UPred[,iProfThis] , -rowMeans(dIPred) , lty = 2 , lwd = 1 , col = 'red')
+            if((!is.null(pi90LPred)) & (!is.null(pi90UPred))){
+              lines(pi90LPred[,iProfThis] , -rowMeans(dIPred) , lty = 2 , lwd = 1 , col = 'red')
+              lines(pi90UPred[,iProfThis] , -rowMeans(dIPred) , lty = 2 , lwd = 1 , col = 'red')
+            }else{}
           }else{
             plot(c() , c() , xlim = xlim , ylim = ylim , xlab = 'z' , ylab = 'depth, m' , yaxt = 'n' , main = nameThis)
           }      
-          iThis <- which((x[,1] == xPred[iProfThis,1]) & (x[,2] == xPred[iProfThis,2]))       
+          iThis <- which((xData[,1] == xPred[iProfThis,1]) & (xData[,2] == xPred[iProfThis,2]))       
           for (j in 1:length(iThis)){
-            lines(z[iThis[j]] * c(1,1) , -dI[iThis[j],] , lty = 1 , lwd = 3 , col = 'black')
+            lines(zData[iThis[j]] * c(1,1) , -dIData[iThis[j],] , lty = 1 , lwd = 3 , col = 'black')
             if((length(zhatxv) >= iThis[j]) && (!is.na(zhatxv[iThis[j]]))){
-              lines(zhatxv[iThis[j]] * c(1,1) , -dI[iThis[j],] , lty = 1 , lwd = 2 , col = 'cyan')
-              lines(pi90Lxv[iThis[j]] * c(1,1) , -dI[iThis[j],] , lty = 2 , lwd = 1 , col = 'cyan')
-              lines(pi90Uxv[iThis[j]] * c(1,1) , -dI[iThis[j],] , lty = 2 , lwd = 1 , col = 'cyan')
+              lines(zhatxv[iThis[j]] * c(1,1) , -dIData[iThis[j],] , lty = 1 , lwd = 2 , col = 'cyan')
+              
+              if((!is.null(pi90Lxv)) & (!is.null(pi90Uxv))){
+                lines(pi90Lxv[iThis[j]] * c(1,1) , -dIData[iThis[j],] , lty = 2 , lwd = 1 , col = 'cyan')
+                lines(pi90Uxv[iThis[j]] * c(1,1) , -dIData[iThis[j],] , lty = 2 , lwd = 1 , col = 'cyan')
+              }else{}
             }else{}
           }
           axis(side = 2 , at = yaxTck , labels = yaxTckLbls , las = 2)
