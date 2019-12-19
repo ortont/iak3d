@@ -1,4 +1,4 @@
-setParBndsIAK3D <- function(x , dI , setupMats , compLikMats = list('compLikOptn' = 0)){
+setParBndsIAK3D <- function(xData , dIData , setupMats , compLikMats = list('compLikOptn' = 0)){
 
     if (compLikMats$compLikOptn == 0){
       DxTmp <- setupMats$Dx[lower.tri(setupMats$Dx)]
@@ -11,7 +11,7 @@ setParBndsIAK3D <- function(x , dI , setupMats , compLikMats = list('compLikOptn
 
       allmaxd <- setupMats$maxd
     }else{    
-      setupMatsFULL <- setupIAK3D(x , dI , nDscPts = 0 , partSetup = TRUE)
+      setupMatsFULL <- setupIAK3D(xData , dIData , nDscPts = 0 , partSetup = TRUE)
       allmaxd <- setupMatsFULL$maxd
 
       tmp <- round(setupMatsFULL$dIU , digits = 2)
@@ -47,7 +47,7 @@ setParBndsIAK3D <- function(x , dI , setupMats , compLikMats = list('compLikOptn
     return(parBnds)
 }
 
-setInitsIAK3D <- function(x , dI , z , X , vXU , iU , modelx , nud ,  
+setInitsIAK3D <- function(xData , dIData , zData , XData , vXU , iU , modelx , nud ,  
             sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1 , prodSum , 
             cmeOpt , setupMats , parBnds , lnTfmdData , lmmFit , compLikMats = list('compLikOptn' = 0) , initC = NULL){
 
@@ -57,7 +57,7 @@ setInitsIAK3D <- function(x , dI , z , X , vXU , iU , modelx , nud ,
       alldIU <- setupMats$dIU
     }else{
     
-      setupMatsFULL <- setupIAK3D(x , dI , nDscPts = 0 , partSetup = TRUE)
+      setupMatsFULL <- setupIAK3D(xData , dIData , nDscPts = 0 , partSetup = TRUE)
       allKx <- setupMatsFULL$Kx
       allKd <- setupMatsFULL$Kd
       alldIU <- setupMatsFULL$dIU
@@ -70,12 +70,12 @@ setInitsIAK3D <- function(x , dI , z , X , vXU , iU , modelx , nud ,
 
 ### for inits for a newton-raphson routine to fit the variance parameters...
       if(is.null(initC)){
-        betaInit <- solve(t(X) %*% X , t(X) %*% z)
+        betaInit <- solve(t(XData) %*% XData , t(XData) %*% zData)
       }else{
-        tmp <- lndetANDinvCb(initC , cbind(z,X))
-        betaInit <- solve(t(X) %*% tmp$invCb[,-1,drop=FALSE] , t(X) %*% tmp$invCb[,1,drop=FALSE])
+        tmp <- lndetANDinvCb(initC , cbind(zData,XData))
+        betaInit <- solve(t(XData) %*% tmp$invCb[,-1,drop=FALSE] , t(XData) %*% tmp$invCb[,1,drop=FALSE])
       }
-      resInit <- z - X %*% betaInit
+      resInit <- zData - XData %*% betaInit
 
       varResInit <- var(as.numeric(resInit))
       
@@ -108,7 +108,7 @@ setInitsIAK3D <- function(x , dI , z , X , vXU , iU , modelx , nud ,
 ### use midpoints to assign, max of one datum for each depth per location.
 ### this should give inits for depth-wise sum component, cd1
 ###############################################
-      dMidpnts <- rowMeans(dI)
+      dMidpnts <- rowMeans(dIData)
 
 ### only one from each location...
       dAB <- quantile(dMidpnts , 1/3) # the cutoff depth between A and B
@@ -150,17 +150,17 @@ setInitsIAK3D <- function(x , dI , z , X , vXU , iU , modelx , nud ,
 
 ### update representative depths with means...
       dMidpntsA <- dMidpnts[iA]
-      xA <- x[iA,]
+      xA <- xData[iA,]
       zTmpA <- resInit[iA]
       dA <- mean(dMidpntsA)
 
       dMidpntsB <- dMidpnts[iB]
-      xB <- x[iB,]
+      xB <- xData[iB,]
       zTmpB <- resInit[iB]
       dB <- mean(dMidpntsB)
 
       dMidpntsC <- dMidpnts[iC]
-      xC <- x[iC,]
+      xC <- xData[iC,]
       zTmpC <- resInit[iC]
       dC <- mean(dMidpntsC)
 
@@ -433,11 +433,11 @@ setInitsIAK3D <- function(x , dI , z , X , vXU , iU , modelx , nud ,
         print('Running with lnTfmdData = F to get better initial variance...')
         verboseOptim <<- F
         if (compLikMats$compLikOptn == 0){
-          tmp <- nllIAK3D(pars = parsTmp , z = z , X = X , vXU = vXU , iU = iU , modelx = modelx , nud = nud , 
+          tmp <- nllIAK3D(pars = parsTmp , zData = zData , XData = XData , vXU = vXU , iU = iU , modelx = modelx , nud = nud , 
             sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , 
             cmeOpt = cmeOpt , prodSum = prodSum , setupMats = setupMats , parBnds = parBnds , useReml = F , lnTfmdData = F , rtnAll = T)	
         }else{
-          tmp <- nllIAK3D_CL(pars = parsTmp , z = z , X = X , modelx = modelx , nud = nud , 
+          tmp <- nllIAK3D_CL(pars = parsTmp , zData = zData , XData = XData , modelx = modelx , nud = nud , 
             sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , 
             cmeOpt = cmeOpt , prodSum = prodSum , setupMats = setupMats , parBnds = parBnds , useReml = F , compLikMats = compLikMats , rtnAll = T)	
         }
@@ -509,6 +509,15 @@ setInitsIAK3D <- function(x , dI , z , X , vXU , iU , modelx , nud ,
 	            lncx0ParTmp , lncx1ParTmp , lncd1ParTmp , logitab(cxd1/(cxd0+cxd1)))
         parsNonStat <- c(sdfdPars_cd1 , sdfdPars_cxd0 , sdfdPars_cxd1)
         parsStat2 <- c(lncme - log(cxd0+cxd1))
+        parNames <- c('ax.lt' , 'nux.lt' , 'ad.lt')
+        if(length(lncx0ParTmp) > 0){ parNames <- c(parNames , 'cx0OVERcxd.l') }else{}
+        if(length(lncx1ParTmp) > 0){ parNames <- c(parNames , 'cx1OVERcxd.l') }else{}
+        if(length(lncd1ParTmp) > 0){ parNames <- c(parNames , 'cd1OVERcxd.l') }else{}
+        parNames <- c(parNames , 'cxd1OVERcxd.lt') 
+        if(length(sdfdPars_cd1) > 0){ parNames <- c(parNames , c('taud1.1.tfm' , 'taud1.2.tfm')) }else{}
+        if(length(sdfdPars_cxd0) > 0){ parNames <- c(parNames , c('tauxd0.1.tfm' , 'tauxd0.2.tfm')) }else{}
+        if(length(sdfdPars_cxd1) > 0){ parNames <- c(parNames , c('tauxd1.1.tfm' , 'tauxd1.2.tfm')) }else{}
+        if(length(lncme) > 0){ parNames <- c(parNames , 'cmeOVERcxd.l') }else{}
       }else{
 ### beta by nr
         parsStat1 <- c(logitab(ax , parBnds$axBnds[1] , parBnds$axBnds[2]) , logitab(nux , parBnds$nuxBnds[1] , parBnds$nuxBnds[2]) , 
@@ -516,6 +525,16 @@ setInitsIAK3D <- function(x , dI , z , X , vXU , iU , modelx , nud ,
             lncx0ParTmp , lncx1ParTmp , lncd1ParTmp , log(cxd0) , log(cxd1))
         parsNonStat <- c(sdfdPars_cd1 , sdfdPars_cxd0 , sdfdPars_cxd1)
         parsStat2 <- lncme
+        parNames <- c('ax.lt' , 'nux.lt' , 'ad.lt')
+        if(length(lncx0ParTmp) > 0){ parNames <- c(parNames , 'cx0.l') }else{}
+        if(length(lncx1ParTmp) > 0){ parNames <- c(parNames , 'cx1.l') }else{}
+        if(length(lncd1ParTmp) > 0){ parNames <- c(parNames , 'cd1.l') }else{}
+        if(length(cxd0) > 0){ parNames <- c(parNames , 'cxd0.l') }else{}
+        if(length(cxd1) > 0){ parNames <- c(parNames , 'cxd1.l') }else{}
+        if(length(sdfdPars_cd1) > 0){ parNames <- c(parNames , c('taud1.1.tfm' , 'taud1.2.tfm')) }else{}
+        if(length(sdfdPars_cxd0) > 0){ parNames <- c(parNames , c('tauxd0.1.tfm' , 'tauxd0.2.tfm')) }else{}
+        if(length(sdfdPars_cxd1) > 0){ parNames <- c(parNames , c('tauxd1.1.tfm' , 'tauxd1.2.tfm')) }else{}
+        if(length(lncme) > 0){ parNames <- c(parNames , 'cme.l') }else{}
       }
           
     }else if(modelx == 'nugget'){
@@ -525,13 +544,26 @@ setInitsIAK3D <- function(x , dI , z , X , vXU , iU , modelx , nud ,
             log((cx0 + cx1) / (cxd0 + cxd1)) , lncd1ParTmp)
         parsNonStat <- c(sdfdPars_cd1 , sdfdPars_cxd0)
         parsStat2 <- lncme - log(cxd0+cxd1)
-
+        parNames <- c('ad.lt')
+        if((length(cx0)+length(cx1)) > 0){ parNames <- c(parNames , 'cx0OVERcxd.l') }else{}
+        if(length(lncd1ParTmp) > 0){ parNames <- c(parNames , 'cd1OVERcxd.l') }else{}
+        if(length(sdfdPars_cd1) > 0){ parNames <- c(parNames , c('taud1.1.tfm' , 'taud1.2.tfm')) }else{}
+        if(length(sdfdPars_cxd0) > 0){ parNames <- c(parNames , c('tauxd0.1.tfm' , 'tauxd0.2.tfm')) }else{}
+        if(length(lncme) > 0){ parNames <- c(parNames , 'cmeOVERcxd.l') }else{}
       }else{
 ### beta by nr
         parsStat1 <- c(logitab(ad , parBnds$adBnds[1] , parBnds$adBnds[2]) , 
             log(cx0 + cx1) , lncd1ParTmp , log(cxd0 + cxd1))
         parsNonStat <- c(sdfdPars_cd1 , sdfdPars_cxd0)
         parsStat2 <- lncme
+        parNames <- c('ad.lt')
+        if(length(cx0) > 0){ parNames <- c(parNames , 'cx0.l') }else{}
+        if(length(lncd1ParTmp) > 0){ parNames <- c(parNames , 'cd1.l') }else{}
+        if(length(cxd0) > 0){ parNames <- c(parNames , 'cxd0.l') }else{}
+        
+        if(length(sdfdPars_cd1) > 0){ parNames <- c(parNames , c('taud1.1.tfm' , 'taud1.2.tfm')) }else{}
+        if(length(sdfdPars_cxd0) > 0){ parNames <- c(parNames , c('tauxd0.1.tfm' , 'tauxd0.2.tfm')) }else{}
+        if(length(lncme) > 0){ parNames <- c(parNames , 'cme.l') }else{}
       }
       
     }
@@ -554,6 +586,57 @@ setInitsIAK3D <- function(x , dI , z , X , vXU , iU , modelx , nud ,
     return(list('pars' = pars , 'parsStat' = parsStat , 'iStat' = iStat , 'iTau1' = iTau1 , 'iTau2' = iTau2))
 }
 
+getParNamesIAK3D <- function(modelx , sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1 , prodSum , cmeOpt , lnTfmdData){
+  if(modelx == 'matern'){
+    if(!lnTfmdData){
+      ### beta,cxd[d=0] auto    
+      parNames <- c('ax.lt' , 'nux.lt' , 'ad.lt')
+      if(!prodSum){ parNames <- c(parNames , 'cx0OVERcxd.l') }else{}
+      if(!prodSum){ parNames <- c(parNames , 'cx1OVERcxd.l') }else{}
+      if((!prodSum) & (sdfdType_cd1 != -9)){ parNames <- c(parNames , 'cd1OVERcxd.l') }else{}
+      parNames <- c(parNames , 'cxd1OVERcxd.lt')
+      if(sdfdType_cd1 == -1){ parNames <- c(parNames , c('taud1.1.tfm' , 'taud1.2.tfm')) }else{}
+      if(sdfdType_cxd0 == -1){ parNames <- c(parNames , c('tauxd0.1.tfm' , 'tauxd0.2.tfm')) }else{}
+      if(sdfdType_cxd1 == -1){ parNames <- c(parNames , c('tauxd1.1.tfm' , 'tauxd1.2.tfm')) }else{}
+      if(cmeOpt == 1){ parNames <- c(parNames , 'cmeOVERcxd.l') }else{}
+    }else{
+      ### beta by nr
+      parNames <- c('ax.lt' , 'nux.lt' , 'ad.lt')
+      if(!prodSum){ parNames <- c(parNames , 'cx0.l') }else{}
+      if(!prodSum){ parNames <- c(parNames , 'cx1.l') }else{}
+      if((!prodSum) & (sdfdType_cd1 != -9)){ parNames <- c(parNames , 'cd1.l') }else{}
+      if(sdfdType_cxd0 != -9){ parNames <- c(parNames , 'cxd0.l') }else{}
+      if(sdfdType_cxd1 != -9){ parNames <- c(parNames , 'cxd1.l') }else{}
+      if(sdfdType_cd1 == -1){ parNames <- c(parNames , c('taud1.1.tfm' , 'taud1.2.tfm')) }else{}
+      if(sdfdType_cxd0 == -1){ parNames <- c(parNames , c('tauxd0.1.tfm' , 'tauxd0.2.tfm')) }else{}
+      if(sdfdType_cxd1 == -1){ parNames <- c(parNames , c('tauxd1.1.tfm' , 'tauxd1.2.tfm')) }else{}
+      if(cmeOpt == 1){ parNames <- c(parNames , 'cme.l') }else{}
+    }
+    
+  }else if(modelx == 'nugget'){
+    if(!lnTfmdData){
+      ### beta,cxd[d=0] auto    
+      parNames <- c('ad.lt')
+      if(!prodSum){ parNames <- c(parNames , 'cx0OVERcxd.l') }else{}
+      if((!prodSum) & (sdfdType_cd1 != -9)){ parNames <- c(parNames , 'cd1OVERcxd.l') }else{}
+      if(sdfdType_cd1 == -1){ parNames <- c(parNames , c('taud1.1.tfm' , 'taud1.2.tfm')) }else{}
+      if(sdfdType_cxd0 == -1){ parNames <- c(parNames , c('tauxd0.1.tfm' , 'tauxd0.2.tfm')) }else{}
+      if(cmeOpt == 1){ parNames <- c(parNames , 'cmeOVERcxd.l') }else{}
+    }else{
+      ### beta by nr
+      parNames <- c('ad.lt' , 'cx0.l')
+      if(!prodSum){ parNames <- c(parNames , 'cx0.l') }else{}
+      if((!prodSum) & (sdfdType_cd1 != -9)){ parNames <- c(parNames , 'cd1.l') }else{}
+      parNames <- c(parNames , 'cxd0.l')
+      if(sdfdType_cd1 == -1){ parNames <- c(parNames , c('taud1.1.tfm' , 'taud1.2.tfm')) }else{}
+      if(sdfdType_cxd0 == -1){ parNames <- c(parNames , c('tauxd0.1.tfm' , 'tauxd0.2.tfm')) }else{}
+      if(cmeOpt == 1){ parNames <- c(parNames , 'cme.l') }else{}
+    }
+    
+  }
+  
+  return(parNames)
+}
 
 setFitRangeIAK3D <- function(pars , modelx , sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1 , prodSum , cmeOpt , lnTfmdData){
 
@@ -701,15 +784,23 @@ setFitRangeIAK3D <- function(pars , modelx , sdfdType_cd1 , sdfdType_cxd0 , sdfd
       
     }
 
-    if(inext != (length(pars)+1)){ 
-      print(inext)
-      print('pars:')
-      print(pars)
-      print('fitRange:')
-      print(fitRange)
-      stop('Some error in defining fitRange - should have one row for each parameter in the vector pars!') 
-    }else{}
+### tidy up, in case just using function to find out how many parameters to be fitted numerically...
+    fitRange <- fitRange[1:(inext-1),,drop=FALSE]
 
     return(fitRange)
 }
 
+getnParsIAK3D <- function(modelx , sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1 , 
+                     prodSum , cmeOpt , lnTfmdData){
+
+# ax,nux,ad,
+# cx0.,cx1.,cd1.,[cxd0.,]sxd1.,
+# taud.1,taud.2,
+# tauxd0.1,tauxd0.2,
+# tauxd1.1,tauxd1.2,
+# cme.
+
+    tmp <- setFitRangeIAK3D(pars = NA * numeric(25) , modelx , sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1 , prodSum , cmeOpt , lnTfmdData)
+
+    return(nrow(tmp))
+}
