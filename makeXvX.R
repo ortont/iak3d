@@ -332,9 +332,74 @@ makeXvX <- function(covData = NA , dIData , modelX , allKnotsd = c() , iU = NA ,
         } # end of the if lnTfmdData else bit.
         
 ###############################################
-### or if we have a cubist model...
+### or if we have a cubist model but don't require vX...
 ###############################################
-    }else if(modelType == 'cubist' | modelType == 'gam'){
+      }else if(modelType == 'cubist' & (!lnTfmdData)){
+### new block. 12-2-20. quicker averaging of cubist model X over depth intervals if vX not required        
+        alldBreaks <- getAlldBreaks(modelX)
+        
+        # jRulesdInRules <- getRulesWithdInCondits(cubistModel)
+        # 
+        # ruleNumbersByCol <- getRuleNumbersFromColNames(cubistModel)
+        # jColsdInRules <- which(is.element(ruleNumbersByCol , jRulesdInRules))
+        # jColsdNotInRules <- setdiff(seq(length(ruleNumbersByCol)) , jColsdInRules)
+
+        # for each row of des mtx, make mVec, vVec and wVec with mean var and weight for each piecewise linear bit of the depth interval...
+        covData$dIMidPts <- dIData[,1]
+        XTmp <- cubist2X(cubistModel = modelX , dataFit = covData , allKnotsd = allKnotsd)$X
+        mwSum <- matrix(0 , nrow(XTmp) , ncol(XTmp)) # vwSqdSum <- not working - prob something along these lines though. 
+        lbCurrent <- dIData[,1]
+        if(length(alldBreaks) > 0){
+          for(jb in 1:length(alldBreaks)){
+            iThis <- which((dIData[,1] < alldBreaks[jb]) & (dIData[,2] > alldBreaks[jb]))
+            if(length(iThis) > 0){
+              wThis <- (alldBreaks[jb] - lbCurrent[iThis]) / (dIData[iThis,2] - dIData[iThis,1])
+              ### just to the left of breaks...
+              covDataThis <- covData[iThis,,drop=FALSE]
+              covDataThis$dIMidPts <- alldBreaks[jb] - 0.0001
+              XTmpB <- cubist2X(cubistModel = modelX , dataFit = covDataThis , allKnotsd = allKnotsd)$X
+              mwSum[iThis,] <- mwSum[iThis,,drop=FALSE] + 0.5 * (XTmpB + XTmp[iThis,,drop=FALSE]) * wThis
+              # vwSqdSum[iThis,] <- vwSqdSum[iThis,,drop=FALSE] + (((XTmpB - XTmp[iThis,,drop=FALSE]) ^ 2) / 12) * (wThis ^ 2)
+              lbCurrent[iThis] <- alldBreaks[jb]
+              
+              ### just to the right of breaks...
+              covDataThis <- covData[iThis,,drop=FALSE]
+              covDataThis$dIMidPts <- alldBreaks[jb] + 0.0001
+              XTmp[iThis,] <- cubist2X(cubistModel = modelX , dataFit = covDataThis , allKnotsd = allKnotsd)$X
+            }else{}
+          }
+        }
+        ### at dU...
+        wThis <- (dIData[,2] - lbCurrent) / (dIData[,2] - dIData[,1])
+        
+        covData$dIMidPts <- dIData[,2]
+        XTmpB <- cubist2X(cubistModel = modelX , dataFit = covData , allKnotsd = allKnotsd)$X
+        
+        mwSum <- mwSum + 0.5 * (XTmpB + XTmp) * wThis
+        # vwSqdSum <- vwSqdSum + (((XTmpB - XTmp) ^ 2) / 12) * (wThis ^ 2)
+        
+        X <- mwSum
+
+### that's the increment-averaged design matrix made. now for XLims and pX
+        if(setXLims){
+          ### slight difference to loop version, lims are now calcd from the averaged values.          
+          XLims[1,] <- apply(X , 2 , minNonZero)
+          XLims[2,] <- apply(X , 2 , maxNonZero)
+        }else{
+          if(!infBnds){
+            ### apply the given constraints to the point-support design matrix...
+            X <- matrix(mapply(replaceLT , x = t(X) , llim = XLims[1,] , replaceZeros = FALSE , SIMPLIFY = TRUE) , nrow = nrow(X) , ncol = ncol(X) , byrow = TRUE)
+            X <- matrix(mapply(replaceGT , x = t(X) , ulim = XLims[2,] , replaceZeros = FALSE , SIMPLIFY = TRUE) , nrow = nrow(X) , ncol = ncol(X) , byrow = TRUE)
+          }else{}
+        }
+
+        ### all variables within Cubist rules are continuous, so...
+        pX <- 1 + integer(p)
+        
+###############################################
+### or if we have a cubist (+ require covariances for lnTfmdData) or gam model...
+###############################################
+      }else if(modelType == 'cubist' | modelType == 'gam'){
 
 #n x p x nDiscPts <= maxTmp
 
@@ -595,3 +660,7 @@ maxNonZero <- function(x , all0Val = -Inf){
   }
 }
 
+rows2vXURows <- function(rowsIn , iU){
+  rowsOut <- (rep(rowsIn , each = length(iU)) - 1) * length(iU) + rep(seq(length(iU)) , length(rowsIn))
+  return(rowsOut)
+}
