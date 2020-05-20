@@ -4,7 +4,7 @@
 ### should have no depth sum component in cov model (include via spline instead)
 ###################################################################
 nllIAK3D_CL <- function(pars , zData , XData , modelx , nud ,  
-                     sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1 , cmeOpt , prodSum , setupMats , parBnds , useReml , compLikMats , rtnAll = F){
+                     sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1 , cmeOpt , prodSum , setupMats = NULL , parBnds , useReml , compLikMats , rtnAll = F , attachBigMats = TRUE){
 
     if(exists("printnllTime") && printnllTime){
       ptm <- proc.time()
@@ -34,30 +34,34 @@ nllIAK3D_CL <- function(pars , zData , XData , modelx , nud ,
     lndetA_SUM <- n_SUM <- 0
     if(rtnAll){ listiCkl_kl <- listCkl_kl <- listiAXkl_kl <- listiAzkl_kl <- list() }else{}
 
-    for(i in 1:nrow(compLikMats$subsetPairsAdj)){
-      iThis <- c(compLikMats$listBlocks[[compLikMats$subsetPairsAdj[i,1]]]$i , compLikMats$listBlocks[[compLikMats$subsetPairsAdj[i,2]]]$i)
-      tmp <- nllIAK3D(pars = pars , zData = zData[iThis] , XData = XData[iThis,,drop = FALSE] , vXU = NA , iU = NA , modelx = modelx , nud = nud , 
-            sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , 
-            cmeOpt = cmeOpt , prodSum = prodSum , setupMats = setupMats[[i]] , parBnds = parBnds , useReml = useReml , lnTfmdData = lnTfmdData , rtnAll = TRUE , forCompLik = TRUE)	      
-      XziAXz_SUM <- XziAXz_SUM + tmp$WiAW
-      lndetA_SUM <- lndetA_SUM + tmp$lndetA
-      n_SUM <- n_SUM + length(iThis)
-      parsBTfmd <- tmp$parsBTfmd
-      sigma2Vec <- tmp$sigma2Vec
+    if(compLikMats$compLikOptn < 4){
+      for(i in 1:nrow(compLikMats$subsetPairsAdj)){
+        iThis <- c(compLikMats$listBlocks[[compLikMats$subsetPairsAdj[i,1]]]$i , compLikMats$listBlocks[[compLikMats$subsetPairsAdj[i,2]]]$i)
+        tmp <- nllIAK3D(pars = pars , zData = zData[iThis] , XData = XData[iThis,,drop = FALSE] , vXU = NA , iU = NA , modelx = modelx , nud = nud , 
+                        sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , 
+                        cmeOpt = cmeOpt , prodSum = prodSum , setupMats = setupMats[[i]] , parBnds = parBnds , useReml = useReml , lnTfmdData = lnTfmdData , rtnAll = TRUE , forCompLik = TRUE)	      
+        XziAXz_SUM <- XziAXz_SUM + tmp$WiAW
+        lndetA_SUM <- lndetA_SUM + tmp$lndetA
+        n_SUM <- n_SUM + length(iThis)
+        parsBTfmd <- tmp$parsBTfmd
+        sigma2Vec <- tmp$sigma2Vec
+        
+        if(rtnAll){ 
+          if(attachBigMats){
+            listCkl_kl[[i]] <- tmp$A
+          #        listiCkl_kl[[i]] <- lndetANDinvCb(tmp$A)$invCb
+            listiCkl_kl[[i]] <- chol2inv(chol(tmp$A)) # should make code better as already solved a system in nll function.
+          }else{}
+          # listiAXkl_kl[[i]] <- tmp$iAW[,1:p,drop=FALSE]
+          # listiAzkl_kl[[i]] <- tmp$iAW[,p+1,drop=FALSE]
+        }else{}
+      }
+    }else{}
 
-      if(rtnAll){ 
-        listCkl_kl[[i]] <- tmp$A
-#        listiCkl_kl[[i]] <- lndetANDinvCb(tmp$A)$invCb
-        listiCkl_kl[[i]] <- chol2inv(chol(tmp$A)) # should make code better as already solved a system in nll function.
-        listiAXkl_kl[[i]] <- tmp$iAW[,1:p,drop=FALSE]
-        listiAzkl_kl[[i]] <- tmp$iAW[,p+1,drop=FALSE]
-      }else{}
-    }
-
-    if(compLikMats$compLikOptn == 1 || compLikMats$compLikOptn == 3){
+    if(compLikMats$compLikOptn == 1 || compLikMats$compLikOptn == 3 || compLikMats$compLikOptn == 4){
       nNonadjSubsets <- nrow(compLikMats$subsetPairsNonadj)
   
-      if(nNonadjSubsets > 0){  
+      if(nNonadjSubsets > 0 || compLikMats$compLikOptn == 4){  
         nadjSubsets <- nrow(compLikMats$subsetPairsAdj)
         XziAXz_BLOCKS <- list() # mayeb try as array in future?
         lndetA_BLOCKS <- NA * numeric(length(compLikMats$listBlocks))
@@ -68,23 +72,37 @@ nllIAK3D_CL <- function(pars , zData , XData , modelx , nud ,
                 cmeOpt = cmeOpt , prodSum = prodSum , setupMats = setupMats[[i+nadjSubsets]] , parBnds = parBnds , useReml = useReml , lnTfmdData = lnTfmdData , rtnAll = TRUE , forCompLik = TRUE)	      
           XziAXz_BLOCKS[[i]] <- tmp$WiAW
           lndetA_BLOCKS[i] <- tmp$lndetA
+          if(compLikMats$compLikOptn == 4){
+            parsBTfmd <- tmp$parsBTfmd
+            sigma2Vec <- tmp$sigma2Vec
+          }else{}
+          
           if(rtnAll){ # these ones are for a single block, not for a pair 
-            listCkl_kl[[i+nadjSubsets]] <- tmp$A
-#            listiCkl_kl[[i+nadjSubsets]] <- lndetANDinvCb(tmp$A)$invCb
-            listiCkl_kl[[i+nadjSubsets]] <- chol2inv(chol(tmp$A))
-            listiAXkl_kl[[i+nadjSubsets]] <- tmp$iAW[,1:p,drop=FALSE]
-            listiAzkl_kl[[i+nadjSubsets]] <- tmp$iAW[,p+1,drop=FALSE]
+            if(attachBigMats){
+              listCkl_kl[[i+nadjSubsets]] <- tmp$A
+              #            listiCkl_kl[[i+nadjSubsets]] <- lndetANDinvCb(tmp$A)$invCb
+              listiCkl_kl[[i+nadjSubsets]] <- chol2inv(chol(tmp$A))
+            }else{}
+            # listiAXkl_kl[[i+nadjSubsets]] <- tmp$iAW[,1:p,drop=FALSE]
+            # listiAzkl_kl[[i+nadjSubsets]] <- tmp$iAW[,p+1,drop=FALSE]
           }else{}
         }
 
-        for(i in 1:nrow(compLikMats$subsetPairsNonadj)){
-          iBlockThis <- compLikMats$subsetPairsNonadj[i,1]
-          jBlockThis <- compLikMats$subsetPairsNonadj[i,2]
+        if(compLikMats$compLikOptn == 1 || compLikMats$compLikOptn == 3){
+          for(i in 1:nrow(compLikMats$subsetPairsNonadj)){
+            iBlockThis <- compLikMats$subsetPairsNonadj[i,1]
+            jBlockThis <- compLikMats$subsetPairsNonadj[i,2]
     
-          XziAXz_SUM <- XziAXz_SUM + XziAXz_BLOCKS[[iBlockThis]] + XziAXz_BLOCKS[[jBlockThis]]
-          lndetA_SUM <- lndetA_SUM + lndetA_BLOCKS[iBlockThis] + lndetA_BLOCKS[jBlockThis]
-        }
-
+            XziAXz_SUM <- XziAXz_SUM + XziAXz_BLOCKS[[iBlockThis]] + XziAXz_BLOCKS[[jBlockThis]]
+            lndetA_SUM <- lndetA_SUM + lndetA_BLOCKS[iBlockThis] + lndetA_BLOCKS[jBlockThis]
+          }
+        }else if(compLikMats$compLikOptn == 4){
+          for(i in 1:length(compLikMats$listBlocks)){
+            XziAXz_SUM <- XziAXz_SUM + XziAXz_BLOCKS[[i]]
+            lndetA_SUM <- lndetA_SUM + lndetA_BLOCKS[i]
+          }
+          
+        }else{}
       }else{}
 
 ### with all subset pairs included...
@@ -105,16 +123,13 @@ nllIAK3D_CL <- function(pars , zData , XData , modelx , nud ,
     }
         
     if(p > 0){
-#      tmp <- lndetANDinvCb(XziAXz[1:p,1:p,drop = FALSE] , XziAXz[1:p,p+1,drop = FALSE])
-#      if(is.character(tmp$cholC)){
-      betahat <- try(solve(XziAXz[1:p,1:p,drop = FALSE] , XziAXz[1:p,p+1,drop = FALSE]) , silent = TRUE)
-      if(is.character(betahat)){
+      betahat <- lndetANDinvCb(XziAXz[1:p,1:p,drop = FALSE] , XziAXz[1:p,p+1,drop = FALSE])
+      lndetXiAX <- betahat$lndetC
+      betahat <- betahat$invCb
+      if(is.na(lndetXiAX) || is.infinite(lndetXiAX)){
         return(badnll)
       }else{}
 
-#      betahat <- tmp$invCb
-#      lndetXiAX <- tmp$lndetC
-      lndetXiAX <- as.numeric(determinant(XziAXz[1:p,1:p,drop = FALSE] , logarithm = TRUE)$modulus)
     }else{
       betahat <- c()
       lndetXiAX <- c()
@@ -151,12 +166,14 @@ nllIAK3D_CL <- function(pars , zData , XData , modelx , nud ,
     if(rtnAll){ 
         vbetahat <- cxdhat * solve(XziAXz[1:p,1:p,drop = FALSE]) 
         sigma2Vec <- cxdhat * sigma2Vec 
-        listiCReskl_kl <- list()
-        for (i in 1:length(listCkl_kl)){
-          listCkl_kl[[i]] <- cxdhat * listCkl_kl[[i]]
-          listiCkl_kl[[i]] <- listiCkl_kl[[i]] / cxdhat
-          listiCReskl_kl[[i]] <- (listiAzkl_kl[[i]] - listiAXkl_kl[[i]] %*% betahat) / cxdhat
-        }
+        if(attachBigMats){
+          listiCReskl_kl <- list()
+          for (i in 1:length(listCkl_kl)){
+            listCkl_kl[[i]] <- cxdhat * listCkl_kl[[i]]
+            listiCkl_kl[[i]] <- listiCkl_kl[[i]] / cxdhat
+            # listiCReskl_kl[[i]] <- (listiAzkl_kl[[i]] - listiAXkl_kl[[i]] %*% betahat) / cxdhat
+          }
+        }else{}
     }else{}
 
     if(useReml){
@@ -195,16 +212,26 @@ nllIAK3D_CL <- function(pars , zData , XData , modelx , nud ,
     }else{}
 
     if(rtnAll){ 
-    	return(list('nll' = nll , 'pars' = pars , 'parsBTfmd' = parsBTfmd , 'betahat' = betahat , 'vbetahat' = vbetahat , 'cxdhat' = cxdhat , 
-                  'sigma2Vec' = sigma2Vec , 'XData' = XData , 'listCkl_kl' = listCkl_kl , 'listiCkl_kl' = listiCkl_kl))
+      if(attachBigMats){
+        return(list('nll' = nll , 'pars' = pars , 'parsBTfmd' = parsBTfmd , 'betahat' = betahat , 'vbetahat' = vbetahat , 'cxdhat' = cxdhat , 
+                    'sigma2Vec' = sigma2Vec , 'XData' = XData , 'listCkl_kl' = listCkl_kl , 'listiCkl_kl' = listiCkl_kl))
+      }else{
+        return(list('nll' = nll , 'pars' = pars , 'parsBTfmd' = parsBTfmd , 'betahat' = betahat , 'vbetahat' = vbetahat , 'cxdhat' = cxdhat , 
+                    'sigma2Vec' = sigma2Vec , 'XData' = XData))
+      }
     }else{
     	return(nll)
     }
 }
 
 
+### this function not used currently. replaced by ByBlock functions.
 predMatsIAK3D_CL <- function(z_muhat , XData , xMap , dIMap , iData = seq(length(z_muhat)) , lmmFit){
 
+  print('Running predMatsIAK3D_CL function')
+
+  oldSetC <- TRUE # new way to be checked.
+  
     n <- length(z_muhat)
     p <- ncol(XData)
     nxMap <- nrow(xMap)
@@ -220,17 +247,53 @@ predMatsIAK3D_CL <- function(z_muhat , XData , xMap , dIMap , iData = seq(length
         iThis <- intersect(iThis , iData)
       }else{}
 
-      setupMatsMap <- setupIAK3D(x = rbind(lmmFit$xData[iThis,,drop=FALSE] , xMap) , dIData = rbind(as.matrix(lmmFit$dIData[iThis,,drop=FALSE]) , dIMap) , nDscPts = 0)
+      if(oldSetC){
+        setupMatsMap <- setupIAK3D(xData = rbind(lmmFit$xData[iThis,,drop=FALSE] , xMap) , dIData = rbind(as.matrix(lmmFit$dIData[iThis,,drop=FALSE]) , dIMap) , nDscPts = 0)
+
+        tmp <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx ,
+                sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 ,
+                cmeOpt = lmmFit$cmeOpt , setupMats = setupMatsMap)
+
+        if(i == 1){ diagCkk <- diag(tmp$C[(length(iThis)+1):(length(iThis)+nxMap),(length(iThis)+1):(length(iThis)+nxMap),drop = FALSE]) }else{}
+
+        ChkThis <- tmp$C[1:length(iThis),(length(iThis)+1):(length(iThis)+nxMap),drop = FALSE]
+        ChThis <- tmp$C[1:length(iThis),1:length(iThis),drop = FALSE]
+      }else{
+        if(i == 1){ 
+          setupMatsMap <- setupIAK3D(xData = xMap , dIData = dIMap , nDscPts = 0)
+          
+          tmp <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx , 
+                           sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , 
+                           cmeOpt = lmmFit$cmeOpt , setupMats = setupMatsMap)
+          
+          diagCkk <- diag(tmp$C)
+          rm(setupMatsMap , tmp)
+        }else{}
         
-      tmp <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx , 
-              sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , 
-              cmeOpt = lmmFit$cmeOpt , setupMats = setupMatsMap)
-
-      if(i == 1){ diagCkk <- diag(tmp$C[(length(iThis)+1):(length(iThis)+nxMap),(length(iThis)+1):(length(iThis)+nxMap),drop = FALSE]) }else{}
+        setupMatsMap <- setupIAK3D2(xData = lmmFit$xData[iThis,,drop=FALSE] , dIData = as.matrix(lmmFit$dIData[iThis,,drop=FALSE]) ,
+                                    xData2 = xMap , dIData2 = dIMap)
+        
+        ChkThis <- setCIAK3D2(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx ,
+                              sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 ,
+                              cmeOpt = lmmFit$cmeOpt , setupMats = setupMatsMap)
+        
+        # ChThis <- tmp$C[1:length(iThis),1:length(iThis),drop = FALSE]
+        ### Ch should be in the stored lmmFit object?
+        print('Testing ChThis is correct')
+        setupMatsMap <- setupIAK3D(xData = rbind(lmmFit$xData[iThis,,drop=FALSE] , xMap) , dIData = rbind(as.matrix(lmmFit$dIData[iThis,,drop=FALSE]) , dIMap) , nDscPts = 0)
+        
+        tmp <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx ,
+                         sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 ,
+                         cmeOpt = lmmFit$cmeOpt , setupMats = setupMatsMap)
+        ChThisLONG <- tmp$C[1:length(iThis),1:length(iThis),drop = FALSE]
+        
+        ChThis <- lmmFit$listCkl_kl[[i]]
+        
+        if(max(abs(ChThis - ChThisLONG)) > 1E-8){
+          stop('Looks like an error in loading ChThis - ordering?')
+        }
+      }
       
-      ChkThis <- tmp$C[1:length(iThis),(length(iThis)+1):(length(iThis)+nxMap),drop = FALSE]
-      ChThis <- tmp$C[1:length(iThis),1:length(iThis),drop = FALSE]
-
 #      tmp <- lndetANDinvCb(ChThis , ChkThis)
 #      iCChkThis <- tmp$invCb
       iCChkThis <- solve(ChThis , ChkThis)
@@ -252,15 +315,36 @@ predMatsIAK3D_CL <- function(z_muhat , XData , xMap , dIMap , iData = seq(length
         iThis <- intersect(iThis , iData)
       }else{}
 
-      setupMatsMap <- setupIAK3D(x = rbind(lmmFit$xData[iThis,,drop=FALSE] , xMap) , dIData = rbind(as.matrix(lmmFit$dIData[iThis,,drop=FALSE]) , dIMap) , nDscPts = 0)
+      if(oldSetC){
+        setupMatsMap <- setupIAK3D(xData = rbind(lmmFit$xData[iThis,,drop=FALSE] , xMap) , dIData = rbind(as.matrix(lmmFit$dIData[iThis,,drop=FALSE]) , dIMap) , nDscPts = 0)
+
+        tmp <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx ,
+                sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 ,
+                cmeOpt = lmmFit$cmeOpt , setupMats = setupMatsMap)
+
+        ChkThis <- tmp$C[1:length(iThis),(length(iThis)+1):(length(iThis)+nxMap),drop = FALSE]
+        ChThis <- tmp$C[1:length(iThis),1:length(iThis),drop = FALSE]
+      }else{
+        setupMatsMap <- setupIAK3D2(xData = lmmFit$xData[iThis,,drop=FALSE] , dIData = as.matrix(lmmFit$dIData[iThis,,drop=FALSE]) , 
+                                    xData2 = xMap , dIData2 = dIMap)
+        ChkThis <- setCIAK3D2(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx , 
+                              sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , 
+                              cmeOpt = lmmFit$cmeOpt , setupMats = setupMatsMap)
         
-      tmp <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx , 
-              sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , 
-              cmeOpt = lmmFit$cmeOpt , setupMats = setupMatsMap)
-
-      ChkThis <- tmp$C[1:length(iThis),(length(iThis)+1):(length(iThis)+nxMap),drop = FALSE]
-      ChThis <- tmp$C[1:length(iThis),1:length(iThis),drop = FALSE]
-
+        print('Testing old and long way...')    
+        setupMatsMap <- setupIAK3D(xData = rbind(lmmFit$xData[iThis,,drop=FALSE] , xMap) , dIData = rbind(as.matrix(lmmFit$dIData[iThis,,drop=FALSE]) , dIMap) , nDscPts = 0)
+        
+        tmp <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx ,
+                         sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 ,
+                         cmeOpt = lmmFit$cmeOpt , setupMats = setupMatsMap)
+        
+        ChThisLONG <- tmp$C[1:length(iThis),1:length(iThis),drop = FALSE]
+        
+        ChThis <- lmmFit$listCkl_kl[[i]]
+        
+        if(max(abs(ChThis - ChThisLONG)) > 1E-8){ stop('Looking error like in ChThis.') }else{}
+      }
+      
 #      tmp <- lndetANDinvCb(ChThis , ChkThis)
 #      iCChkThis <- tmp$invCb
       iCChkThis <- solve(ChThis , ChkThis)
@@ -288,8 +372,10 @@ predMatsIAK3D_CL <- function(z_muhat , XData , xMap , dIMap , iData = seq(length
     return(list('diagCkk' = diagCkk , 'diagCkhiCChk' = diagCkhiCChk , 'CkhiCX' = CkhiCX , 'CkhiCz_muhat' = CkhiCz_muhat))
 }
 
-predMatsIAK3D_CL_ByBlock <- function(z_muhat , XData , xMap , dIMap , iData = seq(length(z_muhat)) , lmmFit , listCkl_kl , listiCkl_kl){
+predMatsIAK3D_CL_ByBlock <- function(z_muhat , XData , xMap , dIMap , iData = seq(length(z_muhat)) , lmmFit){ # , listCkl_kl , listiCkl_kl
 
+  print('Running predMatsIAK3D_CL_ByBlock function')
+  
 ### get the blocks for the prediction locations...
   nBlocks <- length(lmmFit$compLikMats$listBlocks)
   allCentroids <- matrix(NA , nBlocks , 2)
@@ -352,18 +438,49 @@ predMatsIAK3D_CL_ByBlock <- function(z_muhat , XData , xMap , dIMap , iData = se
         iThis <- c(iDatak , iDatal)
 
 ### note different order to other stuff (preds first here) for consistency with Eidsvik...
-        setupMatsMap <- setupIAK3D(x = rbind(xMapThis , lmmFit$xData[iThis,,drop=FALSE]) , dIData = rbind(dIMapThis , as.matrix(lmmFit$dIData[iThis,,drop=FALSE])) , nDscPts = 0)
+        oldSetC <- TRUE # new way to be checked.
+        if(oldSetC){
+          setupMatsMap <- setupIAK3D(xData = rbind(xMapThis , lmmFit$xData[iThis,,drop=FALSE]) , dIData = rbind(dIMapThis , as.matrix(lmmFit$dIData[iThis,,drop=FALSE])) , nDscPts = 0)
+
+          tmp <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx ,
+                  sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 ,
+                  cmeOpt = lmmFit$cmeOpt , setupMats = setupMatsMap)
+
+          if(i == 1){
+            diagCkk[iMapThis,1] <- diag(tmp$C[1:nxMapThis,1:nxMapThis,drop = FALSE])
+          }else{}
+          ChkThis <- tmp$C[(nxMapThis+1):(nxMapThis+length(iThis)),1:nxMapThis,drop = FALSE]
+          ChThis <- tmp$C[(nxMapThis+1):(nxMapThis+length(iThis)),(nxMapThis+1):(nxMapThis+length(iThis)),drop = FALSE]
+        }else{
+          if(i == 1){ 
+            setupMatsMap <- setupIAK3D(xData = xMapThis , dIData = dIMapThis , nDscPts = 0)
+            
+            tmp <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx , 
+                             sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , 
+                             cmeOpt = lmmFit$cmeOpt , setupMats = setupMatsMap)
+            
+            diagCkk[iMapThis,1] <- diag(tmp$C) 
+          }else{}
+          setupMatsMap <- setupIAK3D2(xData = lmmFit$xData[iThis,,drop=FALSE] , dIData = as.matrix(lmmFit$dIData[iThis,,drop=FALSE]) , 
+                                      xData2 = xMapThis , dIData2 = dIMapThis)
+          
+          ChkThis <- setCIAK3D2(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx ,
+                                sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 ,
+                                cmeOpt = lmmFit$cmeOpt , setupMats = setupMatsMap)
+          # ChThis <- tmp$C[(nxMapThis+1):(nxMapThis+length(iThis)),(nxMapThis+1):(nxMapThis+length(iThis)),drop = FALSE]
+          
+          print('testing old long way')
+          setupMatsMap <- setupIAK3D(xData = rbind(xMapThis , lmmFit$xData[iThis,,drop=FALSE]) , dIData = rbind(dIMapThis , as.matrix(lmmFit$dIData[iThis,,drop=FALSE])) , nDscPts = 0)
+          
+          tmp <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx ,
+                           sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 ,
+                           cmeOpt = lmmFit$cmeOpt , setupMats = setupMatsMap)
+          
+          ChThisOLDLONG <- tmp$C[(nxMapThis+1):(nxMapThis+length(iThis)),(nxMapThis+1):(nxMapThis+length(iThis)),drop = FALSE]
+          ChThis <- lmmFit$listCkl_kl[[i]]
+          if(max(abs(ChThis - ChThisOLDLONG)) > 1E-8){ stop('error in chThis') }else{}
+        }
         
-        tmp <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx , 
-                sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , 
-                cmeOpt = lmmFit$cmeOpt , setupMats = setupMatsMap)
-
-        if(i == 1){ 
-          diagCkk[iMapThis,1] <- diag(tmp$C[1:nxMapThis,1:nxMapThis,drop = FALSE]) 
-        }else{}
-        ChkThis <- tmp$C[(nxMapThis+1):(nxMapThis+length(iThis)),1:nxMapThis,drop = FALSE]
-        ChThis <- tmp$C[(nxMapThis+1):(nxMapThis+length(iThis)),(nxMapThis+1):(nxMapThis+length(iThis)),drop = FALSE]
-
 #        tmp <- lndetANDinvCb(ChThis , ChkThis)
 #        iCChkThis <- tmp$invCb
         iCChkThis <- solve(ChThis , ChkThis)
@@ -387,12 +504,15 @@ predMatsIAK3D_CL_ByBlock <- function(z_muhat , XData , xMap , dIMap , iData = se
 
 predMatsIAK3D_CLEV_ByBlock <- function(z_muhat , XData , xMap , dIMap , iData = seq(length(z_muhat)) , lmmFit){
 
+  print('Running predMatsIAK3D_CLEV_ByBlock function')
+  
 ### get the blocks for the prediction locations...
   nBlocks <- length(lmmFit$compLikMats$listBlocks)
   allCentroids <- matrix(NA , nBlocks , 2)
   for(i in 1:nBlocks){ allCentroids[i,] <- lmmFit$compLikMats$listBlocks[[i]]$centroid }
   DTmp <- xyDist(xMap , allCentroids)
   blockMap <- apply(DTmp , 1 , which.min)
+  rm(DTmp)
 
 ### also pass in what block each prediction location is in...
   nBlocksMap <- max(blockMap)
@@ -449,16 +569,20 @@ predMatsIAK3D_CLEV_ByBlock <- function(z_muhat , XData , xMap , dIMap , iData = 
 
       iThis <- c(iDatak , iDatalAll)
 ### note different order to other stuff (preds first here) for consistency with Eidsvik...
-      setupMatsMap <- setupIAK3D(x = rbind(xMapThis , lmmFit$xData[iThis,,drop=FALSE]) , dIData = rbind(dIMapThis , as.matrix(lmmFit$dIData[iThis,,drop=FALSE])) , nDscPts = 0)
+      setupMatsMap <- setupIAK3D(xData = rbind(xMapThis , lmmFit$xData[iThis,,drop=FALSE]) , dIData = rbind(dIMapThis , as.matrix(lmmFit$dIData[iThis,,drop=FALSE])) , nDscPts = 0)
 
-      tmp <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx , 
+      C0klAll <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx , 
                 sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , 
-                cmeOpt = lmmFit$cmeOpt , setupMats = setupMatsMap)
+                cmeOpt = lmmFit$cmeOpt , setupMats = setupMatsMap)$C
+      rm(setupMatsMap)
 
-      C0klAll <- tmp$C
       C0k_0k <- C0klAll[c(i0,i1) , c(i0,i1) , drop = FALSE]
 
-      loadFromFit <- TRUE
+      if((!is.null(lmmFit$listCkl_kl)) & (!is.null(lmmFit$listiCkl_kl))){
+        loadFromFit <- TRUE
+      }else{
+        loadFromFit <- FALSE
+      }
       
       C0k_lList <- Q0kl_i0_i2_List <- list()
       A0_SUM <- matrix(0 , nxMapThis , nxMapThis)
@@ -480,9 +604,10 @@ predMatsIAK3D_CLEV_ByBlock <- function(z_muhat , XData , xMap , dIMap , iData = 
               Ckl_klThis <- lmmFit$listCkl_kl[[iPair]]
               iCkl_klThis <- lmmFit$listiCkl_kl[[iPair]] 
             }
-          }else{}
+          }else{
+            Ckl_klThis <- C0klAll[c(i1,i2) , c(i1,i2) , drop = FALSE]
+          }
           
-          if(!loadFromFit){ Ckl_klThis <- C0klAll[c(i1,i2) , c(i1,i2) , drop = FALSE] }else{}
           Ckl_0This <- C0klAll[c(i1,i2) , i0 , drop = FALSE]
 
           if(loadFromFit){
