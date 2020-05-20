@@ -1,6 +1,6 @@
 fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'matern' , nud = 0.5 , allKnotsd = c() , 
                 sdfdType_cd1 = 0 , sdfdType_cxd0 = 0 , sdfdType_cxd1 = 0 , cmeOpt = 0 , prodSum = TRUE , 
-                lnTfmdData = FALSE , useReml = TRUE , compLikMats = list('compLikOptn' = 0) , namePlot = NA , lmmFit = list() , rqrBTfmdPreds = TRUE , parsInit = NULL){
+                lnTfmdData = FALSE , useReml = TRUE , compLikMats = list('compLikOptn' = 0) , namePlot = NA , lmmFit = list() , rqrBTfmdPreds = TRUE , parsInit = NULL , attachBigMats = TRUE){
 
 ########################################################
 ### if xData or dIData were dataframes, convert to matrices here.
@@ -127,17 +127,7 @@ fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'mate
     if (compLikMats$compLikOptn == 0){
       setupMats <- setupIAK3D(xData , dIData , nDscPts = 0)
     }else{
-      setupMats <- list()
-### order is all adj subset pairs, then all individual subsets (which can be used to get non-adj subset pairs)
-      for (i in 1:nrow(compLikMats$subsetPairsAdj)){
-        iThis <- c(compLikMats$listBlocks[[compLikMats$subsetPairsAdj[i,1]]]$i , compLikMats$listBlocks[[compLikMats$subsetPairsAdj[i,2]]]$i)
-        setupMats[[i]] <- setupIAK3D(xData[iThis,,drop = FALSE] , dIData[iThis,,drop = FALSE] , nDscPts = 0)
-      }
-### now all individual subsets...      
-      for (i in 1:length(compLikMats$listBlocks)){
-        iThis <- compLikMats$listBlocks[[i]]$i
-        setupMats[[nrow(compLikMats$subsetPairsAdj)+i]] <- setupIAK3D(xData[iThis,,drop = FALSE] , dIData[iThis,,drop = FALSE] , nDscPts = 0)
-      }
+      setupMats <- setupIAK3D_CL(xData , dIData , nDscPts = 0 , compLikMats = compLikMats)
     }
       
 ######################################################
@@ -211,7 +201,6 @@ fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'mate
       nllTime <- end_time - start_time
       
 ### and fit...
-      
       if (compLikMats$compLikOptn == 0){
 
         print('Testing whether parallel or series version of gradient function is quicker...')
@@ -237,10 +226,12 @@ fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'mate
           gr4Optim <- gradnllIAK3D
         }
         print('Now fitting...')
-        parsFit <- optimIt(par = parsInit , fn = nllIAK3D , gr = gr4Optim , fitRange = fitRange , 
-            zData = zData , XData = XData , vXU = vXU , iU = iU , modelx = modelx , nud = nud , 
-            sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , 
+        parsFit <- optimIt(par = parsInit , fn = nllIAK3D , gr = gr4Optim , fitRange = fitRange ,
+            zData = zData , XData = XData , vXU = vXU , iU = iU , modelx = modelx , nud = nud ,
+            sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 ,
             cmeOpt = cmeOpt , prodSum = prodSum , setupMats = setupMats , parBnds = parBnds , useReml = useReml , lnTfmdData = lnTfmdData)
+        ### all args taken from this env now.
+        # parsFit <- optimIt(par = parsInit , fn = nllIAK3D , gr = gr4Optim , fitRange = fitRange)
       }else{
         
         print('Testing whether parallel or series version of gradient function is quicker...')
@@ -266,10 +257,12 @@ fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'mate
           gr4Optim <- gradnllIAK3D_CL
         }
         print('Now fitting...')
-        parsFit <- optimIt(par = parsInit , fn = nllIAK3D_CL , gr = gr4Optim , fitRange = fitRange , 
-            zData = zData , XData = XData , modelx = modelx , nud = nud , 
-            sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , 
+        parsFit <- optimIt(par = parsInit , fn = nllIAK3D_CL , gr = gr4Optim , fitRange = fitRange ,
+            zData = zData , XData = XData , modelx = modelx , nud = nud ,
+            sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 ,
             cmeOpt = cmeOpt , prodSum = prodSum , setupMats = setupMats , parBnds = parBnds , useReml = useReml , compLikMats = compLikMats)
+        ### args now taken from this env.
+        # parsFit <- optimIt(par = parsInit , fn = nllIAK3D_CL , gr = gr4Optim , fitRange = fitRange)
       }
       
 ### note that parameters have now been fitted...
@@ -284,11 +277,11 @@ fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'mate
     if (compLikMats$compLikOptn == 0){
       lmmFit <- nllIAK3D(pars = parsFit$par , zData = zData , XData = XData , vXU = vXU , iU = iU , modelx = modelx , nud = nud , 
                 sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , 
-                cmeOpt = cmeOpt , prodSum = prodSum , setupMats = setupMats , parBnds = parBnds , useReml = useReml , lnTfmdData = lnTfmdData , rtnAll = T)	
+                cmeOpt = cmeOpt , prodSum = prodSum , setupMats = setupMats , parBnds = parBnds , useReml = useReml , lnTfmdData = lnTfmdData , rtnAll = T , attachBigMats = attachBigMats)	
     }else{
       lmmFit <- nllIAK3D_CL(pars = parsFit$par , zData = zData , XData = XData , modelx = modelx , nud = nud , 
                 sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , 
-                cmeOpt = cmeOpt , prodSum = prodSum , setupMats = setupMats , parBnds = parBnds , useReml = useReml , compLikMats = compLikMats , rtnAll = T)	
+                cmeOpt = cmeOpt , prodSum = prodSum , setupMats = setupMats , parBnds = parBnds , useReml = useReml , compLikMats = compLikMats , rtnAll = T , attachBigMats = attachBigMats)	
     }
     verboseOptim <<- F
 
@@ -390,7 +383,7 @@ fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'mate
 ### the nll function that is to be minimized...
 ###################################################################
 nllIAK3D <- function(pars , zData , XData , vXU , iU , modelx , nud ,  
-                     sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1 , cmeOpt , prodSum , setupMats , parBnds , useReml , lnTfmdData , rtnAll = F , forCompLik = FALSE){
+                     sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1 , cmeOpt , prodSum , setupMats = NULL , parBnds , useReml , lnTfmdData , rtnAll = F , forCompLik = FALSE , attachBigMats = FALSE){
 
 ### default values for return...
     badnll <- 9E99
@@ -418,22 +411,34 @@ nllIAK3D <- function(pars , zData , XData , vXU , iU , modelx , nud ,
       }else{}
       
     }else{}
-    
+
     parsBTfmd <- readPars(pars = pars , modelx = modelx , nud = nud , 
                 sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , 
                 cmeOpt = cmeOpt , prodSum = prodSum , parBnds = parBnds , lnTfmdData = lnTfmdData)
 
-    tmp <- setCIAK3D(parsBTfmd = parsBTfmd , modelx = modelx , 
-                sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , 
-                cmeOpt = cmeOpt , setupMats = setupMats)
-
-    A <- tmp$C
-    sigma2Vec <- tmp$sigma2Vec
-    remove(tmp) ; 
-
-    parsOK <- T
-    if(max(is.na(A)) == 1){ parsOK <- F }else{}
-    if(is.infinite(parsBTfmd$cx0) | is.infinite(parsBTfmd$cx1) | is.infinite(parsBTfmd$cd1) | is.infinite(parsBTfmd$cxd0) | is.infinite(parsBTfmd$cxd1)){ parsOK <- F }else{}
+    if(any(is.na(c(parsBTfmd$sdfdPars_cd1,parsBTfmd$sdfdPars_cxd0,parsBTfmd$sdfdPars_cxd1))) || 
+       any(is.nan(c(parsBTfmd$sdfdPars_cd1,parsBTfmd$sdfdPars_cxd0,parsBTfmd$sdfdPars_cxd1))) ||
+       any(is.infinite(c(parsBTfmd$sdfdPars_cd1,parsBTfmd$sdfdPars_cxd0,parsBTfmd$sdfdPars_cxd1)))){
+      parsOK <- FALSE
+      A <- NA
+      sigma2Vec <- NA
+      p <- ncol(XData)
+      if(is.null(p)){ p <- 1 }else{}
+      
+    }else{
+      tmp <- setCIAK3D(parsBTfmd = parsBTfmd , modelx = modelx , 
+                       sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , 
+                       cmeOpt = cmeOpt , setupMats = setupMats)
+      
+      A <- tmp$C
+      sigma2Vec <- tmp$sigma2Vec
+      remove(tmp) ; 
+      
+      parsOK <- T
+      if(max(is.na(A)) == 1){ parsOK <- F }else{}
+      if(is.infinite(parsBTfmd$cx0) | is.infinite(parsBTfmd$cx1) | is.infinite(parsBTfmd$cd1) | is.infinite(parsBTfmd$cxd0) | is.infinite(parsBTfmd$cxd1)){ parsOK <- F }else{}
+    }
+      
    
     if(parsOK){
         n <- length(zData)
@@ -442,7 +447,7 @@ nllIAK3D <- function(pars , zData , XData , vXU , iU , modelx , nud ,
         W <- cbind(XData,zData)
 
 ### just to make sure numerical errors have not made it non-symmetric...  		
-        A <- 0.5 * (A + t(A))
+        if(class(A) != 'dspMatrix'){ A <- forceSymmetric(A) }else{}
 
         if(lnTfmdData){
             tmp <- nrUpdatesIAK3DlnN(zData = zData , XData = XData , vXU = vXU , iU = iU , C = A , sigma2Vec = sigma2Vec)
@@ -464,11 +469,10 @@ nllIAK3D <- function(pars , zData , XData , vXU , iU , modelx , nud ,
             C <- A
         }else{
 
-#          tmp <- lndetANDinvCb(A , W)
-#          if(is.character(tmp$cholC)){
-          
-          iAW <- try(solve(A , W) , silent = TRUE)
-          if(is.character(iAW)){
+         iAW <- lndetANDinvCb(A , W)
+         lndetA <- iAW$lndetC
+         iAW <- iAW$invCb
+         if(is.na(lndetA) | is.infinite(lndetA)){
             print('Inversion of A failed!')
             print(paste0('nll = ' , badnll , '; nmPars = ' , paste(round(pars , digits = 3) , collapse = ', ')))
             nll <- badnll
@@ -479,8 +483,13 @@ nllIAK3D <- function(pars , zData , XData , vXU , iU , modelx , nud ,
             
             if(rtnAll){ 
 ### -999 * A returned because it is not the covariance matrix yet, as cxhat was not computed. Still allows A to be retrieved if required though. 
-        	    return(list('nll' = nll , 'pars' = pars , 'parsBTfmd' = parsBTfmd , 'betahat' = NA , 'vbetahat' = NA , 'cxdhat' = NA , 
+              if(attachBigMats){
+                return(list('nll' = nll , 'pars' = pars , 'parsBTfmd' = parsBTfmd , 'betahat' = NA , 'vbetahat' = NA , 'cxdhat' = NA , 
                             'C' = -999 * A , 'sigma2Vec' = sigma2Vec , 'XData' = XData , 'vXU' = vXU , 'iU' = iU))
+              }else{
+                return(list('nll' = nll , 'pars' = pars , 'parsBTfmd' = parsBTfmd , 'betahat' = NA , 'vbetahat' = NA , 'cxdhat' = NA , 
+                            'sigma2Vec' = sigma2Vec , 'XData' = XData , 'vXU' = vXU , 'iU' = iU))
+              }
             }else{
         	    return(nll)
             }
@@ -488,14 +497,9 @@ nllIAK3D <- function(pars , zData , XData , vXU , iU , modelx , nud ,
           
           iAW <- matrix(iAW , ncol = ncol(W))
 
-#          lndetA <- tmp$lndetC
-#          iAW <- tmp$invCb
-
-          lndetA <- as.numeric(determinant(A , logarithm = TRUE)$modulus)
-
           WiAW <- t(W) %*% iAW
-          WiAW  <- 0.5 * (WiAW + t(WiAW))
-
+          if(class(WiAW) != 'dspMatrix'){ WiAW <- forceSymmetric(WiAW) }else{}
+          
           if(forCompLik){
             return(list('pars' = pars , 'parsBTfmd' = parsBTfmd , 'sigma2Vec' = sigma2Vec , 'WiAW' = WiAW , 'lndetA' = lndetA , 'A' = A , 'iAW' = iAW))
           }else{}
@@ -504,28 +508,29 @@ nllIAK3D <- function(pars , zData , XData , vXU , iU , modelx , nud ,
           XiAz <- WiAW[1:p , p+1 , drop = FALSE]
           ziAz <- as.numeric(WiAW[p+1 , p+1])
 
-#          tmp <- lndetANDinvCb(XiAX , XiAz)
-#          if(is.character(tmp$cholC)){
-
-          betahat <- try(solve(XiAX , XiAz) , silent = TRUE)
-          if(is.character(betahat)){
+          betahat <- lndetANDinvCb(XiAX , XiAz)
+          lndetXiAX <- betahat$lndetC
+          betahat <- betahat$invCb
+          if(is.na(lndetXiAX) | is.infinite(lndetXiAX)){
+            
               print('Inversion of t(XData) iA XData failed!')
               print(paste0('nll = ' , badnll , '; nmPars = ' , paste(round(pars , digits = 3) , collapse = ', ')))
               nll <- badnll
               if(rtnAll){ 
 ### -999 * A returned because it is not the covariance matrix yet, as cxhat was not computed. Still allows A to be retrieved if required though. 
-        	    return(list('nll' = nll , 'pars' = pars , 'parsBTfmd' = parsBTfmd , 'betahat' = NA , 'vbetahat' = NA , 'cxdhat' = NA , 
+                if(attachBigMats){
+                  return(list('nll' = nll , 'pars' = pars , 'parsBTfmd' = parsBTfmd , 'betahat' = NA , 'vbetahat' = NA , 'cxdhat' = NA , 
                             'C' = -999 * A , 'sigma2Vec' = sigma2Vec , 'XData' = XData , 'vXU' = vXU , 'iU' = iU))
+                }else{
+                  return(list('nll' = nll , 'pars' = pars , 'parsBTfmd' = parsBTfmd , 'betahat' = NA , 'vbetahat' = NA , 'cxdhat' = NA , 
+                              'sigma2Vec' = sigma2Vec , 'XData' = XData , 'vXU' = vXU , 'iU' = iU))
+                }
               }else{
         	    return(nll)
               }
           }else{}
             
-#          lndetXiAX <- tmp$lndetC
-#          betahat <- tmp$invCb
           betahat <- matrix(betahat , ncol = 1)
-          
-          lndetXiAX <- as.numeric(determinant(XiAX , logarithm = TRUE)$modulus)
           
           resiAres <- as.numeric(ziAz - 2 * t(betahat) %*% XiAz + t(betahat) %*% XiAX %*% betahat)
 
@@ -608,152 +613,275 @@ nllIAK3D <- function(pars , zData , XData , vXU , iU , modelx , nud ,
 #    	return(list('nll' = nll , 'pars' = pars , 'parsBTfmd' = parsBTfmd , 'betahat' = betahat , 'vbetahat' = vbetahat , 'cxdhat' = cxdhat , 
 #                  'C' = C , 'sigma2Vec' = sigma2Vec , 'XData' = XData , 'vXU' = vXU , 'iU' = iU , 'iCX' = tmp$invCb[,1:p,drop=FALSE] , 'iCz_muhat' = tmp$invCb[,p+1,drop=FALSE] , 'iC' = chol2inv(tmp$cholC)))
 
+      if(attachBigMats){
+        
         iC <- chol2inv(chol(C))
         iCXRes <- matrix(iC %*% cbind(XData , zData - muhat) , ncol = p+1)
         
-    	return(list('nll' = nll , 'pars' = pars , 'parsBTfmd' = parsBTfmd , 'betahat' = betahat , 'vbetahat' = vbetahat , 'cxdhat' = cxdhat , 
+      	return(list('nll' = nll , 'pars' = pars , 'parsBTfmd' = parsBTfmd , 'betahat' = betahat , 'vbetahat' = vbetahat , 'cxdhat' = cxdhat , 
                   'C' = C , 'sigma2Vec' = sigma2Vec , 'XData' = XData , 'vXU' = vXU , 'iU' = iU , 'iCX' = iCXRes[,1:p,drop=FALSE] , 'iCz_muhat' = iCXRes[,p+1,drop=FALSE] , 'iC' = iC))
-                  
+      }else{
+        return(list('nll' = nll , 'pars' = pars , 'parsBTfmd' = parsBTfmd , 'betahat' = betahat , 'vbetahat' = vbetahat , 'cxdhat' = cxdhat , 
+                    'sigma2Vec' = sigma2Vec , 'XData' = XData , 'vXU' = vXU , 'iU' = iU))
+      }                
     }else{
     	return(nll)
     }
 }	
 
+### updated from the above function, 28/2/20-5/3/20, to use dspMatrix class for more efficient memory.
 setCIAK3D <- function(parsBTfmd , modelx , 
-                sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1 , cmeOpt , setupMats){
+                        sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1 , cmeOpt , setupMats){
 
-### to be included in args: , spliti = NA
-### if spliti is given as an integer, rqr cov mtx between first spliti points and the remaining points of zData.
-### else full cov mtx for all of zData rqd.
+### if setupMats doesn't include 'Kx', it should include 'xData' and 'dIData', so that proper setupMats can be made now...
+  if(is.null(setupMats$Kx)){
+    setupMats <- setupIAK3D(xData = setupMats$xData , dIData = as.data.frame(setupMats$dIData) , nDscPts = 0) 
+  }else{}
+  
+  n <- nrow(setupMats$Kx)
+  C <- sparseMatrix(i=seq(n),j=seq(n),x=parsBTfmd$cme , symmetric = TRUE) # initiate with just meas err on diag. , dims = as.integer(c(n,n))
+ 
+  ### adding Cx0...
+  C <- C + parsBTfmd$cx0 * forceSymmetric(setupMats$Kx %*% t(setupMats$Kx))
+  
+  if (modelx == 'matern'){
+    phix1 <- maternCov(setupMats$Dx , c(1 , parsBTfmd$ax , parsBTfmd$nux))
+  }else if(modelx == 'nugget'){
+    phix1 <- 0
+  }else{
+    stop('Not ready!')
+  }
+  
+  ### if any components are stationary, function only neds to be run once...
+  iStat <- which(c(sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1) == 0)
+  if(length(iStat) > 0){
+    tmp <- iaCovMatern(dIData = setupMats$dIU , ad = parsBTfmd$ad , nud = parsBTfmd$nud , sdfdPars = c(1 , 0 , 1) , sdfdType = 0 , abcd = setupMats$dIUabcd , iUElements = setupMats$dIUiUElements)
+    phidStat <- tmp$avCovMtx
+    avVardStat <- tmp$avVarVec
+    remove(tmp) ;
+  }else{}
+  
+  if(sdfdType_cd1 == 0){
+    phid_cd1 <- phidStat
+    avVard_cd1 <- avVardStat
+  }else if(sdfdType_cd1 == -9){
+    phid_cd1 <- 0
+    avVard_cd1 <- 0
+  }else{
+    tmp <- iaCovMatern(dIData = setupMats$dIU , ad = parsBTfmd$ad , nud = parsBTfmd$nud , sdfdPars = parsBTfmd$sdfdPars_cd1 , sdfdType = sdfdType_cd1 , abcd = setupMats$dIUabcd , iUElements = setupMats$dIUiUElements)
+    phid_cd1 <- tmp$avCovMtx
+    avVard_cd1 <- tmp$avVarVec
+    remove(tmp) ; 
+  }
+  
+  if(sdfdType_cxd0 == 0){
+    phid_cxd0 <- phidStat
+    avVard_cxd0 <- avVardStat
+  }else{
+    tmp <- iaCovMatern(dIData = setupMats$dIU , ad = parsBTfmd$ad , nud = parsBTfmd$nud , sdfdPars = parsBTfmd$sdfdPars_cxd0 , sdfdType = sdfdType_cxd0 , abcd = setupMats$dIUabcd , iUElements = setupMats$dIUiUElements)
+    phid_cxd0 <- tmp$avCovMtx
+    avVard_cxd0 <- tmp$avVarVec
+    remove(tmp) ; 
+  }
 
-### defined for the unique locations...
-    ijTmp <- which(setupMats$Dx == 0 , arr.ind = TRUE)
-    phix0 <- sparseMatrix(i = ijTmp[,1] , j = ijTmp[,2] , x = 1)
-    
-    if (modelx == 'matern'){
-        phix1 <- maternCov(setupMats$Dx , c(1 , parsBTfmd$ax , parsBTfmd$nux))
-    }else if(modelx == 'nugget'){
-        phix1 <- 0
+  if(modelx == 'nugget'){
+    phid_cxd1 <- 0
+    avVard_cxd1 <- 0
+  }else{
+    if(sdfdType_cxd1 == 0){
+      phid_cxd1 <- phidStat
+      avVard_cxd1 <- avVardStat
     }else{
-        stop('Not ready!')
+      tmp <- iaCovMatern(dIData = setupMats$dIU , ad = parsBTfmd$ad , nud = parsBTfmd$nud , sdfdPars = parsBTfmd$sdfdPars_cxd1 , sdfdType = sdfdType_cxd1 , abcd = setupMats$dIUabcd , iUElements = setupMats$dIUiUElements)
+      phid_cxd1 <- tmp$avCovMtx
+      avVard_cxd1 <- tmp$avVarVec
+      remove(tmp) ; 
     }
+  }
+  
+  parsOK <- T
+  if((max(is.na(phid_cd1)) == 1) | (max(is.na(phid_cxd0)) == 1) | (max(is.na(phid_cxd1)) == 1)){ parsOK <- F } else{}
+  
+  if(parsOK){
+    ### adding Cxd0...
+    C <- C + parsBTfmd$cxd0 * sparseMatrix(i=setupMats$summKxKx$i , j=setupMats$summKxKx$j,x = phid_cxd0@x[setupMats$utriKdIdxdKd][setupMats$summKxKx$idxUtri],symmetric = TRUE)
+    remove(phid_cxd0)
 
-### if any components are stationary, function only neds to be run once...
-    iStat <- which(c(sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1) == 0)
+    ### without using diagBlocks fn...    
     if(length(iStat) > 0){
-        tmp <- iaCovMatern(setupMats$dIU , parsBTfmd$ad , parsBTfmd$nud , c(1 , 0 , 1) , 0 , setupMats$dIUabcd , setupMats$dIUiUElements)
-        phidStat <- tmp$avCovMtx
-        avVardStat <- tmp$avVarVec
-        remove(tmp) ;
+      KphidKStat <- new("dspMatrix" , Dim = as.integer(c(nrow(setupMats$Kd),nrow(setupMats$Kd))), x =  phidStat@x[setupMats$utriKdIdxdKd])
     }else{}
 
+### adding Cd...
     if(sdfdType_cd1 == 0){
-        phid_cd1 <- phidStat
-        avVard_cd1 <- avVardStat
+      C <- C + parsBTfmd$cd1 * KphidKStat
     }else if(sdfdType_cd1 == -9){
-        phid_cd1 <- 0
-        avVard_cd1 <- 0
+      Cd <- 0
     }else{
-        tmp <- iaCovMatern(setupMats$dIU , parsBTfmd$ad , parsBTfmd$nud , parsBTfmd$sdfdPars_cd1 , sdfdType_cd1 , setupMats$dIUabcd , setupMats$dIUiUElements)
-        phid_cd1 <- tmp$avCovMtx
-        avVard_cd1 <- tmp$avVarVec
-        remove(tmp) ; 
+      C <- C + new("dspMatrix" , Dim = as.integer(c(nrow(setupMats$Kd),nrow(setupMats$Kd))), x =  phid_cd1@x[setupMats$utriKdIdxdKd])
     }
-
-    if(sdfdType_cxd0 == 0){
-        phid_cxd0 <- phidStat
-        avVard_cxd0 <- avVardStat
-    }else{
-        tmp <- iaCovMatern(setupMats$dIU , parsBTfmd$ad , parsBTfmd$nud , parsBTfmd$sdfdPars_cxd0 , sdfdType_cxd0 , setupMats$dIUabcd , setupMats$dIUiUElements)
-        phid_cxd0 <- tmp$avCovMtx
-        avVard_cxd0 <- tmp$avVarVec
-        remove(tmp) ; 
-    }
-
+    remove(phid_cd1)
     if(modelx == 'nugget'){
-      phid_cxd1 <- 0
-      avVard_cxd1 <- 0
+      if(exists('KphidKStat')){ remove(KphidKStat) ;  }else{}
+      Cx1 <- Cxd1 <- 0
     }else{
-      if(sdfdType_cxd1 == 0){
-        phid_cxd1 <- phidStat
-        avVard_cxd1 <- avVardStat
-      }else{
-        tmp <- iaCovMatern(setupMats$dIU , parsBTfmd$ad , parsBTfmd$nud , parsBTfmd$sdfdPars_cxd1 , sdfdType_cxd1 , setupMats$dIUabcd , setupMats$dIUiUElements)
-        phid_cxd1 <- tmp$avCovMtx
-        avVard_cxd1 <- tmp$avVarVec
-        remove(tmp) ; 
-      }
-    }
-    
-    parsOK <- T
-    if((max(is.na(phid_cd1)) == 1) | (max(is.na(phid_cxd0)) == 1) | (max(is.na(phid_cxd1)) == 1)){ parsOK <- F } else{}
-
-    if(parsOK){
-        if(length(iStat) > 0){
-          
-          if(modelx == 'nugget' & sdfdType_cd1 == -9){
-### wasteful to allocate full matrix here, so just do prof blocks...   
-#            KphidKStat <- (setupMats$Kx %*% t(setupMats$Kx)) * (setupMats$Kd %*% phidStat %*% t(setupMats$Kd))
-            tmp <- diagBlocksKdMKd(setupMats = setupMats , M = list(phidStat , phid_cxd0))
-
-            KphidKStat <- tmp[[1]]
-            Cxd0 <- parsBTfmd$cxd0 * tmp[[2]]
-            remove(tmp) ; 
-
-          }else{        
-            KphidKStat <- setupMats$Kd %*% phidStat %*% t(setupMats$Kd)	
-            Cxd0 <- parsBTfmd$cxd0 * diagBlocksKdMKd(setupMats = setupMats , M = phid_cxd0)
-          }
-        }else{
-          Cxd0 <- parsBTfmd$cxd0 * diagBlocksKdMKd(setupMats = setupMats , M = phid_cxd0)
-        }
-
-        if(sdfdType_cd1 == 0){
-            Cd <- parsBTfmd$cd1 * KphidKStat
-        }else if(sdfdType_cd1 == -9){
-            Cd <- 0
-        }else{
-            Cd <- parsBTfmd$cd1 * (setupMats$Kd %*% phid_cd1 %*% t(setupMats$Kd))
-        }
-      
-        Kphix0K <- setupMats$Kx %*% phix0 %*% t(setupMats$Kx)
-        Cx0 <- parsBTfmd$cx0 * Kphix0K 
-        remove(Kphix0K) ; 
-        
-        if(modelx == 'nugget'){
-          Cx1 <- Cxd1 <- 0
-        }else{
-          Kphix1K <- setupMats$Kx %*% phix1 %*% t(setupMats$Kx)
-          Cx1 <- parsBTfmd$cx1 * Kphix1K 
-          if(sdfdType_cxd1 == 0){
-            Cxd1 <- parsBTfmd$cxd1 * Kphix1K * KphidKStat 
-          }else{
-            Cxd1 <- parsBTfmd$cxd1 * Kphix1K * (setupMats$Kd %*% phid_cxd1 %*% t(setupMats$Kd))
-          }
-          remove(Kphix1K) ; 
-        }
+      if(sdfdType_cxd1 != 0){ # if not rqd, free up mem...
         if(exists('KphidKStat')){ remove(KphidKStat) ;  }else{}
+      }else{}
+      
+      Kphix1K <- new("dspMatrix" , Dim = as.integer(c(nrow(setupMats$Kx),nrow(setupMats$Kx))), x =  phix1@x[setupMats$utriKxIdxxKx])
+      rm(phix1)
+### adding Cx1...
+      C <- C + parsBTfmd$cx1 * Kphix1K
+      
+### adding Cxd1...
+      if(sdfdType_cxd1 == 0){
+        C <- C + parsBTfmd$cxd1 * Kphix1K * KphidKStat
+      }else{
+        if(exists('KphidKStat')){ remove(KphidKStat) ;  }else{}
+        C <- C + parsBTfmd$cxd1 * Kphix1K * new("dspMatrix" , Dim = as.integer(c(nrow(setupMats$Kd),nrow(setupMats$Kd))), x =  phid_cxd1@x[setupMats$utriKdIdxdKd])
+      }
+      remove(Kphix1K) ; 
+    }
+    if(exists('KphidKStat')){ remove(KphidKStat) ;  }else{}
+    if(exists('phid_cxd1')){ remove(phid_cxd1) ;  }else{}
 
-        n <- nrow(setupMats$Kx)
+    sigma2Vec <- parsBTfmd$cx0 + parsBTfmd$cx1 + parsBTfmd$cd1 * avVard_cd1 + parsBTfmd$cxd0 * avVard_cxd0 + parsBTfmd$cxd1 * avVard_cxd1 + parsBTfmd$cme
+    sigma2Vec <- setupMats$Kd %*%sigma2Vec 
+    
+  }else{        
+    C <- NA
+    sigma2Vec <- NA
+    print('Bad parameters...not sure how this can happen')
+    print(parsBTfmd)
+  }
+  
+  return(list('C' = C , 'sigma2Vec' = sigma2Vec))
+  #	return(list('C' = C , 'sigma2Vec' = sigma2Vec , 'dC' = list(Cx0 , Cx1 , Cd , Cxd0 , Cxd1) , 'phi' = list(phix0 , phix1 , phid_cd1 , phid_cxd0 , phid_cxd1)))
+}
 
-        C <- Cx0 + Cx1 + Cd + Cxd0 + Cxd1
-        diag(C) <- diag(C) + parsBTfmd$cme
 
-        sigma2Vec <- parsBTfmd$cx0 + parsBTfmd$cx1 + parsBTfmd$cd1 * avVard_cd1 + parsBTfmd$cxd0 * avVard_cxd0 + parsBTfmd$cxd1 * avVard_cxd1 + parsBTfmd$cme
-        sigma2Vec <- setupMats$Kd %*%sigma2Vec 
 
-    }else{        
-        C <- NA
-        sigma2Vec <- NA
-        print('Bad parameters...not sure how this can happen')
-        print(parsBTfmd)
+################################################################
+### use setCIAK3D2 for covs between different sets of data (setupMats will also contain xU2, dIU2, etc)
+################################################################
+setCIAK3D2 <- function(parsBTfmd , modelx , 
+                       sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1 , cmeOpt , setupMats){
+  
+  ### if setupMats doesn't include 'Kx', it should include 'xData', 'dIData', 'xData2' and 'dIData2', so that proper setupMats can be made now...
+  if(is.null(setupMats$Kx)){
+    setupMats <- setupIAK3D2(xData = setupMats$xData , dIData = setupMats$dIData , xData2 = setupMats$xData2 , dIData2 = setupMats$dIData2) 
+  }else{}
+  
+  ### starting with Cx0...
+  ### defined for the unique locations...
+  ijTmp <- which(setupMats$Dx == 0 , arr.ind = TRUE)
+  if(nrow(ijTmp) > 0){
+    phix0 <- sparseMatrix(i = ijTmp[,1] , j = ijTmp[,2] , x = 1)
+    C <- parsBTfmd$cx0 * setupMats$Kx %*% phix0 %*% t(setupMats$Kx2)
+  }else{
+    phix0 <- sparseMatrix(i = 1 , ,j=1 , x=0 , dims = c(nrow(setupMats$Dx),ncol(setupMats$Dx)))
+    C <- sparseMatrix(i=1,j=1,x=0,dims = c(nrow(setupMats$Kx),nrow(setupMats$Kx2)))
+  }
+  
+  if (modelx == 'matern'){
+    phix1 <- maternCov(setupMats$Dx , c(1 , parsBTfmd$ax , parsBTfmd$nux))
+  }else if(modelx == 'nugget'){
+    phix1 <- 0
+  }else{
+    stop('Not ready!')
+  }
+  
+  ### if any components are stationary, function only neds to be run once...
+  iStat <- which(c(sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1) == 0)
+  if(length(iStat) > 0){
+    phidStat <- iaCovMatern2(dIData = setupMats$dIU , dIData2 = setupMats$dIU2 , ad = parsBTfmd$ad , nud = parsBTfmd$nud , sdfdPars = c(1 , 0 , 1) , sdfdType = 0)
+  }else{}
+  
+  if(sdfdType_cd1 == 0){
+    phid_cd1 <- phidStat
+  }else if(sdfdType_cd1 == -9){
+    phid_cd1 <- 0
+  }else{
+    phid_cd1 <- iaCovMatern2(dIData = setupMats$dIU , dIData2 = setupMats$dIU2 , ad = parsBTfmd$ad , nud = parsBTfmd$nud , sdfdPars = parsBTfmd$sdfdPars_cd1 , sdfdType = sdfdType_cd1)
+  }
+  
+  if(sdfdType_cxd0 == 0){
+    phid_cxd0 <- phidStat
+  }else{
+    phid_cxd0 <- iaCovMatern2(dIData = setupMats$dIU , dIData2 = setupMats$dIU2 , ad = parsBTfmd$ad , nud = parsBTfmd$nud , sdfdPars = parsBTfmd$sdfdPars_cxd0 , sdfdType = sdfdType_cxd0)
+  }
+  
+  if(modelx == 'nugget'){
+    phid_cxd1 <- 0
+  }else{
+    if(sdfdType_cxd1 == 0){
+      phid_cxd1 <- phidStat
+    }else{
+      phid_cxd1 <- iaCovMatern2(dIData = setupMats$dIU , dIData2 = setupMats$dIU2 , ad = parsBTfmd$ad , nud = parsBTfmd$nud , sdfdPars = parsBTfmd$sdfdPars_cxd1 , sdfdType = sdfdType_cxd1)
+    }
+  }
+  
+  parsOK <- T
+  if((max(is.na(phid_cd1)) == 1) | (max(is.na(phid_cxd0)) == 1) | (max(is.na(phid_cxd1)) == 1)){ parsOK <- F } else{}
+  
+  if(parsOK){
+    
+### adding Cxd0...    
+    if(length(iStat) > 0){
+      
+      if(modelx == 'nugget' & sdfdType_cd1 == -9){
+        KphidKStat <- (setupMats$Kx %*% phix0 %*% t(setupMats$Kx2)) * (setupMats$Kd %*% phidStat %*% t(setupMats$Kd2))
+        C <- C + parsBTfmd$cxd0 * (setupMats$Kx %*% phix0 %*% t(setupMats$Kx2)) * (setupMats$Kd %*% phid_cxd0 %*% t(setupMats$Kd2))
+      }else{        
+        KphidKStat <- setupMats$Kd %*% phidStat %*% t(setupMats$Kd2)	
+        C <- C + parsBTfmd$cxd0 * (setupMats$Kx %*% phix0 %*% t(setupMats$Kx2)) * (setupMats$Kd %*% phid_cxd0 %*% t(setupMats$Kd2))
+      }
+    }else{
+      C <- C + parsBTfmd$cxd0 * (setupMats$Kx %*% phix0 %*% t(setupMats$Kx2)) * (setupMats$Kd %*% phid_cxd0 %*% t(setupMats$Kd2))
+    }
+    
+### adding Cd...    
+    if(sdfdType_cd1 == 0){
+      C <- C + parsBTfmd$cd1 * KphidKStat
+    }else if(sdfdType_cd1 == -9){
+      Cd <- 0
+    }else{
+      C <- C + parsBTfmd$cd1 * (setupMats$Kd %*% phid_cd1 %*% t(setupMats$Kd2))
     }
 
-#    gc(verbose = FALSE)
+### adding Cx0...        
+    Kphix0K <- setupMats$Kx %*% phix0 %*% t(setupMats$Kx2)
+    C <- C + parsBTfmd$cx0 * Kphix0K 
+    remove(Kphix0K) ; 
     
-    return(list('C' = C , 'sigma2Vec' = sigma2Vec))
-#	return(list('C' = C , 'sigma2Vec' = sigma2Vec , 'dC' = list(Cx0 , Cx1 , Cd , Cxd0 , Cxd1) , 'phi' = list(phix0 , phix1 , phid_cd1 , phid_cxd0 , phid_cxd1)))
+    if(modelx == 'nugget'){
+      Cx1 <- Cxd1 <- 0
+    }else{
+      Kphix1K <- setupMats$Kx %*% phix1 %*% t(setupMats$Kx2)
+      ### adding Cx1...    
+      C <- C + parsBTfmd$cx1 * Kphix1K 
+      ### adding Cxd1...    
+      if(sdfdType_cxd1 == 0){
+        C <- C + parsBTfmd$cxd1 * Kphix1K * KphidKStat 
+      }else{
+        C <- C + parsBTfmd$cxd1 * Kphix1K * (setupMats$Kd %*% phid_cxd1 %*% t(setupMats$Kd2))
+      }
+      remove(Kphix1K) ; 
+    }
+    if(exists('KphidKStat')){ remove(KphidKStat) ;  }else{}
+    
+    ### note, no meas err being added to cov between distinct data...
+    
+  }else{        
+    C <- NA
+    print('Bad parameters...not sure how this can happen')
+    print(parsBTfmd)
+  }
+  
+  return(C)
 }
+
 
 setmuIAK3D <- function(XData , vXU , iU , beta , diagC , sigma2Vec){
 ###########################################################
@@ -775,7 +903,7 @@ setmuIAK3D <- function(XData , vXU , iU , beta , diagC , sigma2Vec){
 ### ie only the diagonal blocks of (Kd %*% M %*% t(Kd)) rqd
 ### useful for nugget.
 ######################################################################
-diagBlocksKdMKd <- function(setupMats , M){
+diagBlocksKdMKd <- function(setupMats , M){  
   newcoladds <- as.numeric(setupMats$Kx %*% seq(0,ncol(setupMats$Kx)-1) * ncol(setupMats$Kd))
   ijx <- summary(setupMats$Kd)
   ijx <- ijx[order(ijx$i),]
@@ -793,8 +921,8 @@ diagBlocksKdMKd <- function(setupMats , M){
                  
     KdMKd <- list()
     for(i in 1:length(M)){
-      KdMKdTmp <- sparseMatrix(i = iTmp , j = jTmp , x = as.numeric(t(setupMats$Kd %*% M[[i]])) , dims = c(nrow(setupMats$Kd) , ncol(setupMats$Kd) * ncol(setupMats$Kx)))
-      KdMKd[[i]] <- KdMKdTmp %*% t(KdB)
+      KdMKd[[i]] <- sparseMatrix(i = iTmp , j = jTmp , x = as.numeric(t(setupMats$Kd %*% M[[i]])) , dims = c(nrow(setupMats$Kd) , ncol(setupMats$Kd) * ncol(setupMats$Kx)))
+      KdMKd[[i]] <- KdMKd[[i]] %*% t(KdB)
     }  
   }else{
     KdMKd <- sparseMatrix(i = rep(seq(nrow(setupMats$Kd)) , each = ncol(setupMats$Kd)) , 
@@ -805,7 +933,7 @@ diagBlocksKdMKd <- function(setupMats , M){
   return(KdMKd)
 }
 	
-	
+
 calcbetavXbeta <- function(vX , beta){
 #################################################
 ### vX is n * p x p    
@@ -1035,15 +1163,21 @@ attachSettings2lmmFit <- function(lmmFit , xData , dIData , zData , covsData , m
 verboseOptim <<- F
 
 #optimIt <- function(par , fn , gr = NULL , methodOptim = c("Nelder-Mead" , "L-BFGS-B") , vecFixedIn = logical(length(par)) , fitRange = matrix(NA , length(par) , 2) , ...){
-optimIt <- function(par , fn , gr = NULL , methodOptim = c("L-BFGS-B" , "Nelder-Mead") , vecFixedIn = logical(length(par)) , fitRange = matrix(NA , length(par) , 2) , ...){
+optimIt <- function(par , fn , gr = NULL , methodOptim = c("L-BFGS-B" , "Nelder-Mead") , vecFixedIn = logical(length(par)) , fitRange = matrix(NA , length(par) , 2) , tolIt = 1E-4 , ...){
 # fitRange is npar x 2 with lower and upper values
 # iterate between first NM and then L-BFGS-B (or other specified algorithms) until no more improvement.
     verboseOptim <<- T
     eval(fn(par,...))
     verboseOptim <<- F
     
-    prevSSE = 9E9
-    tolIt <- 1E-4 # stop when we improve by tol or less.
+    fitRange[is.na(fitRange[,1]),1] <- -Inf
+    fitRange[is.na(fitRange[,2]),2] <- Inf
+    
+    warnIn <- options()$warn
+    
+    # prevOF = 9E9
+    prevOF = eval(fn(par,...))
+    # stop when we improve by tol or less.
     stillImproving = TRUE
     listRes <- list()
     it <- 1
@@ -1053,40 +1187,49 @@ optimIt <- function(par , fn , gr = NULL , methodOptim = c("L-BFGS-B" , "Nelder-
     while (stillImproving){
         iMethodThis <- it %% length(methodOptim)
         if(iMethodThis == 0){ iMethodThis <- length(methodOptim) }else{}
-        if(is.element(methodOptim[iMethodThis] , c("L-BFGS-B" , "Brent"))){
-            lower = fitRange[,1] 
-            upper = fitRange[,2] 
-            grThis <- gr
-            ctrlOptim <- list(maxit = 70) # a bit less than the default, because we will iterate
-        }else{
-            lower <- -Inf
-            upper <- Inf
-            grThis <- NULL
-            ctrlOptim <- list(maxit = 350) # a bit less than the default, because we will iterate
-        }    
-    
+
+# set max n fn evals a bit less than the default, because we will iterate
         if(all(!vecFixedIn)){ # to avoid an extra level of wrapping, straight to optim if nothing fixed
-          res <- optim(par = par , fn = fn , gr = grThis , method = methodOptim[iMethodThis] , lower = lower , upper = upper , control = ctrlOptim , ... = ...)
+          if(methodOptim[iMethodThis] == 'Nelder-Mead'){
+            options(warn = -1) # to ignore warnings from Nelder_Mead2 about lack of convergence.
+            res <- Nelder_Mead2(par = par , fn = fn , lower = fitRange[,1] , upper = fitRange[,2] , control = list(maxfun = 350 , warnOnly = TRUE) , ... = ...)
+            options(warn = warnIn)
+            newOF <- res$fval
+            res$value <- res$fval
+          }else{
+            res <- optim(par = par , fn = fn , gr = gr , method = methodOptim[iMethodThis] , lower = fitRange[,1] , upper = fitRange[,2] , control = list(maxit = 70) , ... = ...)
+            newOF <- res$value
+          }
           verboseOptim <<- T
           eval(fn(res$par,...))
           verboseOptim <<- F
           parInitsNext <- res$par
           parStore <- cbind(parStore , res$par)
         }else{
-          res <- optifix(par = par , fn = fn , gr = grThis , fixed = vecFixed , method = methodOptim[iMethodThis] , lower = lower , upper = upper , control = ctrlOptim , ... = ...)
+          if(methodOptim[iMethodThis] == 'Nelder-Mead'){
+            options(warn = -1) # to ignore warnings from Nelder_Mead2 about lack of convergence.
+            res <- Nelder_Mead2fix(par = par , fn = fn , fixed = vecFixed , lower = fitRange[,1] , upper = fitRange[,2] , control = list(maxfun = 350 , warnOnly = TRUE) , ... = ...)
+            options(warn = warnIn)
+            newOF <- res$fval
+            res$value <- res$fval
+          }else{
+            res <- optifix(par = par , fn = fn , gr = gr , fixed = vecFixed , method = methodOptim[iMethodThis] , lower = fitRange[,1] , upper = fitRange[,2] , control = list(maxit = 70) , ... = ...)
+            newOF <- res$value
+          }
           verboseOptim <<- T
           eval(fn(res$fullpars,...))
           verboseOptim <<- F
           parInitsNext <- res$fullpars
           parStore <- cbind(parStore , res$fullpars)
+          res$par <- res$fullpars
         }
         listRes[[it]] <- res
 
         it <- it + 1
         
-        if (res$value < (prevSSE - tolIt)){
+        if (newOF < (prevOF - tolIt)){
             stillImproving = TRUE
-            prevSSE <- res$value
+            prevOF <- newOF
             par <- parInitsNext
         }else{
             stillImproving = FALSE
@@ -1095,14 +1238,17 @@ optimIt <- function(par , fn , gr = NULL , methodOptim = c("L-BFGS-B" , "Nelder-
 
     res$allRes <- listRes
     res$parStore <- parStore
-            
-    return(res)
+         
+###23/04/2020, changing to return newres...
+    newres <- list('par' = res$par , 'value' = newOF , 'allRes' = listRes , 'parStore' = parStore)
+       
+    return(newres)
 }
 
 ##########################################################
 ### function to calculate lndetC and invC b (or just invC if b not given) using cholesky...
 ##########################################################
-lndetANDinvCb <- function(C , b = NA){
+lndetANDinvCb_OLD <- function(C , b = NA){
 
     if(is.numeric(C)){
       cholC <- try(chol(C) , silent = TRUE)
@@ -1130,6 +1276,34 @@ lndetANDinvCb <- function(C , b = NA){
    }
 
    return(list('lndetC' = lndetC , 'invCb' = invCb, 'cholC' = cholC))
+}
+
+##########################################################
+### this version quicker; solve makes factorisation of C as side effect. 
+### determinant uses that if chol factorisation (for dgeMatrix or matrix)
+### for dspMatrix, factoristaion is BunchKaufman, not used by determinant fn, so manual calc...
+### not returning chol to save mem
+##########################################################
+lndetANDinvCb <- function(C , b = NULL){
+  if(is.null(dim(C))){ stop('Error - enter matrix for lndetANDinvCb_NEW') }else{}
+  if(is.null(b)){
+    invCb <- try(solve(C) , silent = TRUE)
+  }else{
+    invCb <- try(solve(C , b) , silent = TRUE)
+  }
+  if (is.character(invCb)){
+    lndetC <- invCb <- NA
+  }else{
+    if(class(C) == 'dspMatrix'){
+      ### side effect of solve should have added BunchKaufman factorization (not used by determinant fn, so doing it here)...     
+      lndetC <- sum(log(diag(C@factors$pBunchKaufman)))
+    }else{
+      ### for matrix, side effect of solve should have added chol factorization, used by determinant fn...     
+      lndetC <- as.numeric(determinant(C , logarithm = TRUE)$modulus)
+    }
+  }
+  
+  return(list('lndetC' = lndetC , 'invCb' = invCb))
 }
 
 ##########################################################
@@ -1327,10 +1501,11 @@ gradnllIAK3D.mc <- function(pars , zData , XData , vXU , iU , modelx , nud ,
     listRqd4nll <- c("setupIAK3D" , "nllIAK3D" , "readPars" , "setCIAK3D" , 
                           "printnllTime" , "verboseOptim" , "logitab" , "sdfdRead" , "tauTfm" , 
                           "maternCov" , "iaCovMatern" , "intRy" , "intRy12" , "intRy34" , "intTy" , "gammafnInt" , "poly2Exp" , "diagBlocksKdMKd" ,
-                          "sparseMatrix" , "t" , "summary" , "diag" , "determinant")
+                          "sparseMatrix" , "t" , "summary" , "diag" , "determinant" , "lndetANDinvCb")
     cl <- makeCluster(numCores)
     clusterExport(cl, listRqd4nll)
-
+    clusterEvalQ(cl, library("Matrix"))
+    
     outtmp <- clusterApply(cl=cl, x=parsList, fun=nllIAK3D , 
                            zData = zData , XData = XData , vXU = vXU , iU = iU , modelx = modelx , nud = nud ,  
                            sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , cmeOpt = cmeOpt , 
@@ -1368,10 +1543,11 @@ gradnllIAK3D_CL.mc <- function(pars , zData , XData , modelx , nud ,
     listRqd4nll <- c("setupIAK3D" , "nllIAK3D" , "nllIAK3D_CL" , "readPars" , "setCIAK3D" , 
                            "printnllTime" , "verboseOptim" , "logitab" , "sdfdRead" , "tauTfm" , 
                            "maternCov" , "iaCovMatern" , "intRy" , "intRy12" , "intRy34" , "intTy" , "gammafnInt" , "poly2Exp" , "diagBlocksKdMKd" ,
-                           "sparseMatrix" , "t" , "summary" , "diag" , "determinant")
+                           "sparseMatrix" , "t" , "summary" , "diag" , "determinant" , "lndetANDinvCb")
     cl <- makeCluster(numCores)
     clusterExport(cl, listRqd4nll)
-
+    clusterEvalQ(cl, library("Matrix"))
+    
     outtmp <- clusterApply(cl=cl, x=parsList, fun=nllIAK3D_CL , 
                        zData = zData , XData = XData , modelx = modelx , nud = nud ,  
                        sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , cmeOpt = cmeOpt , 
