@@ -250,8 +250,20 @@ mpspline.source <- function (dfHzns, ...)
 ### to redo this, put overlapsByRegression = FALSE; hzns get removed in mpspline fn.
 ### NOTE - dIData and dIStd are in m as inputs here,
 ###        but mpspline function uses cm.
+###        Also, default for this fn is vlow = -1000, while default for mpspline.source fn is vlow = 0
 ##################################################
-harmonizeMPS <- function(xData , dIData , zData , dIStd , overlapsByRegression = TRUE){
+harmonizeMPS <- function(xData , dIData , zData , dIStd , vlow = -1000 , vhigh = 1000 , overlapsByRegression = TRUE){
+  
+### only include where we have some data...
+    iok <- which(!is.na(zData))
+    if(length(iok) > 0){
+      xData <- xData[iok,,drop=FALSE]
+      dIData <- dIData[iok,,drop=FALSE]
+      zData <- zData[iok]
+    }else{
+      stop('No data given to harmonizeMPS!')
+    }
+  
     profIDData <- makeProfID(xData)
     nProfs <- max(profIDData)
     profEAS <- data.frame('ID' = profIDData , 'Eastings' = xData[,1]  , 'Northings' = xData[,2] , 
@@ -269,7 +281,7 @@ harmonizeMPS <- function(xData , dIData , zData , dIStd , overlapsByRegression =
 
     maxd <- max(max(dIStd[,2]) , max(dIData[,2]))
     
-    z.sEAS <- mpspline.source(dfHzns = profEAS[iEAS,,drop=FALSE] , lam = 0 , vlow = -1000 , vhigh = 1000 , d = t(c(0,100*maxd)))
+    z.sEAS <- mpspline.source(dfHzns = profEAS[iEAS,,drop=FALSE] , lam = 0 , vlow = vlow , vhigh = vhigh , d = t(c(0,100*maxd)))
 
     xDataH <- xData[!duplicated(profIDData),,drop=FALSE]
     var.1cm <- matrix(NA , 100*maxd , nProfs)
@@ -328,7 +340,10 @@ harmonizeMPS <- function(xData , dIData , zData , dIStd , overlapsByRegression =
         }
       }
     }else{}
-
+    
+    hrmnzdData[hrmnzdData < vlow] <- vlow
+    hrmnzdData[hrmnzdData > vhigh] <- vhigh
+    
     return(list('xDataH' = xDataH , 'hrmnzdData' = hrmnzdData , 'hrmnzdDataEAS' = hrmnzdDataEAS))    
 }
 
@@ -360,7 +375,7 @@ isOverlap <- function(profIn){
   return(overlap)
 }
 
-whichProfilesOverlap <- function(dfAll){
+whichProfilesOverlap <- function(dfAll , idVar = 'ID'){
   lProfs <- list()
   cAll <- dfAll[,c('Eastings' , 'Northings')]
   cAll <- cAll[which(!duplicated(cAll)),,drop=FALSE]
@@ -368,13 +383,13 @@ whichProfilesOverlap <- function(dfAll){
   for(i in 1:nrow(cAll)){
     iThis <- which(dfAll$Eastings == cAll[i,1] & dfAll$Northings == cAll[i,2])
     lProfs[[i]] <- dfAll[iThis,,drop=FALSE]
-    idsProfs[i] <- dfAll$ID[iThis[1]]
+    idsProfs[i] <- dfAll[[idVar]][iThis[1]]
   }
   
   iOVLP <- which(unlist(lapply(lProfs , isOverlap)))
   if(length(iOVLP) > 0){
     idsOVLP <- idsProfs[iOVLP]
-    dfOVLP <- dfAll[which(is.element(dfAll$ID , idsOVLP)),,drop=FALSE]
+    dfOVLP <- dfAll[which(is.element(dfAll[idVar] , idsOVLP)),,drop=FALSE]
   }else{
     dfOVLP <- dfAll[c(),,drop=FALSE]
   }
