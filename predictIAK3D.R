@@ -57,11 +57,34 @@ predictIAK3D <- function(xMap , dIMap , covsMap , lmmFit , rqrBTfmdPreds = TRUE 
       XLims4Pred[1,] <- -Inf
       XLims4Pred[2,] <- Inf
     }
+
+    if(lmmFit$compLikMats$compLikOptn == 0){
+### make or load C and delete from lmmFit...    
+      if(is.element('C' , names(lmmFit))){
+        C <- lmmFit$C
+        lmmFit$C <- NULL
+      }else{
+        print('Before making C for data in predictIAK3D:')
+        gc() ; # try to make sure garbege collected before making C (as runs out of mem making C in shiny app)
+        print(mem_used())
+        if(is.element('setupMats' , names(lmmFit))){
+          C <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx , 
+                         sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , 
+                         cmeOpt = lmmFit$cmeOpt , setupMats = lmmFit$setupMats)$C
+        }else{
+          C <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx , 
+                         sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , 
+                         cmeOpt = lmmFit$cmeOpt , setupMats = list('xData' = lmmFit$xData , 'dIData' = lmmFit$dIData))$C
+        }
+        print('Made C for data in predictIAK3D. Now:')
+        print(mem_used())
+      }
+    }else{}
     
     if(!lmmFit$lnTfmdData){
       muhat <- lmmFit$XData %*% betahat 
     }else{
-      muhat <- setmuIAK3D(XData = lmmFit$XData , vXU = lmmFit$vXU , iU = lmmFit$iU , beta = betahat , diagC = diag(lmmFit$C) , sigma2Vec = lmmFit$sigma2Vec) 
+      muhat <- setmuIAK3D(XData = lmmFit$XData , vXU = lmmFit$vXU , iU = lmmFit$iU , beta = betahat , diagC = diag(C) , sigma2Vec = lmmFit$sigma2Vec) 
     }
     
     if(lmmFit$compLikMats$compLikOptn == 0){
@@ -70,12 +93,12 @@ predictIAK3D <- function(xMap , dIMap , covsMap , lmmFit , rqrBTfmdPreds = TRUE 
         iCz_muhat <- lmmFit$iCz_muhat
         iC <- lmmFit$iC
       }else{
-        #        tmp <- lndetANDinvCb(lmmFit$C , cbind(lmmFit$XData , lmmFit$zData - muhat))
-        #        iCX <- tmp$invCb[,1:p,drop=FALSE]
-        #        iCz_muhat <- tmp$invCb[,p+1,drop=FALSE]
-        #        iC <- chol2inv(tmp$cholC)
-        
-        iC <- chol2inv(chol(C))
+        C <- chol2inv(chol(C))
+        iC <- C # maybe better for memory to make as C then copy to iC then remove? 
+        remove(C)
+        print('Inverted C for data in predictIAK3D. Now:')
+        print(mem_used())
+
         iCXResTmp <- matrix(iC %*% cbind(lmmFit$XData , lmmFit$zData - muhat) , ncol = p+1)
         iCX <- iCXResTmp[,1:p,drop=FALSE]
         iCz_muhat <- iCXResTmp[,p+1,drop=FALSE]
@@ -97,7 +120,7 @@ predictIAK3D <- function(xMap , dIMap , covsMap , lmmFit , rqrBTfmdPreds = TRUE 
         tmp <- makeXvX(covData = covsMap[iThis,,drop = FALSE] , dIData = dIMapThis , modelX = lmmFit$modelX , allKnotsd = lmmFit$allKnotsd , iU = lmmFit$iU , nDiscPts = 10 , lnTfmdData = lmmFit$lnTfmdData , XLims = XLims4Pred)
         XMapThis <- as.matrix(tmp$X)
         vXUMapThis <- as.matrix(tmp$vXU)
-        
+
         iOKInThis <- which(!is.na(rowMeans(XMapThis)))
         nxMapThis <- length(iOKInThis)
         
@@ -111,21 +134,26 @@ predictIAK3D <- function(xMap , dIMap , covsMap , lmmFit , rqrBTfmdPreds = TRUE 
           }else{}
           
           if(lmmFit$compLikMats$compLikOptn == 0){
-            setupMatsMap <- setupIAK3D(xData = rbind(lmmFit$xData , xMap[iThis[iOKInThis],,drop=FALSE]) , dIData = rbind(as.matrix(lmmFit$dIData) , dIMapThis[iOKInThis,,drop=FALSE]) , nDscPts = 0)
+            
+            setupMatsMap <- setupIAK3D(xData = xMap[iThis[iOKInThis],,drop=FALSE] , dIData = dIMapThis[iOKInThis,,drop=FALSE] , nDscPts = 0)
             
             tmp <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx , 
                              sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , 
                              cmeOpt = lmmFit$cmeOpt , setupMats = setupMatsMap)
             rm(setupMatsMap) 
             
-            sigma2Vec <- tmp$sigma2Vec
-            sigma2Veck <- sigma2Vec[(nData + 1):(nData + nxMapThis)]
+            sigma2Veck <- tmp$sigma2Vec
+            Ckk <- diag(tmp$C)
+            rm(tmp)
             
-            Ckh <- tmp$C[(nData+1):(nData+nxMapThis),1:nData , drop = FALSE]  
-            Ckk <- diag(tmp$C[(nData+1):(nData+nxMapThis),(nData+1):(nData+nxMapThis) , drop = FALSE])
+            setupMatsMap <- setupIAK3D2(xData = xMap[iThis[iOKInThis],,drop=FALSE] , dIData = dIMapThis[iOKInThis,,drop=FALSE] , 
+                                        xData2 = lmmFit$xData , dIData2 = as.matrix(lmmFit$dIData))
             
-            rm(tmp) 
-            
+            Ckh <- setCIAK3D2(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx , 
+                              sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , 
+                              cmeOpt = lmmFit$cmeOpt , setupMats = setupMatsMap)
+            rm(setupMatsMap) 
+
             Ckhtmp <- Ckh %*% cbind(iCX , iCz_muhat , iC)
             CkhiCX <- Ckhtmp[,1:p , drop = FALSE]
             CkhiCz_muhat <- Ckhtmp[,p+1 , drop = FALSE]
@@ -140,6 +168,7 @@ predictIAK3D <- function(xMap , dIMap , covsMap , lmmFit , rqrBTfmdPreds = TRUE 
                                                 xMap = xMap[iThis[iOKInThis],,drop=FALSE] , dIMap = dIMapThis[iOKInThis,,drop=FALSE], lmmFit = lmmFit)
               zkTmp <- tmp$zk
               vkTmp <- tmp$vk
+              rm(tmp)
             }else{
               tmp <- predMatsIAK3D_CL_ByBlock(z_muhat = lmmFit$zData - muhat , XData = lmmFit$XData , 
                                               xMap = xMap[iThis[iOKInThis],,drop=FALSE] , dIMap = dIMapThis[iOKInThis,,drop=FALSE], lmmFit = lmmFit)
@@ -148,6 +177,7 @@ predictIAK3D <- function(xMap , dIMap , covsMap , lmmFit , rqrBTfmdPreds = TRUE 
               CkhiCChk <- tmp$diagCkhiCChk 
               CkhiCX <- tmp$CkhiCX 
               CkhiCz_muhat <- tmp$CkhiCz_muhat
+              rm(tmp)
             }
           }
           
@@ -290,22 +320,25 @@ profilePredictIAK3D <- function(xMap , dIMap , covsMap , iData = seq(length(lmmF
     }else{}
 
     if(lmmFit$compLikMats$compLikOptn == 0){
-      setupMatsMap <- setupIAK3D(xData = rbind(lmmFit$xData[iData,,drop=FALSE] , xMap) , dIData = rbind(as.matrix(lmmFit$dIData[iData,,drop=FALSE]) , dIMap) , nDscPts = 0)
-        
+      setupMatsMap <- setupIAK3D(xData = xMap , dIData = dIMap , nDscPts = 0)
+      
       tmp <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx , 
-            sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , 
-            cmeOpt = lmmFit$cmeOpt , setupMats = setupMatsMap)
+                       sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , 
+                       cmeOpt = lmmFit$cmeOpt , setupMats = setupMatsMap)
       rm(setupMatsMap) 
+      
+      sigma2Veck <- tmp$sigma2Vec
+      Ckk <- diag(tmp$C)
+      
+      setupMatsMap <- setupIAK3D2(xData = xMap , dIData = dIMap , 
+                                  xData2 = lmmFit$xData[iData,,drop=FALSE] , dIData2 = as.matrix(lmmFit$dIData[iData,,drop=FALSE]))
+      
+      Ckh <- setCIAK3D2(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx , 
+                        sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , 
+                        cmeOpt = lmmFit$cmeOpt , setupMats = setupMatsMap)
+      
+      rm(tmp,setupMatsMap) 
 
-      sigma2Vec <- tmp$sigma2Vec
-      sigma2Vech <- sigma2Vec[1:nData]
-      sigma2Veck <- sigma2Vec[(nData + 1):(nData + ndIMap)]
-
-      Ckh <- tmp$C[(nData+1):(nData+ndIMap),1:nData , drop = FALSE]  
-      Ckk <- diag(tmp$C[(nData+1):(nData+ndIMap),(nData+1):(nData+ndIMap) , drop = FALSE])
-
-      rm(tmp) 
-       
       Ckhtmp <- Ckh %*% cbind(iCX , iCz_muhat , iC)
       CkhiCX <- Ckhtmp[,1:p]
       CkhiCz_muhat <- Ckhtmp[,p+1]
