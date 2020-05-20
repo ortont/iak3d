@@ -417,9 +417,9 @@ cubist2XSetup <- function(cubistModel , dataFit , zFit = NULL , profIDFit = NULL
         cubistModel <- tmp$cubistModel 
 
         if(refineCubistModel){
-### further refine the model, by removing predictors with p > 0.5    
+### further refine the model, by removing predictors with p > 0.15    
           if(is.null(profIDFit)){ stop('Error - to use refineXIAK3D, must input profIDFit') }else{}
-          ipRmvd <- refineXIAK3D(X = X , z = zFit , profID = profIDFit , alpha = 0.5)$ipRemove
+          ipRmvd <- refineXIAK3D(X = X , z = zFit , profID = profIDFit , alpha = 0.15)$ipRemove
           tmp <- removeColinPreds(X = X , cubistModel = cubistModel , dataFit = dataFit , ipRmvd = ipRmvd , reasonRmv = 1)
           X <- tmp$X 
           cubistModel <- tmp$cubistModel 
@@ -843,6 +843,46 @@ parserTmp <- function(x)
     if(length(x) == 1) x <- x[[1]]
     x
   }
+
+
+##############################################################
+### function to get all d Breaks from cubist model (which has already had cubist2X run on it).
+##############################################################
+getAlldBreaks <- function(cubistModel){
+  if(!is.element('listRules' , names(cubistModel))){ stop('Error - run cubist2X function before getting all dBreaks!') }else{}
+  dfdBreaks <- lapply(cubistModel$listRules , function(dfIn){ dfIn[which(dfIn$variable == 'dIMidPts'),,drop=FALSE] })
+  dfdBreaks <- do.call(rbind , dfdBreaks)
+  dBreaks <- unique(dfdBreaks$valUpdated)
+  dBreaks <- dBreaks[order(dBreaks)]
+  return(dBreaks)
+}
+
+##############################################################
+### function to get the indices of the rules with d in the rule conditions from cubist model (which has already had cubist2X run on it).
+##############################################################
+getRulesWithdInCondits <- function(cubistModel){
+  if(!is.element('listRules' , names(cubistModel))){ stop('Error - run cubist2X function before getting all dBreaks!') }else{}
+  
+  ndBreaksPerRule <- unlist(lapply(cubistModel$listRules , function(dfIn){ length(which(dfIn$variable == 'dIMidPts')) }))
+  
+  return(which(ndBreaksPerRule > 0))
+}
+
+##############################################################
+### function to rule numbers from X column names from cubist model (which has already had cubist2X run on it).
+##############################################################
+getRuleNumbersFromColNames <- function(cubistModel){
+  if(!is.element('listRules' , names(cubistModel))){ stop('Error - run cubist2X function before getting all dBreaks!') }else{}
+  
+### split by '_'
+  tmp <- strsplit(cubistModel$names4XCubist , '_')
+### get final elements...  
+  tmp <- unlist(lapply(tmp, tail , n = 1L))
+### remove 'R' and convert to integer...    
+  jRules <- as.integer(substr(tmp , 2 , nchar(tmp)))
+
+  return(jRules)
+}
 
 ##############################################################
 ### function to remove variables from X to make inv(XX) exist.
