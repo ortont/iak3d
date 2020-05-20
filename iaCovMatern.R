@@ -88,14 +88,108 @@ iaCovMatern <- function(dIData , ad , nud , sdfdPars , sdfdType , abcd , iUEleme
   
   avCov <- avCov / ((abcd[,4] - abcd[,3]) * (abcd[,2] - abcd[,1]))
   
-  avCovMtx <- matrix(0 , n , n)
-  avCovMtx[iUElements] <- avCov
-  if(n > 1){
-    avCovMtx <- avCovMtx + t(avCovMtx) - diag(diag(avCovMtx))
-  }else{}
+  # avCovMtx <- matrix(0 , n , n)
+  # avCovMtx[iUElements] <- avCov
+  # if(n > 1){
+  #   avCovMtx <- avCovMtx + t(avCovMtx) - diag(diag(avCovMtx))
+  # }else{}
+  # return(list('avCovMtx' = avCovMtx , 'avVarVec' = avVarVec))
   
-  return(list('avCovMtx' = avCovMtx , 'avVarVec' = avVarVec))
+  avCov <- new("dspMatrix" , Dim = as.integer(c(n,n)), x = avCov , uplo = "L")
+  avCov <- t(avCov) # so that will be stored as upper triangle.
+  
+  return(list('avCovMtx' = avCov , 'avVarVec' = avVarVec))
 } 
+
+##############################################################
+### use iaCovMatern2 for cov between distinct sets of depth intervals
+##############################################################
+iaCovMatern2 <- function(dIData , dIData2 , ad , nud , sdfdPars , sdfdType){
+  
+  n <- dim(dIData)[[1]]
+  
+  ###########################################################
+  ### assuming nud = 0.5 / 1.5 / 2.5
+  ### ri and psi values from Wikipedia
+  ###########################################################
+  if (nud == 0.5){
+    r0 <- 1
+    r1 <- 0
+    r2 <- 0
+    psi <- 1 / ad
+  }else if(nud == 1.5){
+    r0 <- 1
+    r1 <- sqrt(3) / ad
+    r2 <- 0
+    psi <- sqrt(3) / ad
+  }else if(nud == 2.5){
+    r0 <- 1
+    r1 <- sqrt(5) / ad
+    r2 <- 5 / (3 * (ad ^ 2))
+    psi <- sqrt(5) / ad
+  }else{
+    stop('This function can only be applied with nud = 0.5, 1.5 or 2.5!')
+  }
+  
+  ########################################################       
+  ### assuming type is -1, exp change to steady state...
+  ### if sdfdPars = 0, put tau0 = 1, tau1 = 0, tau2 = 1 (tau2 won't contribute to function with tau1 = 0)
+  ### if sdfdPars = -1, put tau0 = 1 - sdfdPars[1], tau1 = sdfdPars[1], tau2 = sdfdPars[2]    
+  ########################################################       
+  if(sdfdType == 0){
+    tau0 <- 1
+    tau1 <- 0
+    tau2 <- 1
+  }else if(sdfdType == -1){
+    tau0 <- 1 - sdfdPars[1]
+    tau1 <- sdfdPars[1]
+    tau2 <- sdfdPars[2]
+  }else{
+    stop('This function van only be applied with sdfdType = 0 or -1!')
+  }
+  
+  nsMaternParams <- list('r0' = r0 , 'r1' = r1 , 'r2' = r2 , 'psi' = psi , 'tau0' = tau0 ,'tau1' = tau1 ,'tau2' = tau2) 
+  
+  ### not symmetric...    
+  ###############################################
+  ### take the pairs that contribute to lower diagonal elements...
+  ### and arrange the 2 intervals as 4 columns so that first column (aa) is always smallest...
+  ###############################################
+  n2 <- nrow(dIData2) 
+  
+  abcd <- matrix(NA , n*n2 , 4)
+  abcd[,1] <- rep(dIData[,1] , n2)
+  abcd[,2] <- rep(dIData[,2] , n2)
+  abcd[,3] <- rep(dIData2[,1] , each = n)
+  abcd[,4] <- rep(dIData2[,2] , each = n)
+  
+  iTmp <- apply(abcd[,c(1,3),drop=FALSE] , 1 , which.min)
+  iTmp <- which(iTmp == 2)
+  if(length(iTmp) > 0){ abcd[iTmp,] <- abcd[iTmp,c(3,4,1,2),drop=FALSE] }else{}
+  
+  #############################
+  ### get the entries that are given by the 3 cases of the integration region...	
+  #############################
+  iCase1 <- which(abcd[,2] <= abcd[,3])
+  iCase2 <- which((abcd[,3] < abcd[,2]) & (abcd[,2] <= abcd[,4]))
+  iCase3 <- which((abcd[,3] < abcd[,2]) & (abcd[,4] < abcd[,2]))
+  
+  avCovMtx <- NA * abcd[,1]
+  avCovMtx[iCase1] <- intRy(aa = abcd[iCase1,1] , bb = abcd[iCase1,2] , cc = abcd[iCase1,3] , dd = abcd[iCase1,4] , nsMaternParams = nsMaternParams) 
+  avCovMtx[iCase2] <- intRy(aa = abcd[iCase2,1] , bb = abcd[iCase2,3] , cc = abcd[iCase2,3] , dd = abcd[iCase2,4] , nsMaternParams = nsMaternParams) +
+    intRy(aa = abcd[iCase2,3] , bb = abcd[iCase2,2] , cc = abcd[iCase2,2] , dd = abcd[iCase2,4] , nsMaternParams = nsMaternParams) +
+    2 * intTy(aa = abcd[iCase2,3] , bb = abcd[iCase2,2] , nsMaternParams = nsMaternParams)
+  avCovMtx[iCase3] <- intRy(aa = abcd[iCase3,1] , bb = abcd[iCase3,3] , cc = abcd[iCase3,3] , dd = abcd[iCase3,4] , nsMaternParams = nsMaternParams) +
+    intRy(aa = abcd[iCase3,3] , bb = abcd[iCase3,4] , cc = abcd[iCase3,4] , dd = abcd[iCase3,2] , nsMaternParams = nsMaternParams) +
+    2 * intTy(aa = abcd[iCase3,3] , bb = abcd[iCase3,4] , nsMaternParams = nsMaternParams)
+  
+  avCovMtx <- avCovMtx / ((abcd[,4] - abcd[,3]) * (abcd[,2] - abcd[,1]))
+  
+  avCovMtx <- matrix(avCovMtx , n , n2)
+  
+  return(avCovMtx)
+} 
+
 
 ############################################
 ### now some useful functions...
@@ -262,28 +356,62 @@ maternCov <- function(D , pars){
   ########################################################
   
   if((c1 > 0) & (a > 0) & (nu >= 0.05)  & (nu <= 20)){
-    
-    iD0 <- which(D == 0)
-    iDGT0 <- which(D > 0)
-    
+####################################################    
+### below block updated below, 27/2/20, to save memory...
+####################################################    
+    # iD0 <- which(D == 0)
+    # iDGT0 <- which(D > 0)
+    # 
+    # ### range is approx rho * 3...this is from wiki, 
+    # ### and is i think what stein's parameterization was supposed to be.
+    # sqrt2nuOVERa <- sqrt(2 * nu) / a 
+    # Dsqrt2nuOVERa <- D * sqrt2nuOVERa  
+    # 
+    # bes <- 0 * D
+    # print(class(bes))
+    # bes[iDGT0] <- besselK(Dsqrt2nuOVERa[iDGT0] , nu) 
+    # print(class(bes))
+    # 
+    # lnconstmatern <- NA * Dsqrt2nuOVERa
+    # lnconstmatern[iDGT0] <- nu * log(Dsqrt2nuOVERa[iDGT0]) - (nu - 1) * log(2) - lgamma(nu)
+    # print(class(lnconstmatern))
+    # 
+    # realmin <- 3.448490e-304 
+    # ibesGT0 <- which(bes > realmin)
+    # 
+    # C <- 0 * D # initiate.
+    # C[ibesGT0] <- c1 * exp(lnconstmatern[ibesGT0]+log(bes[ibesGT0]))
+    # C[iD0] <- c1
+    # C[which(is.infinite(bes))] <- c1
+
+    ####################################################    
     ### range is approx rho * 3...this is from wiki, 
     ### and is i think what stein's parameterization was supposed to be.
     sqrt2nuOVERa <- sqrt(2 * nu) / a 
-    Dsqrt2nuOVERa <- D * sqrt2nuOVERa  
-    
-    bes <- 0 * D
-    bes[iDGT0] <- besselK(Dsqrt2nuOVERa[iDGT0] , nu) 
-    
-    lnconstmatern <- NA * Dsqrt2nuOVERa
-    lnconstmatern[iDGT0] <- nu * log(Dsqrt2nuOVERa[iDGT0]) - (nu - 1) * log(2) - lgamma(nu)
-    
-    realmin <- 3.448490e-304 
-    ibesGT0 <- which(bes > realmin)
-    
-    C <- 0 * D # initiate.
-    C[ibesGT0] <- c1 * exp(lnconstmatern[ibesGT0]+log(bes[ibesGT0]))
-    C[iD0] <- c1
-    C[which(is.infinite(bes))] <- c1
+
+    # C <- 0 * D # initiate.
+    # C[D==0] <- c1
+    # C[D > 0] <- c1 * exp(nu * log(sqrt2nuOVERa * D[D > 0]) - (nu - 1) * log(2) - lgamma(nu) + log(besselK(sqrt2nuOVERa * D[D > 0] , nu)))
+    # C[is.infinite(C)] <- c1
+    # 
+    # C <- as(C , class(D)) # takes a bit longer, but should save memory. not sure why class changes when C[D==0] <- c1 is done.
+
+    if(class(D) == "dspMatrix"){
+      xC <- 0 * D@x # initiate.
+      xC[D@x==0] <- c1
+      xC[D@x > 0] <- c1 * exp(nu * log(sqrt2nuOVERa * D@x[D@x > 0]) - (nu - 1) * log(2) - lgamma(nu) + log(besselK(sqrt2nuOVERa * D@x[D@x > 0] , nu)))
+      xC[is.infinite(xC)] <- c1
+      C <- D 
+      C@x <- xC
+
+    }else{
+      C <- 0 * D # initiate.
+      C[D==0] <- c1
+      C[D > 0] <- c1 * exp(nu * log(sqrt2nuOVERa * D[D > 0]) - (nu - 1) * log(2) - lgamma(nu) + log(besselK(sqrt2nuOVERa * D[D > 0] , nu)))
+      C[is.infinite(C)] <- c1
+      
+      # C <- as(C , class(D)) # takes a bit longer, but should save memory. not sure why class changes when C[D==0] <- c1 is done.
+    }
     
   }else{
     C <- NA
@@ -299,27 +427,29 @@ setupIAK3D <- function(xData , dIData , nDscPts = 0 , partSetup = FALSE){
   ### note, I only use 'U' for unique in xU and dIU.
   ### Dx and other mats are defined with the unique locations, 
   ### but for simpler notation I don't use the 'U' notation there. 
+
+  # if(is.null(ncol(dIData))){
+  #   dIData <- matrix(dIData , ncol = 2)
+  # }else{}
+  # n <- nrow(dIData)
+  # 
+  # if(is.null(ncol(xData))){
+  #   xData <- matrix(xData , nrow = n)
+  # }else{}
+  
   xU <- xData[!duplicated(xData),,drop=FALSE]
   dIU <- dIData[!duplicated(dIData),,drop=FALSE]
   
   ndIU <- nrow(dIU)
   nxU <- nrow(xU)
   
-  iK <- jK <- c()
-  for (i in 1:nxU){
-    iKThis <- which((xData[,1] == xU[i,1]) & (xData[,2] == xU[i,2]))
-    iK <- c(iK , iKThis)
-    jK <- c(jK , matrix(i , length(iKThis) , 1))
-  }
-  Kx <- sparseMatrix(i = iK , j = jK , x = 1)
+  ijTmp = lapply(seq(nxU) , function(i){ which((xData[,1] == xU[i,1]) & (xData[,2] == xU[i,2])) })
+  Kx <- sparseMatrix(i = unlist(ijTmp) , j = rep(seq(length(ijTmp)) , times = unlist(lapply(ijTmp , length))) , x = 1)
+  rm(ijTmp)
   
-  iK <- jK <- c()
-  for (i in 1:ndIU){
-    iKThis <- which((dIData[,1] == dIU[i,1]) & (dIData[,2] == dIU[i,2]))
-    iK <- c(iK , iKThis)
-    jK <- c(jK , matrix(i , length(iKThis) , 1))
-  }
-  Kd <- sparseMatrix(i = iK , j = jK , x = 1)
+  ijTmp = lapply(seq(ndIU) , function(i){ which((dIData[,1] == dIU[i,1]) & (dIData[,2] == dIU[i,2])) })
+  Kd <- sparseMatrix(i = unlist(ijTmp) , j = rep(seq(length(ijTmp)) , times = unlist(lapply(ijTmp , length))) , x = 1)
+  rm(ijTmp)
   
   #############################################################
   ### to have proper variances at least down to 2 m for valid predictions to all GSM depths. 
@@ -333,7 +463,22 @@ setupIAK3D <- function(xData , dIData , nDscPts = 0 , partSetup = FALSE){
     return(list('xU' = xU , 'Kx' = Kx , 'dIU' = dIU , 'Kd' = Kd , 'maxd' = maxd))  
   }else{}
   
-  Dx <- xyDist(xU , xU)
+  Dx <- xyDist(xU , xU) # save as symmetric matrix, upper triangle saved.
+  Dx <- new('dspMatrix' , Dim = as.integer(c(nxU,nxU)) ,  x = Dx[upper.tri(Dx ,  diag = TRUE)] , uplo = "U")
+  
+  Idxx <- new("dspMatrix" , Dim = as.integer(c(nxU,nxU)), x =  as.numeric(seq(nxU * (nxU+1) / 2))) 
+  utriKxIdxxKx <- Kx %*% Idxx %*% t(Kx)
+  utriKxIdxxKx <- utriKxIdxxKx[upper.tri(utriKxIdxxKx , diag = TRUE)] # get in col form...
+  rm(Idxx)
+  
+  Idxd <- new("dspMatrix" , Dim = as.integer(c(ndIU,ndIU)), x =  as.numeric(seq(ndIU * (ndIU+1) / 2))) 
+  utriKdIdxdKd <- Kd %*% Idxd %*% t(Kd)
+  utriKdIdxdKd <- utriKdIdxdKd[upper.tri(utriKdIdxdKd , diag = TRUE)] # get in col form...
+  rm(Idxd)
+
+  ### get summary of KxKx and get which indices within the upp tri of KxKx are 1?
+  summKxKx <- summary(as(Kx %*% t(Kx) , "symmetricMatrix"))
+  summKxKx$idxUtri <- summKxKx$j * (summKxKx$j - 1) / 2 + summKxKx$i
   
   #############################################
   ### and the disc pts, if numerical approx of average covariances is being used...
@@ -352,9 +497,13 @@ setupIAK3D <- function(xData , dIData , nDscPts = 0 , partSetup = FALSE){
   ###########################################################
   ### and the setup stuff for the analytical version...
   ###########################################################
-  iTmp <- kronecker(seq(ndIU) , matrix(1 , ndIU , 1))
-  jTmp <- kronecker(matrix(1 , ndIU , 1) , seq(ndIU))
-  ijTmp <- cbind(iTmp , jTmp)
+  # iTmp <- kronecker(seq(ndIU) , matrix(1 , ndIU , 1))
+  # jTmp <- kronecker(matrix(1 , ndIU , 1) , seq(ndIU))
+  # ijTmp <- cbind(iTmp , jTmp)
+  ijTmp <- matrix(NA , ndIU ^ 2 , 2)
+  ijTmp[,1] <- kronecker(seq(ndIU) , matrix(1 , ndIU , 1))
+  ijTmp[,2] <- kronecker(matrix(1 , ndIU , 1) , seq(ndIU))
+  
   iUElements <- which(ijTmp[,1] <= ijTmp[,2])
   ijTmp <- ijTmp[iUElements ,,drop=FALSE]
   abcd <- cbind(dIU[ijTmp[,1],,drop=FALSE] , dIU[ijTmp[,2],,drop=FALSE])
@@ -365,8 +514,103 @@ setupIAK3D <- function(xData , dIData , nDscPts = 0 , partSetup = FALSE){
   
   return(list('xU' = xU , 'Kx' = Kx , 'Dx' = Dx , 'dIU' = dIU , 'Kd' = Kd ,  
               'dDsc' = dDsc , 'KdDsc' = KdDsc , 'DdDsc' = DdDsc , 'nDscPts' = nDscPts , 
-              'dIUabcd' = abcd , 'dIUiUElements' = iUElements , 'maxd' = maxd))  
+              'dIUabcd' = abcd , 'dIUiUElements' = iUElements , 'maxd' = maxd , 
+              'utriKxIdxxKx' = utriKxIdxxKx , 'utriKdIdxdKd' = utriKdIdxdKd , 'summKxKx' = summKxKx))  
 }
+
+### compLik version...
+setupIAK3D_CL <- function(xData , dIData , nDscPts = 0 , partSetup = FALSE , compLikMats = NULL){
+  if(is.null(compLikMats)){ stop('Error - enter compLikMats for function setupIAK3D_CL!') }else{}
+
+  setupMats <- list()
+  ### order is all adj subset pairs, then all individual subsets (which can be used to get non-adj subset pairs)
+  for (i in 1:nrow(compLikMats$subsetPairsAdj)){
+    iThis <- c(compLikMats$listBlocks[[compLikMats$subsetPairsAdj[i,1]]]$i , compLikMats$listBlocks[[compLikMats$subsetPairsAdj[i,2]]]$i)
+    setupMats[[i]] <- setupIAK3D(xData[iThis,,drop = FALSE] , dIData[iThis,,drop = FALSE] , nDscPts = nDscPts ,  partSetup = partSetup)
+  }
+  ### now all individual subsets...      
+  for (i in 1:length(compLikMats$listBlocks)){
+    iThis <- compLikMats$listBlocks[[i]]$i
+    setupMats[[nrow(compLikMats$subsetPairsAdj)+i]] <- setupIAK3D(xData[iThis,,drop = FALSE] , dIData[iThis,,drop = FALSE] , nDscPts = nDscPts ,  partSetup = partSetup)
+  }
+  return(setupMats)
+}
+
+##################################################################
+### as above, but for non-symmetric case...
+### no option of disc pts here, and abcd not calculated (done in calcC fn)
+##################################################################
+setupIAK3D2 <- function(xData , dIData , xData2 , dIData2){
+  ### note, I only use 'U' for unique in xU and dIU.
+  ### Dx and other mats are defined with the unique locations, 
+  ### but for simpler notation I don't use the 'U' notation there. 
+  xU <- xData[!duplicated(xData),,drop=FALSE]
+  dIU <- dIData[!duplicated(dIData),,drop=FALSE]
+  
+  ndIU <- nrow(dIU)
+  nxU <- nrow(xU)
+  
+  xU2 <- xData2[!duplicated(xData2),,drop=FALSE]
+  dIU2 <- dIData2[!duplicated(dIData2),,drop=FALSE]
+  
+  ndIU2 <- nrow(dIU2)
+  nxU2 <- nrow(xU2)
+  
+  # iK <- jK <- c()
+  # for (i in 1:nxU){
+  #   iKThis <- which((xData[,1] == xU[i,1]) & (xData[,2] == xU[i,2]))
+  #   iK <- c(iK , iKThis)
+  #   jK <- c(jK , matrix(i , length(iKThis) , 1))
+  # }
+  # Kx <- sparseMatrix(i = iK , j = jK , x = 1)
+  # 
+  # iK <- jK <- c()
+  # for (i in 1:ndIU){
+  #   iKThis <- which((dIData[,1] == dIU[i,1]) & (dIData[,2] == dIU[i,2]))
+  #   iK <- c(iK , iKThis)
+  #   jK <- c(jK , matrix(i , length(iKThis) , 1))
+  # }
+  # Kd <- sparseMatrix(i = iK , j = jK , x = 1)
+
+  ijTmp = lapply(seq(nxU) , function(i){ which((xData[,1] == xU[i,1]) & (xData[,2] == xU[i,2])) })
+  Kx <- sparseMatrix(i = unlist(ijTmp) , j = rep(seq(length(ijTmp)) , times = unlist(lapply(ijTmp , length))) , x = 1)
+  rm(ijTmp)
+  
+  ijTmp = lapply(seq(ndIU) , function(i){ which((dIData[,1] == dIU[i,1]) & (dIData[,2] == dIU[i,2])) })
+  Kd <- sparseMatrix(i = unlist(ijTmp) , j = rep(seq(length(ijTmp)) , times = unlist(lapply(ijTmp , length))) , x = 1)
+  rm(ijTmp)
+  
+  
+  # iK <- jK <- c()
+  # for (i in 1:nxU2){
+  #   iKThis <- which((xData2[,1] == xU2[i,1]) & (xData2[,2] == xU2[i,2]))
+  #   iK <- c(iK , iKThis)
+  #   jK <- c(jK , matrix(i , length(iKThis) , 1))
+  # }
+  # Kx2 <- sparseMatrix(i = iK , j = jK , x = 1)
+  # 
+  # iK <- jK <- c()
+  # for (i in 1:ndIU2){
+  #   iKThis <- which((dIData2[,1] == dIU2[i,1]) & (dIData2[,2] == dIU2[i,2]))
+  #   iK <- c(iK , iKThis)
+  #   jK <- c(jK , matrix(i , length(iKThis) , 1))
+  # }
+  # Kd2 <- sparseMatrix(i = iK , j = jK , x = 1)
+
+  ijTmp = lapply(seq(nxU2) , function(i){ which((xData2[,1] == xU2[i,1]) & (xData2[,2] == xU2[i,2])) })
+  Kx2 <- sparseMatrix(i = unlist(ijTmp) , j = rep(seq(length(ijTmp)) , times = unlist(lapply(ijTmp , length))) , x = 1)
+  rm(ijTmp)
+  
+  ijTmp = lapply(seq(ndIU2) , function(i){ which((dIData2[,1] == dIU2[i,1]) & (dIData2[,2] == dIU2[i,2])) })
+  Kd2 <- sparseMatrix(i = unlist(ijTmp) , j = rep(seq(length(ijTmp)) , times = unlist(lapply(ijTmp , length))) , x = 1)
+  rm(ijTmp)
+  
+  
+  Dx <- xyDist(xU , xU2)
+  
+  return(list('xU' = xU , 'Kx' = Kx , 'Dx' = Dx , 'dIU' = dIU , 'Kd' = Kd , 'xU2' = xU2 , 'Kx2' = Kx2 , 'dIU2' = dIU2 , 'Kd2' = Kd2))  
+}
+
 
 ##########################################################
 ### compute ia covs with matern correlation, exp fn for vars, using discretization approach...
