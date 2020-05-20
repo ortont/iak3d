@@ -54,7 +54,7 @@ selectCovIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx ,
       lmm.fit.Selectnud <- list()
       for (i in 1:3){
         print(paste0('nud = ' , nudVec[i] , ', sdfdType_cd1 = ' , sdfdTypeANDcmeOpt[1] , ', sdfdType_cxd0 = ' , sdfdTypeANDcmeOpt[2] , 
-                     ', sdfdType_cxd1 = ' , sdfdTypeANDcmeOpt[3] , ', cmeOpt = ' , sdfdTypeANDcmeOpt[4] , '...'))
+                     ', sdfdType_wacxd1 = ' , sdfdTypeANDcmeOpt[3] , ', cmeOpt = ' , sdfdTypeANDcmeOpt[4] , '...'))
         
         namePlot <- paste0(dirPlot , '/lmm.fit.Selectnud' , floor(nudVec[i]) , '.pdf')
         lmm.fit.Selectnud[[i]] <- fitIAK3D(xData = xData , dIData = dIData , zData = zData , covsData = covsData , modelX = modelX , modelx = modelx , nud = nudVec[i] , allKnotsd = allKnotsd ,
@@ -468,18 +468,27 @@ stepBackWald <- function(namesX , pX , allKnotsd , zData , dIData , covsData , l
 ##########################################################################
 ### function to give the Wald test p value, given betahat, vbetahat...
 ### and the which elements of betahat we want to test are equal to 0....
+### must specifiy exactly one of ip0 or L
 ##########################################################################
-waldTest <- function(betahat , vbetahat , ip0){
-  L <- matrix(0 , length(ip0) , length(betahat))
-  for (j in 1:length(ip0)){
-    L[j , ip0[j]] <- 1
+waldTest <- function(betahat , vbetahat , ip0 = NULL , L = NULL){
+  if(is.null(ip0) & is.null(L)){ stop('Error, specify exactly one of ip0 or L for Wald test!') }else{} 
+  if((!is.null(ip0)) & (!is.null(L))){ stop('Error, specify exactly one of ip0 or L for Wald test!') }else{} 
+
+  if(is.null(L)){
+    L <- matrix(0 , length(ip0) , length(betahat))
+    for (j in 1:length(ip0)){
+      L[j , ip0[j]] <- 1
+    }
+    diffp <- length(ip0)
+  }else{
+    diffp <- dim(L)[[1]]
   }
-  
+
   v <- L %*% vbetahat %*% t(L)
   Lbetahat <- L %*% betahat
   WaldStat <- as.numeric(t(Lbetahat) %*% solve(v , Lbetahat))
   
-  pValWT <- 1 - pchisq(WaldStat , length(ip0))
+  pValWT <- 1 - pchisq(WaldStat , diffp)
   
   return(pValWT)
 }
@@ -493,14 +502,14 @@ nllLm <- function(zData , XData , REML = FALSE){
     XX <- t(XData) %*% XData 
     cholXX <- try(chol(XX) , silent = TRUE)
     if(is.character(cholXX) | min(eigen(XX)$value) <= 0){
-      return(list('nll' = NA , 'betahat' = matrix(NA , p , 1) , 'vbetahat' = matrix(NA , p , p) , 'sigma2hat' = NA)) 
+      return(list('nll' = NA , 'betahat' = matrix(NA , p , 1) , 'vbetahat' = matrix(NA , p , p) , 'sigma2hat' = NA))
     }else{}
     vbetahat <- chol2inv(cholXX)
     betahat <- matrix(vbetahat %*% (t(XData) %*% zData) , ncol = 1)
-    
+
     lndetXX <- determinant(XX , logarithm = TRUE)
     if(lndetXX$sign < 0){
-      return(list('nll' = NA , 'betahat' = matrix(NA , p , 1) , 'vbetahat' = matrix(NA , p , p) , 'sigma2hat' = NA)) 
+      return(list('nll' = NA , 'betahat' = matrix(NA , p , 1) , 'vbetahat' = matrix(NA , p , p) , 'sigma2hat' = NA))
     }else{}
     lndetXX <- as.numeric(lndetXX$modulus)
     
@@ -676,16 +685,24 @@ lmGivenX <- function(zData , XData , method = 'ML' , XFULL = NULL){
     XX <- t(XData) %*% XData
     Xz <- matrix(t(XData) %*% zData , ncol = 1)
     
-#    tmp0 <- try(solve(XX , Xz) , silent = TRUE)
-#    tmp <- lndetANDinvCb(XX , Xz)
-#    if(is.character(tmp$cholC) | is.character(tmp0)){
-    betahat <- try(solve(XX , Xz) , silent = TRUE)
-    if(is.character(betahat)){
+# #    tmp0 <- try(solve(XX , Xz) , silent = TRUE)
+# #    tmp <- lndetANDinvCb(XX , Xz)
+# #    if(is.character(tmp$cholC) | is.character(tmp0)){
+#     betahat <- try(solve(XX , Xz) , silent = TRUE)
+#     if(is.character(betahat)){
+#       return(list('nll' = NA , 'AIC' = NA , 'betahat' = matrix(NA , p , 1)))
+#     }else{}
+# #    lndetXX <- tmp$lndetC
+    # lndetXX <- as.numeric(determinant(XX , logarithm = TRUE)$modulus)
+    
+    betahat <- lndetANDinvCb(XX , Xz)
+    lndetXX <- betahat$lndetC
+    betahat <- betahat$invCb
+    
+    if(is.na(lndetXX) || (is.infinite(lndetXX))){
       return(list('nll' = NA , 'AIC' = NA , 'betahat' = matrix(NA , p , 1)))
     }else{}
-#    lndetXX <- tmp$lndetC
     betahat <- matrix(betahat , ncol = 1)
-    lndetXX <- as.numeric(determinant(XX , logarithm = TRUE)$modulus)
     
     zRes <- zData - XData %*% betahat
     if(method == 'ML'){
