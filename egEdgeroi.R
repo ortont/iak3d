@@ -2,8 +2,8 @@
 ### source('/export/home/ortont/scripts/iakTests/egEdgeroi.R')
 ### source('U://scripts/iakTests/egEdgeroi.R')
 ##############################################################
-# rm(list=ls())
-# assign("last.warning", NULL, envir = baseenv())
+rm(list=ls())
+assign("last.warning", NULL, envir = baseenv())
 
 ##############################################################
 ### full model selection took ~ 19 hours.
