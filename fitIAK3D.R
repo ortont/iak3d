@@ -339,6 +339,8 @@ fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'mate
             
       nxPred <- dim(xPred)[[1]]
         
+      # return(list('xTmp' = rbind(xPred , xPredDistant) , 'dIMap' = dIPred , 'covsMap' = rbind(covsPred , covsPredDistant) , 'lmmFit' = lmmFit))
+      
 ### call the predict function...
       tmp <- predictIAK3D(xMap = rbind(xPred , xPredDistant) , dIMap = dIPred , covsMap = rbind(covsPred , covsPredDistant) , lmmFit = lmmFit , rqrBTfmdPreds = rqrBTfmdPreds , constrainX4Pred = FALSE)
 
@@ -777,7 +779,7 @@ setCIAK3D2 <- function(parsBTfmd , modelx ,
   ### defined for the unique locations...
   ijTmp <- which(setupMats$Dx == 0 , arr.ind = TRUE)
   if(nrow(ijTmp) > 0){
-    phix0 <- sparseMatrix(i = ijTmp[,1] , j = ijTmp[,2] , x = 1)
+    phix0 <- sparseMatrix(i = ijTmp[,1] , j = ijTmp[,2] , x = 1 , dims = c(nrow(setupMats$Dx) , ncol(setupMats$Dx)))
     C <- parsBTfmd$cx0 * setupMats$Kx %*% phix0 %*% t(setupMats$Kx2)
   }else{
     phix0 <- sparseMatrix(i = 1 , ,j=1 , x=0 , dims = c(nrow(setupMats$Dx),ncol(setupMats$Dx)))
