@@ -1,6 +1,6 @@
 fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'matern' , nud = 0.5 , allKnotsd = c() , 
                 sdfdType_cd1 = 0 , sdfdType_cxd0 = 0 , sdfdType_cxd1 = 0 , cmeOpt = 0 , prodSum = TRUE , 
-                lnTfmdData = FALSE , useReml = TRUE , compLikMats = list('compLikOptn' = 0) , namePlot = NA , lmmFit = list() , rqrBTfmdPreds = TRUE , parsInit = NULL , attachBigMats = TRUE){
+                lnTfmdData = FALSE , useReml = TRUE , compLikMats = list('compLikOptn' = 0) , namePlot = NA , lmmFit = list() , rqrBTfmdPreds = TRUE , parsInit = NULL , attachBigMats = TRUE , testMC = TRUE){
 
 ########################################################
 ### if xData or dIData were dataframes, convert to matrices here.
@@ -203,26 +203,30 @@ fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'mate
 ### and fit...
       if (compLikMats$compLikOptn == 0){
 
-        print('Testing whether parallel or series version of gradient function is quicker...')
-        start_time <- Sys.time()
-        gr <- gradnllIAK3D(pars = parsInit , zData = zData , XData = XData , vXU = vXU , iU = iU , modelx = modelx , nud = nud , 
-                            sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , 
-                            cmeOpt = cmeOpt , prodSum = prodSum , setupMats = setupMats , parBnds = parBnds , useReml = useReml , lnTfmdData = lnTfmdData)	
-        end_time <- Sys.time()
-        grTime <- end_time - start_time
-        
-        start_time <- Sys.time()
-        gr.mc <- gradnllIAK3D.mc(pars = parsInit , zData = zData , XData = XData , vXU = vXU , iU = iU , modelx = modelx , nud = nud , 
-                            sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , 
-                            cmeOpt = cmeOpt , prodSum = prodSum , setupMats = setupMats , parBnds = parBnds , useReml = useReml , lnTfmdData = lnTfmdData)	
-        end_time <- Sys.time()
-        grTime.mc <- end_time - start_time
-        
-        if(grTime.mc < grTime){
-          print('Multi-core version of grad was quicker, so will use this to compute gradients of nll using all cores for parameter fitting (see function gradnllIAK3D.mc to change this).')
-          gr4Optim <- gradnllIAK3D.mc
+        if(testMC){
+          print('Testing whether parallel or series version of gradient function is quicker...')
+          start_time <- Sys.time()
+          gr <- gradnllIAK3D(pars = parsInit , zData = zData , XData = XData , vXU = vXU , iU = iU , modelx = modelx , nud = nud , 
+                             sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , 
+                             cmeOpt = cmeOpt , prodSum = prodSum , setupMats = setupMats , parBnds = parBnds , useReml = useReml , lnTfmdData = lnTfmdData)	
+          end_time <- Sys.time()
+          grTime <- end_time - start_time
+          
+          start_time <- Sys.time()
+          gr.mc <- gradnllIAK3D.mc(pars = parsInit , zData = zData , XData = XData , vXU = vXU , iU = iU , modelx = modelx , nud = nud , 
+                                   sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , 
+                                   cmeOpt = cmeOpt , prodSum = prodSum , setupMats = setupMats , parBnds = parBnds , useReml = useReml , lnTfmdData = lnTfmdData)	
+          end_time <- Sys.time()
+          grTime.mc <- end_time - start_time
+          
+          if(grTime.mc < grTime){
+            print('Multi-core version of grad was quicker, so will use this to compute gradients of nll using all cores for parameter fitting (see function gradnllIAK3D.mc to change this).')
+            gr4Optim <- gradnllIAK3D.mc
+          }else{
+            print('Single-core version of grad was quicker, so will use this to compute gradients of nll for parameter fitting.')
+            gr4Optim <- gradnllIAK3D
+          }
         }else{
-          print('Single-core version of grad was quicker, so will use this to compute gradients of nll for parameter fitting.')
           gr4Optim <- gradnllIAK3D
         }
         print('Now fitting...')
@@ -234,26 +238,30 @@ fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'mate
         # parsFit <- optimIt(par = parsInit , fn = nllIAK3D , gr = gr4Optim , fitRange = fitRange)
       }else{
         
-        print('Testing whether parallel or series version of gradient function is quicker...')
-        start_time <- Sys.time()
-        gr_CL <- gradnllIAK3D_CL(pars = parsInit , zData = zData , XData = XData , modelx = modelx , nud = nud , 
-                               sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , 
-                               cmeOpt = cmeOpt , prodSum = prodSum , setupMats = setupMats , parBnds = parBnds , useReml = useReml , compLikMats = compLikMats)	
-        end_time <- Sys.time()
-        grTime <- end_time - start_time
-        
-        start_time <- Sys.time()
-        gr_CL <- gradnllIAK3D_CL.mc(pars = parsInit , zData = zData , XData = XData , modelx = modelx , nud = nud , 
+        if(testMC){
+          print('Testing whether parallel or series version of gradient function is quicker...')
+          start_time <- Sys.time()
+          gr_CL <- gradnllIAK3D_CL(pars = parsInit , zData = zData , XData = XData , modelx = modelx , nud = nud , 
                                  sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , 
                                  cmeOpt = cmeOpt , prodSum = prodSum , setupMats = setupMats , parBnds = parBnds , useReml = useReml , compLikMats = compLikMats)	
-        end_time <- Sys.time()
-        grTime.mc <- end_time - start_time
-        
-        if(grTime.mc < grTime){
-          print('Multi-core version of grad was quicker, so will use this to compute gradients of nll using all cores for parameter fitting (see function gradnllIAK3D_CL.mc to change this).')
-          gr4Optim <- gradnllIAK3D_CL.mc
+          end_time <- Sys.time()
+          grTime <- end_time - start_time
+          
+          start_time <- Sys.time()
+          gr_CL <- gradnllIAK3D_CL.mc(pars = parsInit , zData = zData , XData = XData , modelx = modelx , nud = nud , 
+                                   sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , 
+                                   cmeOpt = cmeOpt , prodSum = prodSum , setupMats = setupMats , parBnds = parBnds , useReml = useReml , compLikMats = compLikMats)	
+          end_time <- Sys.time()
+          grTime.mc <- end_time - start_time
+          
+          if(grTime.mc < grTime){
+            print('Multi-core version of grad was quicker, so will use this to compute gradients of nll using all cores for parameter fitting (see function gradnllIAK3D_CL.mc to change this).')
+            gr4Optim <- gradnllIAK3D_CL.mc
+          }else{
+            print('Single-core version of grad was quicker, so will use this to compute gradients of nll for parameter fitting.')
+            gr4Optim <- gradnllIAK3D_CL
+          }
         }else{
-          print('Single-core version of grad was quicker, so will use this to compute gradients of nll for parameter fitting.')
           gr4Optim <- gradnllIAK3D_CL
         }
         print('Now fitting...')
