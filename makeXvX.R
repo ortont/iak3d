@@ -279,25 +279,25 @@ makeXvX <- function(covData = NA , dIData , modelX , allKnotsd = c() , iU = NA ,
           id1Tmp <- c(id , idInt)
           if(length(id1Tmp) > 0){
             EdTmp <- rowMeans(dIData)
-            X[,id1Tmp] <- X_d[,id1Tmp,drop=FALSE] * matrix(EdTmp , N , length(id1Tmp))
+            X[,id1Tmp] <- X_d[,id1Tmp,drop=FALSE] * matrix(EdTmp , n , length(id1Tmp))
           }else{}
           id2Tmp <- c(id2 , id2Int)
           if(length(id2Tmp) > 0){
             Ed2Tmp <- dIData[,1]^2 + dIData[,1] * dIData[,2] + dIData[,2]^2
-            X[,id2Tmp] <- X_d[,id2Tmp,drop=FALSE] * matrix(Ed2Tmp , N , length(id2Tmp))
+            X[,id2Tmp] <- X_d[,id2Tmp,drop=FALSE] * matrix(Ed2Tmp , n , length(id2Tmp))
           }else{}
           id3Tmp <- c(id3 , id3Int)
           if(length(id3Tmp) > 0){
             Ed3Tmp <- dIData[,1]^3 + (dIData[,1]^2)*dIData[,2] + dIData[,1]*(dIData[,2]^2) + dIData[,2]^3
-            X[,id3Tmp] <- X_d[,id3Tmp,drop=FALSE] * matrix(Ed3Tmp , N , length(id3Tmp))
+            X[,id3Tmp] <- X_d[,id3Tmp,drop=FALSE] * matrix(Ed3Tmp , n , length(id3Tmp))
           }else{}
 
           id123Tmp <- c(id1Tmp , id2Tmp , id3Tmp)
           if(length(id123Tmp) > 0){
             if(setXLims){
 ### slight difference to loop version, lims are now calcd from the averaged values.          
-              XLims[1,id123Tmp] <- apply(X[,i123Tmp,drop=FALSE] , 2 , min)
-              XLims[2,id123Tmp] <- apply(X[,i123Tmp,drop=FALSE] , 2 , max)
+              XLims[1,id123Tmp] <- apply(X[,id123Tmp,drop=FALSE] , 2 , min)
+              XLims[2,id123Tmp] <- apply(X[,id123Tmp,drop=FALSE] , 2 , max)
             }else{
               if(!infBnds){
 ### slight difference, apply the given constraints to the interval-support design matrix...
