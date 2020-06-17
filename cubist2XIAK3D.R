@@ -852,8 +852,12 @@ getAlldBreaks <- function(cubistModel){
   if(!is.element('listRules' , names(cubistModel))){ stop('Error - run cubist2X function before getting all dBreaks!') }else{}
   dfdBreaks <- lapply(cubistModel$listRules , function(dfIn){ dfIn[which(dfIn$variable == 'dIMidPts'),,drop=FALSE] })
   dfdBreaks <- do.call(rbind , dfdBreaks)
-  dBreaks <- unique(dfdBreaks$valUpdated)
-  dBreaks <- dBreaks[order(dBreaks)]
+  if(!is.null(dfdBreaks)){
+    dBreaks <- unique(dfdBreaks$valUpdated)
+    dBreaks <- dBreaks[order(dBreaks)]
+  }else{
+    dBreaks <- c()
+  }
   return(dBreaks)
 }
 
@@ -1061,17 +1065,46 @@ refineXIAK3D <- function(X , z , profID , alpha = 0.5){
 #############################################################################
 ### function to make profID from coordinates...
 #############################################################################
-makeProfID <- function(cAll){
+makeProfID <- function(cAll , useOldVersion = TRUE){
   if(is.null(cAll)){
     return(NULL)
   }else{
-    cU <- cAll[which(!duplicated(cAll)),,drop=FALSE]
-    profID <- NA * numeric(nrow(cAll))
-    for (i in 1:nrow(cU)){
-      iThis <- which(cAll[,1] == cU[i,1] & cAll[,2] == cU[i,2])
-      profID[iThis] <- i
+    if(!is.element(class(cAll) , c('data.frame' , 'matrix'))){ stop('Error - makeProfID assumes cAll entered as matrix or data.frame.') }else{}
+    
+    ndim <- ncol(cAll)
+    
+    if(useOldVersion){
+      cU <- cAll[which(!duplicated(cAll)),,drop=FALSE]
+      profID <- NA * numeric(nrow(cAll))
+      for (i in 1:nrow(cU)){
+        if(ndim == 1){
+          iThis <- which(cAll[,1] == cU[i,1])
+        }else if(ndim == 2){
+          iThis <- which(cAll[,1] == cU[i,1] & cAll[,2] == cU[i,2])
+        }else if(ndim == 3){
+          iThis <- which(cAll[,1] == cU[i,1] & cAll[,2] == cU[i,2] & cAll[,3] == cU[i,3])
+        }else{
+          stop('Really - more than 3 dims for making ids?')
+        }
+        profID[iThis] <- i
+      }
+      
+    }else{
+      ### or would be better...
+      if(ndim == 1){
+        profID <- as.character(cAll[,1])
+      }else if(ndim == 2){
+        profID <- paste0(as.character(cAll[,1]) , '_' , as.character(cAll[,2]))
+      }else if(ndim == 3){
+        profID <- paste0(as.character(cAll[,1]) , '_' , as.character(cAll[,2]) , '_' , as.character(cAll[,3]))
+      }else{
+        stop('Really - more than 3 dims for making ids?')
+      }
+### could convert to numeric id if rqd...      
+      # profID <- as.numeric(factor(profID))
+      
     }
-  
+
     return(profID)
   }
 }
