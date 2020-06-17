@@ -756,12 +756,12 @@ xyDist <- function(xData , yData){
 
 ####################################################################
 ### for plotting the covariance function (as variogram) for given depths...
-### overlapsByRegression = FALSE removes overlapping depth intervals for harmonixing with eas
-### overlapsByRegression = TRUE removes full profiles with overlap or 1 depth interval; then
+### singlesByRegression = FALSE removes profiles with one depth intervals for harmonixing with eas
+### singlesByRegression = TRUE removes profiles 1 depth interval; then
 ###                             fits regression to predict profile using fully fitted eas fns as calibration covariate data
-###                             and the actual sampled (overlapping) horizons as prediction covariates 
+###                             and the actual sampled (overlapping) horizon as prediction covariates 
 ####################################################################
-plotCovx <- function(lmm.fit , hx , dIPlot , addExpmntlV = TRUE , hzntlUnits = 'km' , ylim = NULL , roundTo = NULL , noPlot = FALSE , overlapsByRegression = TRUE){
+plotCovx <- function(lmm.fit , hx , dIPlot , addExpmntlV = TRUE , hzntlUnits = 'km' , ylim = NULL , roundTo = NULL , noPlot = FALSE , singlesByRegression = TRUE){
   
   if(is.null(roundTo)){ spline4ExpV <- TRUE }else{ spline4ExpV <- FALSE }
   
@@ -771,11 +771,17 @@ plotCovx <- function(lmm.fit , hx , dIPlot , addExpmntlV = TRUE , hzntlUnits = '
   
   if(spline4ExpV){
     ### run a hack of mppsline funtion with residuals...
-    tmp <- harmonizeMPS(xData = lmm.fit$xData , dIData = lmm.fit$dIData , zData = lmm.fit$zData - lmm.fit$XData %*% lmm.fit$betahat , dIStd = dIPlot , overlapsByRegression = overlapsByRegression)
-    xDataH <- tmp$xDataH 
+    profIDTmp <- makeProfID(lmm.fit$xData , useOldVersion = FALSE)
+    tmp <- harmonizeMPS(profIDData = profIDTmp , dIData = lmm.fit$dIData , zData = lmm.fit$zData - lmm.fit$XData %*% lmm.fit$betahat , dIStd = dIPlot , singlesByRegression = singlesByRegression)
+    profIDDataH <- tmp$profIDDataH 
     hrmnzdResData <- tmp$hrmnzdData 
     hrmnzdResDataEAS <- tmp$hrmnzdDataEAS    
-    
+    xDataH <- data.frame('profIDDataH' = profIDDataH)
+    df2Tmp <- data.frame('profIDDataH' = profIDTmp , 'Eastings' = lmm.fit$xData[,1] , 'Northings' = lmm.fit$xData[,2])
+    xDataH <- merge(x = xDataH, y = df2Tmp, by = "profIDDataH", all.x = TRUE)
+    xDataH <- as.matrix(xDataH[,c('Eastings','Northings',drop=FALSE)])
+    rm(df2Tmp , profIDTmp , tmp)
+
   }else{
     ### round dIFit to nearest roundTo cm...
     dIFitRnd <- lmm.fit$dIData
@@ -916,7 +922,7 @@ plotCord <- function(lmm.fit , hdPlot , vrtclUnits = 'm'){
 ### a color plot to show modelled covariances between different depth intervals (above x=y)
 ### and empirical covariances between (rounded) depth intervals (below x=y)
 ############################################################################
-getCovs4Plot <- function(lmm.fit = NULL , dIPlot , roundTo = NULL , overlapsByRegression = TRUE){ # roundTo = 0.10 , 
+getCovs4Plot <- function(lmm.fit = NULL , dIPlot , roundTo = NULL , singlesByRegression = TRUE){ # roundTo = 0.10 , 
   
   if(is.null(roundTo)){ spline4ExpV <- TRUE }else{ spline4ExpV <- FALSE }
   
@@ -933,28 +939,18 @@ getCovs4Plot <- function(lmm.fit = NULL , dIPlot , roundTo = NULL , overlapsByRe
   
   if(spline4ExpV){
     ### run a hack of mppsline funtion with residuals...
-    # profIDData <- makeProfID(lmm.fit$xData)
-    # profEAS <- data.frame('ID' = profIDData , 'Eastings' = lmm.fit$xData[,1]  , 'Northings' = lmm.fit$xData[,2] , 
-    #                       'dU' = 100 * lmm.fit$dIData[,1] , 'dL' = 100 * lmm.fit$dIData[,2] , 'residuals' = lmm.fit$zData - lmm.fit$XData %*% lmm.fit$betahat) 
-    # 
-    # z.s <- mpspline.source(dfHzns = profEAS , lam = 0 , vlow = -1000 , d = t(c(0,100*max(dIPlot[,2]))))
-    # nProfs <- ncol(z.s$var.1cm)
-    # x.s <- matrix(NA , nProfs , 2)
-    # for(i in 1:nProfs){
-    #   x.s[i,] <- as.numeric(lmm.fit$xData[which(profIDData == z.s$idcol[i])[1],])
-    # }
-    # var.1cm <- z.s$var.1cm
-# 
-#     resDataAll <- matrix(NA , nProfs , nrow(dIPlot))
-#     for(i in 1:nrow(dIPlot)){
-#       resDataAll[,i] <- colSums(var.1cm[seq(round(dIPlot[i,1]*100) + 1 , round(dIPlot[i,2]*100)),,drop=FALSE]) / ((dIPlot[i,2]-dIPlot[i,1])*100)
-#     }
-    
-    ### run a hack of mppsline funtion with residuals...
-    tmp <- harmonizeMPS(xData = lmm.fit$xData , dIData = lmm.fit$dIData , zData = lmm.fit$zData - lmm.fit$XData %*% lmm.fit$betahat , dIStd = dIPlot , overlapsByRegression = overlapsByRegression)
-    xDataH <- tmp$xDataH 
+    profIDTmp <- makeProfID(lmm.fit$xData , useOldVersion = FALSE)
+    tmp <- harmonizeMPS(profIDData = profIDTmp , dIData = lmm.fit$dIData , zData = lmm.fit$zData - lmm.fit$XData %*% lmm.fit$betahat , dIStd = dIPlot , singlesByRegression = singlesByRegression)
+    profIDDataH <- tmp$profIDDataH 
     hrmnzdResData <- tmp$hrmnzdData 
     hrmnzdResDataEAS <- tmp$hrmnzdDataEAS    
+    
+    xDataH <- data.frame('profIDDataH' = profIDDataH)
+    df2Tmp <- data.frame('profIDDataH' = profIDTmp , 'Eastings' = lmm.fit$xData[,1] , 'Northings' = lmm.fit$xData[,2])
+    xDataH <- merge(x = xDataH, y = df2Tmp, by = "profIDDataH", all.x = TRUE)
+    xDataH <- as.matrix(xDataH[,c('Eastings','Northings',drop=FALSE)])
+    rm(df2Tmp , profIDTmp , tmp)
+
     nProfs <- nrow(xDataH)
     
     dfCovariances <- NULL
