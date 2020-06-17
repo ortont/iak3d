@@ -561,7 +561,8 @@ xValIAK3D <- function(lmmFit , removeAllWithin = 0 , namePlot = 'xvPlots.pdf' , 
 }
 
 plotProfilesIAK3D <- function(namePlot = 'profilePlots.pdf' , xData , dIData , zData , xPred = NULL , dIPred = NULL , zPred = NULL  , pi90LPred = NULL , pi90UPred = NULL , 
-                              zPredDistant = NA , zhatxv = NA , pi90Lxv = NA , pi90Uxv = NA , profNames = NULL , xlim = NULL , xlab = NULL){
+                              dIStd = NULL , zStd = NULL , pi90LStd = NULL , pi90UStd = NULL , 
+                              zPredDistant = NULL , zhatxv = NULL , pi90Lxv = NULL , pi90Uxv = NULL , profNames = NULL , xlim = NULL , xlab = NULL){
 #################################################    
 ### make a pdf with the distant profile prediction (page 1) and all data profiles (6 per page thereafter)...
 ### note these are not validation predictions, they are predicted at the data profiles given the data for the same profiles
@@ -573,7 +574,7 @@ plotProfilesIAK3D <- function(namePlot = 'profilePlots.pdf' , xData , dIData , z
 #################################################    
 ########################################################
 ### if xData or dIData were dataframes, convert to matrices here.
-### and make sure all are numeric...
+### and make sure dI numeric, and x not a factor...
 ########################################################
     if(!is.matrix(xData)){
         xData <- as.matrix(xData)
@@ -582,11 +583,8 @@ plotProfilesIAK3D <- function(namePlot = 'profilePlots.pdf' , xData , dIData , z
         dIData <- as.matrix(dIData)
     }else{}
 
-    xCopy <- matrix(NA , nrow(xData) , ncol(xData))
-    for (i in 1:ncol(xData)){ xCopy[,i] <- as.numeric(xData[,i]) }
-    xData <- xCopy
-    remove(xCopy)
-    
+    for (i in 1:ncol(xData)){ if(is.factor(xData[,i])){ stop('Enter xData as either coordinates or as character vec of ids') }else{} }
+
     dICopy <- matrix(NA , nrow(dIData) , ncol(dIData))
     for (i in 1:ncol(dIData)){ dICopy[,i] <- as.numeric(dIData[,i]) }
     dIData <- dICopy
@@ -604,23 +602,22 @@ plotProfilesIAK3D <- function(namePlot = 'profilePlots.pdf' , xData , dIData , z
         dIPred <- as.matrix(dIPred)
       }else{}
 
-      xPredCopy <- matrix(NA , nrow(xPred) , ncol(xPred))
-      for (i in 1:ncol(xPred)){ xPredCopy[,i] <- as.numeric(xPred[,i]) }
-      xPred <- xPredCopy
-      remove(xPredCopy)
-    
+      for (i in 1:ncol(xPred)){ if(is.factor(xPred[,i])){ stop('Enter xPred as either coordinates or as character vec of ids') }else{} }
+
       dIPredCopy <- matrix(NA , nrow(dIPred) , ncol(dIPred))
       for (i in 1:ncol(dIPred)){ dIPredCopy[,i] <- as.numeric(dIPred[,i]) }
       dIPred <- dIPredCopy
       remove(dIPredCopy)
     }else{}
 
+    ndx <- ncol(xData)
+    
     nPerPage <- 6
     
     if (is.null(xPred)){
       xPred <- xData[!duplicated(xData) , ,drop = FALSE]
       plotPreds <- FALSE
-      zPredDistant <- NA
+      zPredDistant <- NULL
     }else{
       plotPreds <- TRUE
     }
@@ -661,8 +658,13 @@ plotProfilesIAK3D <- function(namePlot = 'profilePlots.pdf' , xData , dIData , z
     }else{}
     
     pdf(file = namePlot)
-    if(!is.na(zPredDistant[1])[1]){
-      plot(zPredDistant , -rowMeans(dIPred) , xlim = xlim , ylim = ylim , type = 'l' , lwd = 2 , col = 'red' ,  
+    if(!is.null(zPredDistant)){
+      if(is.character(xlim) && xlim == 'flex'){
+        xlimThis <- c(min(c(zData,zPredDistant)) , max(c(zData,zPredDistant)))
+      }else{
+        xlimThis <- xlim
+      }
+      plot(zPredDistant , -rowMeans(dIPred) , xlim = xlimThis , ylim = ylim , type = 'l' , lwd = 2 , col = 'red' ,  
             xlab = xlab , ylab = 'depth, m' , yaxt = 'n' , main = 'Distant profile')
 ### add all data to this plot...                  
       for (j in 1:length(zData)){
@@ -684,21 +686,57 @@ plotProfilesIAK3D <- function(namePlot = 'profilePlots.pdf' , xData , dIData , z
           }else{
             nameThis <- profNames[iProfThis]
           }      
+### get data for this profile...
+          if (ndx == 1){
+            iThis <- which(xData[,1] == xPred[iProfThis,1])
+          }else if(ndx == 2){
+            iThis <- which((xData[,1] == xPred[iProfThis,1]) & (xData[,2] == xPred[iProfThis,2]))       
+          }else if(ndx == 3){
+            iThis <- which((xData[,1] == xPred[iProfThis,1]) & (xData[,2] == xPred[iProfThis,2]) & (xData[,3] == xPred[iProfThis,3]))       
+          }else{
+            stop('x is 4d or more? Check this.')            
+          }
           
+          if(is.character(xlim) && xlim == 'flex'){
+            ### justuse data and preds to define xlim...              
+            if(plotPreds){
+              if(!is.null(dIStd)){
+                xlimThis <- c(min(c(zPred[,iProfThis],zData[iThis],zStd[iProfThis,]),na.rm=T) , max(c(zPred[,iProfThis],zData[iThis],zStd[iProfThis,]),na.rm=T))
+              }else{
+                xlimThis <- c(min(c(zPred[,iProfThis],zData[iThis]),na.rm=T) , max(c(zPred[,iProfThis],zData[iThis]),na.rm=T))
+              }
+            }else{
+              xlimThis <- c(min(zData[iThis]) , max(zData[iThis]))
+            }
+          }else{
+            xlimThis <- xlim
+          }
+          if(xlimThis[1] == xlimThis[2]){ xlimThis[1] <- xlimThis[1] - 0.1 ; xlimThis[2] <- xlimThis[2] + 0.1 }else{}
+
           if(plotPreds){
-            plot(zPred[,iProfThis] , -rowMeans(dIPred) , xlim = xlim , ylim = ylim , type = 'l' , lwd = 2 , col = 'red' , 
+            plot(zPred[,iProfThis] , -rowMeans(dIPred) , xlim = xlimThis , ylim = ylim , type = 'l' , lwd = 2 , col = 'red' , 
               xlab = xlab , ylab = 'depth, m' , yaxt = 'n' , main = nameThis)
             if((!is.null(pi90LPred)) & (!is.null(pi90UPred))){
               lines(pi90LPred[,iProfThis] , -rowMeans(dIPred) , lty = 2 , lwd = 1 , col = 'red')
               lines(pi90UPred[,iProfThis] , -rowMeans(dIPred) , lty = 2 , lwd = 1 , col = 'red')
             }else{}
+            
+            if(!is.null(dIStd)){
+              for(j in 1:nrow(dIStd)){
+                lines(zStd[iProfThis,j] * c(1,1) , -dIStd[j,] , lty = 1 , lwd = 2 , col = 'green')
+                if((!is.null(pi90LStd)) & (!is.null(pi90UStd))){
+                  lines(pi90LStd[iProfThis,j] * c(1,1) , -dIStd[j,] , lty = 2 , lwd = 1 , col = 'green')
+                  lines(pi90UStd[iProfThis,j] * c(1,1) , -dIStd[j,] , lty = 2 , lwd = 1 , col = 'green')
+                }else{}
+              }
+            }else{}
           }else{
-            plot(c() , c() , xlim = xlim , ylim = ylim , xlab = 'z' , ylab = 'depth, m' , yaxt = 'n' , main = nameThis)
-          }      
-          iThis <- which((xData[,1] == xPred[iProfThis,1]) & (xData[,2] == xPred[iProfThis,2]))       
+            plot(c() , c() , xlim = xlimThis , ylim = ylim , xlab = 'z' , ylab = 'depth, m' , yaxt = 'n' , main = nameThis)
+          } 
+          
           for (j in 1:length(iThis)){
             lines(zData[iThis[j]] * c(1,1) , -dIData[iThis[j],] , lty = 1 , lwd = 3 , col = 'black')
-            if((length(zhatxv) >= iThis[j]) && (!is.na(zhatxv[iThis[j]]))){
+            if((!is.null(zhatxv)) && (length(zhatxv) >= iThis[j]) && (!is.na(zhatxv[iThis[j]]))){
               lines(zhatxv[iThis[j]] * c(1,1) , -dIData[iThis[j],] , lty = 1 , lwd = 2 , col = 'cyan')
               
               if((!is.null(pi90Lxv)) & (!is.null(pi90Uxv))){
