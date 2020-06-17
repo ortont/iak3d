@@ -5,21 +5,28 @@
 ####################################################################################
 mpspline.source <- function (dfHzns, ...) 
 {
-### dfHzns has ID, Eastings, Northings, dU, dL, z...
+### dfHzns has ID, dU, dL, z...
 ### final column is target variable z
     .local <- function (obj, var.name, lam = 0.1, d = t(c(0, 
         5, 15, 30, 60, 100, 200)), vlow = 0, vhigh = 1000, show.progress = TRUE) 
     {
         dfHzns <- dfHzns[(!(dfHzns$dU < 0) & !(dfHzns$dL < 0)),,drop=FALSE]
         objd <- dfHzns
-        if(ncol(dfHzns) > 6){ stop('dfHzns should have 6 cols, ID, Eastings, Northings, dU, dL, and target variable.') }else{}
-        var.name <- names(dfHzns)[ncol(dfHzns)]
+        if(ncol(dfHzns) > 4){ stop('dfHzns should have 4 cols, ID, dU, dL, and target variable called z.') }else{}
+        var.name = 'z'
+        if(!is.element('z' , names(dfHzns))){ stop('Error - for mpspline.source, dfHzns must have a column called z.') }else{}
         depthcols <- c('dU' , 'dL')
+        if((!is.element('dU' , names(dfHzns))) | (!is.element('dL' , names(dfHzns)))){ stop('Error - for mpspline.source, dfHzns must have columns called dU and dL.') }else{}
         idcol <- 'ID'
-        dfHznsTmp <- rmOverlapAll(dfHzns)
-        iTmp <- which(!duplicated(rbind(dfHznsTmp , dfHzns))[-seq(nrow(dfHznsTmp))])
-        dfHznsRmvd <- dfHzns[iTmp,c(idcol , depthcols , var.name)]
-        dfHzns <- dfHznsTmp[,c(idcol , depthcols , var.name)]
+        if(!is.element('ID' , names(dfHzns))){ stop('Error - for mpspline.source, dfHzns must have a column called ID.') }else{}
+
+        # dfHznsTmp <- rmOverlapAll(dfHzns)
+        # iTmp <- which(!duplicated(rbind(dfHznsTmp , dfHzns))[-seq(nrow(dfHznsTmp))])
+        # dfHznsRmvd <- dfHzns[iTmp,c(idcol , depthcols , var.name)]
+        # dfHzns <- dfHznsTmp[,c(idcol , depthcols , var.name)]
+
+### make sure order is ID, dU, dL, and target variable called z
+        dfHzns <- dfHzns[,c(idcol , depthcols , var.name)]
         
         IDU <- unique(dfHzns$ID)
         sel <- logical(length(IDU))
@@ -197,31 +204,21 @@ mpspline.source <- function (dfHzns, ...)
                     sset[st] <- tmse
                 }
             }
-            
-            # ### a bit to predict the hzns that were removed because of overlap
-            # ### should give some idea of measurement error.
-            #             if(is.element(subs$ID[1] , dfHznsRmvd$ID)){
-            #                 subsPred <- dfHznsRmvd[which(dfHznsRmvd$ID == subs$ID[1]),]
-            #                 m_fyfit <- 
-            #             }else{}
-            
-            
-            
-        }
+         }
         
-        ### a bit to predict the hzns that were removed because of overlap
-        ### should give some idea of measurement error.
-        if(nrow(dfHznsRmvd) > 0){
-            dfHznsRmvd$predicted <- NA
-            for(i in 1:nrow(dfHznsRmvd)){
-                iThis <- which(IDU == dfHznsRmvd$ID[i])
-                if(round(dfHznsRmvd$dL[i]) > ncol(m_fyfit)){
-                    dfHznsRmvd$predicted[i] <- NA
-                }else{
-                    dfHznsRmvd$predicted[i] <- mean(m_fyfit[iThis,seq(round(dfHznsRmvd$dU[i]) , round(dfHznsRmvd$dL[i]))] , na.rm = TRUE)
-                }
-            }
-        }else{}
+        # ### a bit to predict the hzns that were removed because of overlap
+        # ### should give some idea of measurement error.
+        # if(nrow(dfHznsRmvd) > 0){
+        #     dfHznsRmvd$predicted <- NA
+        #     for(i in 1:nrow(dfHznsRmvd)){
+        #         iThis <- which(IDU == dfHznsRmvd$ID[i])
+        #         if(round(dfHznsRmvd$dL[i]) > ncol(m_fyfit)){
+        #             dfHznsRmvd$predicted[i] <- NA
+        #         }else{
+        #             dfHznsRmvd$predicted[i] <- mean(m_fyfit[iThis,seq(round(dfHznsRmvd$dU[i]) , round(dfHznsRmvd$dL[i]))] , na.rm = TRUE)
+        #         }
+        #     }
+        # }else{}
 
         yave <- as.data.frame(yave)
         jmat <- matrix(NA, ncol = 1, nrow = length(d))
@@ -235,7 +232,7 @@ mpspline.source <- function (dfHzns, ...)
             names(yave)[jj] <- jmat[jj]
         }
         retval <- list(idcol = IDU, var.fitted = dave, 
-            var.std = yave, var.1cm = t(m_fyfit) , dfHznsRmvd = dfHznsRmvd)
+            var.std = yave, var.1cm = t(m_fyfit)) #  , dfHznsRmvd = dfHznsRmvd
 
         return(retval)
     }
@@ -252,66 +249,83 @@ mpspline.source <- function (dfHzns, ...)
 ###        but mpspline function uses cm.
 ###        Also, default for this fn is vlow = -1000, while default for mpspline.source fn is vlow = 0
 ##################################################
-harmonizeMPS <- function(xData , dIData , zData , dIStd , vlow = -1000 , vhigh = 1000 , overlapsByRegression = TRUE){
-  
+harmonizeMPS <- function(profIDData , dIData , zData , dIStd , vlow = -1000 , vhigh = 1000 , singlesByRegression = TRUE){
+
+    profIDData <- as.character(profIDData)
+
 ### only include where we have some data...
     iok <- which(!is.na(zData))
     if(length(iok) > 0){
-      xData <- xData[iok,,drop=FALSE]
+      profIDData <- profIDData[iok]
       dIData <- dIData[iok,,drop=FALSE]
       zData <- zData[iok]
     }else{
       stop('No data given to harmonizeMPS!')
     }
   
-    profIDData <- makeProfID(xData)
-    nProfs <- max(profIDData)
-    profEAS <- data.frame('ID' = profIDData , 'Eastings' = xData[,1]  , 'Northings' = xData[,2] , 
-                          'dU' = 100 * dIData[,1] , 'dL' = 100 * dIData[,2] , 'z' = zData) 
+    profEAS <- data.frame('ID' = profIDData , 'dU' = 100 * dIData[,1] , 'dL' = 100 * dIData[,2] , 'z' = zData) 
 
-    if(overlapsByRegression){
-      IDMT1 <- unique(profIDData[which(duplicated(profIDData))])
-      ID1 <- setdiff(seq(nProfs) , IDMT1)
-      IDOVLP <- unique(whichProfilesOverlap(profEAS)$ID) 
-      
-      iEAS <- which(!is.element(profIDData , c(ID1 , IDOVLP)))        
+    profEAS <- averageOverlapAll(profEAS , idVar = "ID")
+    
+    
+    if(singlesByRegression){
+      IDMT1 <- unique(profEAS$ID[which(duplicated(profEAS$ID))])
+      iEAS <- which(is.element(profEAS$ID , IDMT1))
     }else{
-      iEAS <- seq(length(zData))
+      iEAS <- seq(nrow(profEAS))
     }
 
-    maxd <- max(max(dIStd[,2]) , max(dIData[,2]))
+    maxdcm <- round(max(max(round(100*dIStd[,2])) , max(profEAS$dL)))
     
-    z.sEAS <- mpspline.source(dfHzns = profEAS[iEAS,,drop=FALSE] , lam = 0 , vlow = vlow , vhigh = vhigh , d = t(c(0,100*maxd)))
+    z.sEAS <- mpspline.source(dfHzns = profEAS[iEAS,,drop=FALSE] , lam = 0 , vlow = vlow , vhigh = vhigh , d = t(c(0,maxdcm)))
 
-    xDataH <- xData[!duplicated(profIDData),,drop=FALSE]
-    var.1cm <- matrix(NA , 100*maxd , nProfs)
+    profIDDataH <- unique(profEAS$ID)
+    nProfs <- length(profIDDataH)
+
+    ### re order var.1cm according to profIDDataH...    
+    var.1cm <- matrix(NA , maxdcm , nProfs)
     for(i in 1:length(z.sEAS$idcol)){
-        var.1cm[,z.sEAS$idcol[i]] <- z.sEAS$var.1cm[,i]
+        var.1cm[,which(profIDDataH == z.sEAS$idcol[i])] <- z.sEAS$var.1cm[,i]
     }
     remove(z.sEAS)
-
+    
+### all profiles that had spline fitted used more than 1 depth interval; 
+### for harmonizing, we will extend the prediction at deepest dL to cover the target depths
+### in future, could be worth looking at doind these by regression, using the splined average 
+### over the covered depths as single predictor.
+    
     hrmnzdData <- matrix(NA , nProfs , nrow(dIStd))
     for (i in 1:nrow(dIStd)){
-        hrmnzdData[,i] <- colSums(var.1cm[seq(round(dIStd[i,1]*100) + 1 , round(dIStd[i,2]*100)),,drop=FALSE]) / ((dIStd[i,2]-dIStd[i,1])*100)
+      ncmThis <- round((dIStd[i,2]-dIStd[i,1])*100)
+      zTmp <- var.1cm[seq(round(dIStd[i,1]*100) + 1 , round(dIStd[i,2]*100)),,drop=FALSE]
+### fill zTmp down if at least some values in a col of zTmp      
+      getLastElement <- function(xVec){ if(all(is.na(xVec))){ return(NA) }else{ xVec <- xVec[!is.na(xVec)] ; return(xVec[length(xVec)]) } }
+      zTmpFillVals = apply(zTmp , 2 , getLastElement)
+
+      fillNAs <- function(xVec , fillVal){ iTmp <- which(is.na(xVec)) ; if(length(iTmp) == 0){ return(xVec) }else{ xVec[iTmp] <- fillVal ; return(xVec) }  }
+      zTmp <- mapply(fillNAs , xVec = lapply(seq_len(ncol(zTmp)), function(i) zTmp[,i]) , fillVal = zTmpFillVals , SIMPLIFY = FALSE)
+      zTmp <- matrix(unlist(zTmp) , ncmThis , nProfs)
+      
+      hrmnzdData[,i] <- colSums(zTmp) / ncmThis
     }
     hrmnzdDataEAS <- !is.na(hrmnzdData) # TRUE where EAS fitted, FALSE will be a regression or missing
 
-    if(overlapsByRegression){
+    if(singlesByRegression){
       for(i in 1:nrow(hrmnzdData)){
-        iThis <- which(profIDData == i)
+        iThis <- which(profEAS$ID == profIDDataH[i])
         for(j in 1:ncol(hrmnzdData)){
             if(is.na(hrmnzdData[i,j])){
 ### what is missing?
-                dITarget <- dIStd[j,,drop=FALSE]
+                dITarget <- dIStd[j,,drop=FALSE] * 100 # this is now in cm
 ### what data do we have in this profile? 
-                dIDataThis <- dIData[iThis,,drop=FALSE]
-### use fitted splines where the target and data depths are covered to fit regression...
+                dIDataThis <- as.matrix(profEAS[iThis,c('dU','dL'),drop=FALSE]) # this is already in cm
+### use fitted splines where the target and data depths are fully covered to fit regression...
                 XDataThis <- matrix(1 , nProfs , length(iThis) + 1)
-                XPredThis <- matrix(c(1 , zData[iThis]) , 1 , length(iThis) + 1)
+                XPredThis <- matrix(c(1 , profEAS$z[iThis]) , 1 , length(iThis) + 1)
                 for(k in 1:length(iThis)){
-                    XDataThis[,k+1] <- colSums(var.1cm[seq(round(dIDataThis[k,1]*100) + 1 , round(dIDataThis[k,2]*100)),,drop=FALSE]) / ((dIDataThis[k,2]-dIDataThis[k,1])*100)
+                  XDataThis[,k+1] <- colSums(var.1cm[seq(round(dIDataThis[k,1]) + 1 , round(dIDataThis[k,2])),,drop=FALSE]) / (dIDataThis[k,2]-dIDataThis[k,1])
                 }
-                zDataThis <- colSums(var.1cm[seq(round(dITarget[1,1]*100) + 1 , round(dITarget[1,2]*100)),,drop=FALSE]) / ((dITarget[1,2]-dITarget[1,1])*100)
+                zDataThis <- colSums(var.1cm[seq(round(dITarget[1,1]) + 1 , round(dITarget[1,2])),,drop=FALSE]) / (dITarget[1,2]-dITarget[1,1])
 
 ### look for best regression here (fewer predictors could be more available data)
                 nVec <- vPredVec <- zPredVec <- NA * numeric(length(iThis))
@@ -344,7 +358,7 @@ harmonizeMPS <- function(xData , dIData , zData , dIStd , vlow = -1000 , vhigh =
     hrmnzdData[hrmnzdData < vlow] <- vlow
     hrmnzdData[hrmnzdData > vhigh] <- vhigh
     
-    return(list('xDataH' = xDataH , 'hrmnzdData' = hrmnzdData , 'hrmnzdDataEAS' = hrmnzdDataEAS))    
+    return(list('profIDDataH' = profIDDataH , 'hrmnzdData' = hrmnzdData , 'hrmnzdDataEAS' = hrmnzdDataEAS , 'var.1cm' = var.1cm))    
 }
 
 isOverlap <- function(profIn){
@@ -376,20 +390,19 @@ isOverlap <- function(profIn){
 }
 
 whichProfilesOverlap <- function(dfAll , idVar = 'ID'){
+  dfAll[[idVar]] <- as.character(dfAll[[idVar]])
+  idsProfs <- unique(dfAll[[idVar]])
   lProfs <- list()
-  cAll <- dfAll[,c('Eastings' , 'Northings')]
-  cAll <- cAll[which(!duplicated(cAll)),,drop=FALSE]
-  idsProfs <- NA * numeric(nrow(cAll))
-  for(i in 1:nrow(cAll)){
-    iThis <- which(dfAll$Eastings == cAll[i,1] & dfAll$Northings == cAll[i,2])
+  for(i in 1:length(idsProfs)){
+    iThis <- which(dfAll[[idVar]] == idsProfs[i])
     lProfs[[i]] <- dfAll[iThis,,drop=FALSE]
-    idsProfs[i] <- dfAll[[idVar]][iThis[1]]
   }
-  
+  ### something funny going on with large datasets here - seems to complete loop but hang. not sure why. works ok when entire fn is run.
+
   iOVLP <- which(unlist(lapply(lProfs , isOverlap)))
   if(length(iOVLP) > 0){
     idsOVLP <- idsProfs[iOVLP]
-    dfOVLP <- dfAll[which(is.element(dfAll[idVar] , idsOVLP)),,drop=FALSE]
+    dfOVLP <- dfAll[which(is.element(as.character(dfAll[[idVar]]) , idsOVLP)),,drop=FALSE]
   }else{
     dfOVLP <- dfAll[c(),,drop=FALSE]
   }
@@ -397,13 +410,15 @@ whichProfilesOverlap <- function(dfAll , idVar = 'ID'){
   return(dfOVLP)
 }
 
-rmOverlapAll <- function(dfIn){
+rmOverlapAll <- function(dfIn , idVar = 'ID'){
+  dfIn[[idVar]] <- as.character(dfIn[[idVar]])
+
+  idsProfs <- unique(dfIn[[idVar]])
   profList <- list()
-  cAll <- dfIn[,c('Eastings' , 'Northings')]
-  cU <- cAll[!duplicated(cAll),,drop=FALSE]
-  for(i in 1:nrow(cU)){
-    profList[[i]] <- dfIn[which(dfIn$Eastings == cU[i,1] & dfIn$Northings == cU[i,2]),,drop=FALSE]
+  for(i in 1:length(idsProfs)){
+    profList[[i]] <- dfIn[which(dfIn[[idVar]] == idsProfs[i]),,drop=FALSE]
   }
+  
   profListOut <- lapply(profList , rmOverlap)
   profListOut <- do.call(rbind.data.frame, profListOut)
   
@@ -448,5 +463,100 @@ rmOverlap <- function(profIn){
   }else{}
   
   return(profIn)
+}
+
+### averageOverlap for variable z in the input data.frame
+### other info (apart from depth) will be copied down the data.frame.
+### all depths will be rounded to 1 cm.
+averageOverlap <- function(profIn){
+  
+  profIn$dU <- round(profIn$dU , digits = 2)
+  profIn$dL <- round(profIn$dL , digits = 2)
+  
+  profIn <- profIn[order(profIn$dU),,drop=FALSE]
+  iOK <- which(((profIn$dL - profIn$dU) > 0) & (profIn$dU >= 0) & (profIn$dL > 0))
+  profIn <- profIn[iOK,,drop=FALSE]
+
+  if (nrow(profIn)> 1){
+    m1cm <- matrix(NA , round(max(profIn$dL) * 100) , nrow(profIn))
+    for(i in 1:nrow(profIn)){
+      m1cm[(round(100*profIn$dU[i])+1):round(100*profIn$dL[i]),i] <- profIn$z[i]
+    }
+    dUNew <- unique(c(profIn$dU, profIn$dL))
+    dUNew <- dUNew[order(dUNew)]
+    dLNew <- dUNew[-1]
+    dUNew <- dUNew[-length(dUNew)]
+
+    if(is.element('Observation_ID_LIST' , names(profIn))){
+      oidThis <- unique(unlist(strsplit(as.character(profIn$Observation_ID_LIST) , '_AND_')))    
+      profIn$Observation_ID_LIST <- paste(oidThis , collapse = '_AND_')
+    }else{}
+    
+### samples combined - just join all profile sample ids here, as difficult to properly keep track anymore
+    if(is.element('SampleID_LIST' , names(profIn))){
+      sidThis <- unique(unlist(strsplit(as.character(profIn$SampleID_LIST) , '_AND_')))    
+      profIn$SampleID_LIST <- paste(sidThis , collapse = '_AND_')
+    }else{}
+    
+    profOut <- profIn[rep(1 , length(dUNew)),,drop=FALSE]
+    profOut$dU <- dUNew
+    profOut$dL <- dLNew
+    rm(dUNew , dLNew)
+ 
+   if(is.element('dIMidPts' , names(profOut))){
+     profOut$dIMidPts <- 0.5 * (profOut$dL + profOut$dU)
+    }else{}
+    
+    profOut$z <- NA
+
+    for(i in 1:nrow(profOut)){
+      mThis <- m1cm[(round(100*profOut$dU[i])+1):round(100*profOut$dL[i]),,drop=FALSE]
+      if(!all(is.na(mThis))){
+        profOut$z[i] <- mean(mThis , na.rm = T)
+      }else{}
+    }
+    profOut <- profOut[which(!is.na(profOut$z)),,drop=FALSE]
+  }else{
+    profOut <- profIn
+  }
+
+  return(profOut)  
+}
+
+averageOverlapAll <- function(dfIn , idVar = 'ID'){
+### split into profiles that overlap and ones that don't...
+  dfIn[[idVar]] <- as.character(dfIn[[idVar]])
+
+  dfOVLP <- whichProfilesOverlap(dfIn , idVar = idVar)
+  if(nrow(dfOVLP) == 0){
+    ### no overlap, so return inputted df...
+    dfOut <- dfIn
+  }else{
+    ### start output with all profiles that didn't overlap...  
+    if(nrow(dfOVLP) == nrow(dfIn)){
+### every profile had overlap, so start with empty df...
+      dfOut <- dfIn[c(),,drop=FALSE] 
+    }else{
+      idTmpOVLP <- unique(dfOVLP[[idVar]])
+      iNoOvlp <- which(!is.element(dfIn[[idVar]] , idTmpOVLP))
+      dfOut <- dfIn[iNoOvlp,,drop=FALSE]
+    }
+    
+    idsU <- unique(dfOVLP[[idVar]])
+    profList <- list()
+    for(i in 1:length(idsU)){
+      profList[[i]] <- dfOVLP[which(dfOVLP[[idVar]] == idsU[i]),,drop=FALSE]
+    }
+
+    for(i in 1:length(profList)){
+      profListOut <- averageOverlap(profList[[i]])
+    }
+
+    profListOut <- lapply(profList , averageOverlap)
+    profListOut <- do.call(rbind.data.frame, profListOut)
+    dfOut <- rbind(dfOut , profListOut)
+  }  
+
+  return(dfOut)
 }
 
