@@ -650,18 +650,20 @@ iaCovDsc <- function(dIData , ad , nud , sdfdPars , sdfdType , dDsc , DdDsc , Kd
 ##################################################
 ### empirical horizontal variogram with hxBins (2 cols, lower and upper for each bin)...
 ##################################################
-varioCloud <- function(xData , zData , decl = 0){
+varioCloud <- function(xData , zData , sepDists = NULL , decl = 0){
   
-  sepDists <- xyDist(xData , xData)
+  if(is.null(sepDists)){ sepDists <- xyDist(xData , xData) }else{}
+  
   if(decl > 0){
     #    wData <- rowSums(sepDists < (max(sepDists)/50))
     wData <- rowSums(sepDists < decl)
     wData <- 1 / wData
     wData <- wData / sum(wData)
+    ww <- matrix(wData , ncol = 1) %*% matrix(wData , nrow = 1)
   }else{
-    wData <- rep(1 / nrow(xData) , nrow(xData))
+    # wData <- rep(1 / nrow(xData) , nrow(xData))
+    # ww <- matrix(wData , ncol = 1) %*% matrix(wData , nrow = 1)
   }
-  ww <- matrix(wData , ncol = 1) %*% matrix(wData , nrow = 1)
   
   semivar <- 0.5 * (xyDist(zData , zData) ^ 2)
   
@@ -671,18 +673,23 @@ varioCloud <- function(xData , zData , decl = 0){
   ijTmp <- ijTmp[which(ijTmp[,2] > ijTmp[,1]),]
   sepDists <- sepDists[ijTmp]
   semivar <- semivar[ijTmp]
-  ww <- ww[ijTmp]
+  if(decl > 0){
+    ww <- ww[ijTmp]
+  }else{}
   
   iGT0 <- which(sepDists > 0)
   sepDists <- sepDists[iGT0]
   semivar <- semivar[iGT0] 
-  ww <- ww[iGT0]
-  
+  if(decl > 0){
+    ww <- ww[iGT0]
+  }else{
+    ww <- rep(1 / (nrow(xData) ^ 2) , length(semivar))
+  }
   return(list('sepDists' = sepDists , 'semivar' = semivar , 'ww' = ww))
 }
 
-vario <- function(hxBins , xData , zData , decl = 0){
-  vTmp <- varioCloud(xData = xData , zData = zData , decl = decl)
+vario <- function(hxBins , xData , zData , sepDists = NULL , decl = 0){
+  vTmp <- varioCloud(xData = xData , zData = zData , sepDists = sepDists , decl = decl)
   
   vgm <- hxAv <- nAv <- NA * hxBins[,1]
   for(ihx in 1:nrow(hxBins)){
