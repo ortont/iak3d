@@ -652,6 +652,7 @@ plotProfilesIAK3D <- function(namePlot = 'profilePlots.pdf' , xData , dIData , z
     if(is.null(xlim)){
       rangez <- max(zData) - min(zData)
       xlim <- c(min(zData) - 0.01 * rangez , max(zData) + 0.01 * rangez)
+      if(xlim[2] - xlim[1] < 0.1){ xlim <- c(xlim[1] - 0.1 , xlim[2] + 0.1) }else{} 
     }else{}
     if(is.null(xlab)){
       xlab <- 'z'
@@ -661,6 +662,7 @@ plotProfilesIAK3D <- function(namePlot = 'profilePlots.pdf' , xData , dIData , z
     if(!is.null(zPredDistant)){
       if(is.character(xlim) && xlim == 'flex'){
         xlimThis <- c(min(c(zData,zPredDistant)) , max(c(zData,zPredDistant)))
+        if(xlimThis[2] - xlimThis[1] < 0.1){ xlimThis <- c(xlimThis[1] - 0.1 , xlimThis[2] + 0.1) }else{} 
       }else{
         xlimThis <- xlim
       }
@@ -711,7 +713,7 @@ plotProfilesIAK3D <- function(namePlot = 'profilePlots.pdf' , xData , dIData , z
           }else{
             xlimThis <- xlim
           }
-          if(xlimThis[1] == xlimThis[2]){ xlimThis[1] <- xlimThis[1] - 0.1 ; xlimThis[2] <- xlimThis[2] + 0.1 }else{}
+          if(xlimThis[2] - xlimThis[1] < 0.1){ xlimThis[1] <- xlimThis[1] - 0.1 ; xlimThis[2] <- xlimThis[2] + 0.1 }else{}
 
           if(plotPreds){
             plot(zPred[,iProfThis] , -rowMeans(dIPred) , xlim = xlimThis , ylim = ylim , type = 'l' , lwd = 2 , col = 'red' , 
