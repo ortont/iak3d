@@ -54,7 +54,7 @@ selectCovIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx ,
       lmm.fit.Selectnud <- list()
       for (i in 1:3){
         print(paste0('nud = ' , nudVec[i] , ', sdfdType_cd1 = ' , sdfdTypeANDcmeOpt[1] , ', sdfdType_cxd0 = ' , sdfdTypeANDcmeOpt[2] , 
-                     ', sdfdType_wacxd1 = ' , sdfdTypeANDcmeOpt[3] , ', cmeOpt = ' , sdfdTypeANDcmeOpt[4] , '...'))
+                     ', sdfdType_cxd1 = ' , sdfdTypeANDcmeOpt[3] , ', cmeOpt = ' , sdfdTypeANDcmeOpt[4] , '...'))
         
         namePlot <- paste0(dirPlot , '/lmm.fit.Selectnud' , floor(nudVec[i]) , '.pdf')
         lmm.fit.Selectnud[[i]] <- fitIAK3D(xData = xData , dIData = dIData , zData = zData , covsData = covsData , modelX = modelX , modelx = modelx , nud = nudVec[i] , allKnotsd = allKnotsd ,
