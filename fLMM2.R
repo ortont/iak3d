@@ -1,35 +1,54 @@
-fitLMM2 <- function(pars , c , z , X , D , covModel , nSpatStructs , returnAll , optionML , verbose , forCompLik = FALSE , mina = NULL , maxa = NULL , badNll = 9E99){
+fitLMM2 <- function(c , z , X , covModel = 'exponential' , nSpatStructs = 1 , optionML = F , verbose = FALSE , mina = NULL , maxa = NULL , parsInit = NULL , attachBigMats = TRUE){
 
-  DFit <- xyDist(cTmp[iFit,] , cTmp[iFit,])
+  ina <- which(is.na(z))
+  if(length(ina) > 0){
+    c <- c[-ina,,drop=FALSE]
+    z <- z[-ina]
+    X <- X[-ina,,drop=FALSE]
+  }else{}
+  
+  D <- xyDist(c , c)
 
-  useML <- FALSE
 ### note parameterisation in fLMM2 fn for exp model is with a = range (not 3a = range)
-  mina <- min(DFit[DFit > 0])
-  maxa <- max(DFit) / 2
+  if(is.null(mina)){ mina <- min(D[D > 0]) }else{}
+  if(is.null(maxa)){ maxa <- max(D) / 2 }else{}
 
-  parInit <- c(0.3 , 1 , 0.3 , 50)
-
-#fLMM2 <- function(pars , c , z , X , D , covModel , nSpatStructs , returnAll , optionML , verbose , forCompLik = FALSE , mina = NULL , maxa = NULL , badNll = 9E99){
-
-  ftLMM2Init <- fLMM2(pars = parInit , c = cTmp[iFit,] , z = yTmp[iFit] , X = XFit , D = DFit , 
-                    covModel = 'exponential' , nSpatStructs = 2 , returnAll = FALSE , optionML = useML , 
+  if(is.null(parsInit)){
+    if(nSpatStructs == 1){
+      parsInit <- c(0.6 , 0.5 * mina + 0.5 * maxa)
+    }else if(nSpatStructs == 2){
+      parsInit <- c(0.3 , 0.9 * mina + 0.1 * maxa , 0.3 , 0.3 * mina + 0.7 * maxa)
+    }else{
+      stop('Error - generalise fitLMM2 for other values of nSpatStructs!')
+    }
+  }else{}
+  
+#####################################################    
+### run to get initial lik val...
+#####################################################    
+  ftLMM2Init <- fLMM2(pars = parsInit , c = c , z = z , X = X , D = D , 
+                    covModel = covModel , nSpatStructs = nSpatStructs , returnAll = FALSE , optionML = optionML , 
                     verbose = TRUE , forCompLik = FALSE , mina = mina , maxa = maxa)
-    
-#  badNll <- ftLMM2Init + 100
-#  
-#  print(badNll)
-    
+
 #####################################################    
 ### fit model with temporal correlation accounted for...
 #####################################################    
-  tmp <- optimIt(par = parInit , fn = fLMM2 , methodOptim = c('Nelder-Mead') , c = cTmp[iFit,] , z = yTmp[iFit] , X = XFit , D = DFit ,
-               covModel = 'exponential' , nSpatStructs = 2 , returnAll = FALSE , optionML = useML , 
-               verbose = TRUE , forCompLik = FALSE , mina = mina , maxa = maxa , badNll = badNll)
+  badNll <- 9E99
+  tmp <- optimIt(par = parsInit , fn = fLMM2 , methodOptim = c('Nelder-Mead') , c = c , z = z , X = X , D = D ,
+               covModel = covModel , nSpatStructs = nSpatStructs , returnAll = FALSE , optionML = optionML , 
+               verbose = verbose , forCompLik = FALSE , mina = mina , maxa = maxa , badNll = badNll)
 
-  return(parFit)
+#####################################################    
+### run again to get final lik val + other info...
+#####################################################    
+  ftLMM2Fit <- fLMM2(pars = tmp$par , c = c , z = z , X = X , D = D , 
+                      covModel = covModel , nSpatStructs = nSpatStructs , returnAll = TRUE , optionML = optionML , 
+                      verbose = TRUE , forCompLik = FALSE , mina = mina , maxa = maxa , attachBigMats = attachBigMats)
+  
+  return(ftLMM2Fit)
 }
 
-fLMM2 <- function(pars , c , z , X , D , covModel , nSpatStructs , returnAll , optionML , verbose , forCompLik = FALSE , mina = NULL , maxa = NULL , badNll = 9E99){
+fLMM2 <- function(pars , c , z , X , D , covModel , nSpatStructs , returnAll , optionML , verbose , forCompLik = FALSE , mina = NULL , maxa = NULL , badNll = 9E99 , attachBigMats = TRUE){
     N <- length(z)
     np <- dim(X)[2]
 
@@ -47,7 +66,7 @@ fLMM2 <- function(pars , c , z , X , D , covModel , nSpatStructs , returnAll , o
 ### if nSpatStructs = 1...s,a
 ### if nSpatStructs = 2, will be ...s1,a1,s2,a2
     if (nSpatStructs == 1){
-        s1 <- pars[1] ; a1 <- pars[2] ; s2 <- 0 ; a2 <- NA ; s0 <- 1 - s1
+        s1 <- pars[1] ; a1 <- pars[2] ; s2 <- 0 ; a2 <- a1 ; s0 <- 1 - s1
         if((s1 < 0) | (s1 > 1) | (a1 < mina) | (a1 > maxa)){ paramsOK <- F }else{ paramsOK = T } 
     }else{
         s1 <- pars[1] ; a1 <- pars[2]; s2 <- pars[3] ; a2 <- pars[4] ; s0 <- 1 - (s1 + s2)
@@ -83,30 +102,16 @@ fLMM2 <- function(pars , c , z , X , D , covModel , nSpatStructs , returnAll , o
 
         # return(list(C,oneszX))
         
-        # tmp <- lndetANDinvCb(C , oneszX)
-        # 
-        # if(returnAll){ cholA <- tmp$cholC }else{}
-        # 
-        # lndetC <- tmp$lndetC
-        # if(is.na(lndetC)){             
-        #     printNll(nll = NA , parsOut = parsOut , verbose = verbose)
-        #     return(listOut) 
-        # }else{}
+        tmp <- lndetANDinvCb(C , oneszX)
+         
+        if(returnAll){ cholA <- chol(C) }else{}
+        lndetC <- tmp$lndetC
+        if(is.na(lndetC)){             
+            printNll(nll = NA , parsOut = parsOut , verbose = verbose)
+            return(listOut) 
+        }else{}
+        iConeszX <- tmp$invCb
 
-        iConeszX <- try(solve(C , oneszX) , silent = TRUE)
-        if(is.character(iConeszX)){
-          printNll(nll = NA , parsOut = parsOut , verbose = verbose)
-          return(listOut) 
-        }else{}
-        if(returnAll){ cholA <- try(chol(C) , silent = TRUE) }else{}
-        
-        lndetC <- determinant(C)
-        if(lndetC$sign <= 0){             
-          printNll(nll = NA , parsOut = parsOut , verbose = verbose)
-          return(listOut) 
-        }else{}
-        lndetC <- as.numeric(lndetC$modulus)
-        
         oneszXinvConeszX <- t(oneszX) %*% iConeszX
         
         onesinvCones <- oneszXinvConeszX[1,1 , drop = FALSE]
@@ -130,26 +135,13 @@ fLMM2 <- function(pars , c , z , X , D , covModel , nSpatStructs , returnAll , o
             }
         }else{}
         
-        # tmp <- lndetANDinvCb(XinvCX , t(zinvCX))
-        # lndetXinvCX <- tmp$lndetC
-        # if(is.na(lndetXinvCX)){     
-        #   printNll(nll = NA , parsOut = parsOut , verbose = verbose)
-        #   return(listOut) 
-        # }else{}
-        # betahat <- tmp$invCb
-        
-        betahat <- try(solve(XinvCX , t(zinvCX)) , silent = TRUE)
-        if(is.character(betahat)){     
+        tmp <- lndetANDinvCb(XinvCX , t(zinvCX))
+        lndetXinvCX <- tmp$lndetC
+        if(is.na(lndetXinvCX)){     
           printNll(nll = NA , parsOut = parsOut , verbose = verbose)
           return(listOut) 
         }else{}
-        lndetXinvCX <- determinant(XinvCX)
-        if(lndetXinvCX$sign <= 0){             
-          printNll(nll = NA , parsOut = parsOut , verbose = verbose)
-          return(listOut) 
-        }else{}
-        lndetXinvCX <- as.numeric(lndetXinvCX$modulus)
-        
+        betahat <- tmp$invCb
         
         resiCres <- as.numeric(zinvCz - 2 * zinvCX %*% betahat + t(betahat) %*% XinvCX %*% betahat)
         
@@ -162,7 +154,12 @@ fLMM2 <- function(pars , c , z , X , D , covModel , nSpatStructs , returnAll , o
             lndetXinvCX <- lndetXinvCX - np * log(sigma2hat)
         }        
 
-        if(returnAll){ vbetahat <- sigma2hat * chol2inv(chol(XinvCX)) }else{}
+        if(returnAll){ 
+          XiAX <- XinvCX
+          XiAz <- t(zinvCX)
+          ziAz <- zinvCz
+          vbetahat <- sigma2hat * chol2inv(chol(XinvCX)) 
+        }else{}
         lndetC <- lndetC + N * log(sigma2hat)
         resiCres <- resiCres / sigma2hat
         
@@ -177,10 +174,18 @@ fLMM2 <- function(pars , c , z , X , D , covModel , nSpatStructs , returnAll , o
     if(is.na(nll)){ nll <- badNll }else{}
 
     if(returnAll){
+      covParams4Kriging <- c((1 - s1) * sigma2hat , s1 * sigma2hat , a1 , s2 * sigma2hat , a2)
+      if(attachBigMats){
         C <- sigma2hat * C    
-        covParams4Kriging <- c((1 - s1) * sigma2hat , s1 * sigma2hat , a1 , s2 * sigma2hat , a2)
         iC <- chol2inv(cholA) / sigma2hat
-        return(list('nll' = nll , 'sigma2hat' = sigma2hat , 'betahat' = betahat , 'vbetahat' = vbetahat , 'pars' = pars , 'covParams4Kriging' = covParams4Kriging , 'C' = C , 'iC' = iC))
+        return(list('nll' = nll , 'sigma2hat' = sigma2hat , 'betahat' = betahat , 'vbetahat' = vbetahat , 'pars' = pars , 
+                    'covModel' = covModel , 'covParams4Kriging' = covParams4Kriging , 'nSpatStructs' = nSpatStructs , 
+                    'C' = C , 'iC' = iC , 'XiAX' = XiAX , 'XiAz' = XiAz , 'ziAz' = ziAz))
+      }else{
+        return(list('nll' = nll , 'sigma2hat' = sigma2hat , 'betahat' = betahat , 'vbetahat' = vbetahat , 'pars' = pars , 
+                    'covModel' = covModel , 'covParams4Kriging' = covParams4Kriging , 'nSpatStructs' = nSpatStructs , 
+                    'XiAX' = XiAX , 'XiAz' = XiAz , 'ziAz' = ziAz))
+      }
     }else{             
         return(nll)
     }
@@ -337,7 +342,7 @@ compLikLMM2 <- function(pars , c , z , X , DBlocks , blocks , nBlocks1 = length(
         }
             
         if(returnAll){
-            vbetahat <- sigma2hat * chol2inv(tmp$cholC) 
+            vbetahat <- sigma2hat * solve(sumXiAX) 
             iCz <- iCz / sigma2hat
 
             iCres <- NA * iCz
@@ -382,7 +387,7 @@ compLikLMM2 <- function(pars , c , z , X , DBlocks , blocks , nBlocks1 = length(
 }    
 
 
-krigingLMM2 <- function(ck , Xk , c , z , X , D , covModel , nSpatStructs , covParams , betahat , predVarsRqd , fullCovMtx = FALSE){
+krigingLMM2 <- function(ck , Xk , c , z , X , D , covModel , nSpatStructs , covParams , betahat , predVarsRqd , fullCovMtx = FALSE , blockLength = 0){
 
     ndimc <- ncol(c)
     nk <- nrow(ck)
@@ -391,13 +396,29 @@ krigingLMM2 <- function(ck , Xk , c , z , X , D , covModel , nSpatStructs , covP
       nk <- length(ck)
     }else{}
     
+    ### prediction block centred at 0,0
+    if(blockLength > 0){
+      if(ncol(Xk) > 1){ stop('Generalise this bit of krigingLMM2 for block kriging with trend!') }else{}
+      if(ndimc>2){ stop('Generalise this bit of krigingLMM2 for 3d blocks!') }else{}
+      xBlock0 <- seq(0,blockLength,length=5)
+      if(ndimc == 1){
+        xBlock0 <- matrix(xBlock0 , ncol = 1)
+      }else if(ndimc == 2){
+        xBlock0 <- cbind(rep(xBlock0 , each = length(xBlock0)) , rep(xBlock0 , length(xBlock0)))
+      }else{}
+      xBlock0 <- xBlock0 - blockLength / 2
+    }else{
+      xBlock0 <- matrix(0 , 1 , ndimc)
+    }
+    nkPerBlock <- nrow(xBlock0)
+    
     N <- length(z)
     np <- ncol(X)
     if(is.null(np)){ np <- 1 }else{}
     
     c0 <- covParams[1] ; c1 <- covParams[2] ; a1 <- covParams[3] ; 
     if (nSpatStructs == 1){
-        c2 <- 0 ; a2 <- NA
+        c2 <- 0 ; a2 <- a1
     }else{
         c2 <- covParams[4] ; a2 <- covParams[5]
     }
@@ -419,20 +440,26 @@ krigingLMM2 <- function(ck , Xk , c , z , X , D , covModel , nSpatStructs , covP
     invCz <- tmp$invCb[,1 , drop = FALSE]
     invCX <- tmp$invCb[,2:(1+np) , drop = FALSE]
       
-    invC <- chol2inv(tmp$cholC)
+    # invC <- chol2inv(tmp$cholC)
+    invC <- solve(C)
     invCRes <- invCz - invCX %*% betahat    
         
     XinvCX <- t(X) %*% invCX
     invXinvCX <- solve(XinvCX)
         
-	nPerBlock <- 5000
-    nBlocks <- ceiling(nk / nPerBlock)
+    if(blockLength == 0){
+      nPerChunk <- 5000
+      nChunks <- ceiling(nk / nPerChunk)
+    }else{
+      nPerChunk <- 1
+      nChunks <- nk
+    }
 
     pred <- matrix(NA,nk,1)
     predVars <- matrix(NA,nk,1)
 
     if(fullCovMtx){ 
-        if(nBlocks > 1){
+        if(nChunks > 1){
             stop('Returning full prediction covariance matrix only possible if less than 5000 prediction locations given!')
         }else{}
         predVars <- matrix(NA,nk,nk)
@@ -441,44 +468,68 @@ krigingLMM2 <- function(ck , Xk , c , z , X , D , covModel , nSpatStructs , covP
 ###############################################
 ### for each chunk...
 ###############################################
-	for (iBlock in 1:nBlocks){
+	for (iChunk in 1:nChunks){
     
-        print(paste0(iBlock , ' of ' , nBlocks))
-        
-		if (iBlock < nBlocks){
-			ikThis <- seq( (iBlock - 1) * nPerBlock + 1 , iBlock * nPerBlock)	
+	  if(is.element(iChunk , round(quantile(seq(nChunks) , seq(0.05 , 0.95 , 0.05))))){ print(paste0(iChunk , ' of ' , nChunks)) }else{}
+
+		if (iChunk < nChunks){
+			ikThis <- seq( (iChunk - 1) * nPerChunk + 1 , iChunk * nPerChunk)	
 		}else{
-			ikThis <- seq( (iBlock - 1) * nPerBlock + 1 , nk)
+			ikThis <- seq( (iChunk - 1) * nPerChunk + 1 , nk)
 		}
-        nkThis <- length(ikThis)
-        if(ndimc == 1){
-          ckThis <- ck[ikThis]
-        }else{
-          ckThis <- ck[ikThis,  , drop = FALSE]
-        }
-
-   		Dkh <- rdist(ckThis,c)
-        Ckh <- defineCLMM2(c0 = c0 , c1 = c1 , a1 = a1 , c2 = c2 , a2 = a2 , D = Dkh , covModel = covModel , nSpatStructs = nSpatStructs)
-
-        pred[ikThis] <- Xk[ikThis, , drop = FALSE] %*% betahat + Ckh %*% invCRes
-### also calculate the prediction variances; but only if rqd...
-        if(predVarsRqd){
-            if(fullCovMtx){
-   		        Dk <- rdist(ckThis,ckThis)
-                Ck <- defineCLMM2(c0 = c0 , c1 = c1 , a1 = a1 , c2 = c2 , a2 = a2 , D = Dk , covModel = covModel , nSpatStructs = nSpatStructs)
-                Xk_CkhiChXh <- Xk[ikThis,] - Ckh %*% invCX
-                varTrend <- (Xk_CkhiChXh %*% invXinvCX) %*% t(Xk_CkhiChXh)
-                predVars[ikThis,ikThis] <- Ck - (Ckh %*% invC) %*% t(Ckh) + varTrend
-            }else{
-                Ck <- c0 + c1 + c2
-                Xk_CkhiChXh <- Xk[ikThis,] - Ckh %*% invCX
-                varTrend <- rowSums((Xk_CkhiChXh %*% invXinvCX) * Xk_CkhiChXh)
-                predVars[ikThis] <- Ck - rowSums((Ckh %*% invC) * Ckh) + varTrend
-            }
-        }
-    } 
+    nkThis <- length(ikThis)
     
-    return(list('pred' = pred , 'predVars' = predVars))
+    if(ndimc == 1){
+      ckThis <- ck[ikThis]
+    }else{
+      ckThis <- ck[ikThis,  , drop = FALSE]
+    }
+
+    if(blockLength > 0){
+      if(ndimc == 1){
+        ckThis <- ckThis + xBlock0
+      }else{
+        ckTmp <- xBlock0
+        for(j in 1:ndimc){
+          ckTmp[,j] <- ckTmp[,j] + ckThis[1,j]
+        }
+        ckThis <- ckTmp 
+        rm(ckTmp)
+      }
+    }else{}
+
+ 		Dkh <- rdist(ckThis,c)
+    Ckh <- defineCLMM2(c0 = c0 , c1 = c1 , a1 = a1 , c2 = c2 , a2 = a2 , D = Dkh , covModel = covModel , nSpatStructs = nSpatStructs)
+
+    if(blockLength == 0){
+      pred[ikThis] <- Xk[ikThis, , drop = FALSE] %*% betahat + Ckh %*% invCRes
+    }else{
+### needs to be generalised in trend is not a const mean.      
+      pred[ikThis] <- Xk[ikThis, , drop = FALSE] %*% betahat + mean(Ckh %*% invCRes)
+    }
+    
+### also calculate the prediction variances; but only if rqd...
+    if(predVarsRqd){
+      if(fullCovMtx | (blockLength > 0)){
+        Dk <- rdist(ckThis,ckThis)
+        Ck <- defineCLMM2(c0 = c0 , c1 = c1 , a1 = a1 , c2 = c2 , a2 = a2 , D = Dk , covModel = covModel , nSpatStructs = nSpatStructs)
+        Xk_CkhiChXh <- Xk[ikThis,] - Ckh %*% invCX
+        varTrend <- (Xk_CkhiChXh %*% invXinvCX) %*% t(Xk_CkhiChXh)
+        if(blockLength == 0){
+          predVars[ikThis,ikThis] <- Ck - (Ckh %*% invC) %*% t(Ckh) + varTrend
+        }else{
+          predVars[ikThis] <- mean(Ck - (Ckh %*% invC) %*% t(Ckh) + varTrend)
+        }
+      }else{
+        Ck <- c0 + c1 + c2
+        Xk_CkhiChXh <- Xk[ikThis,] - Ckh %*% invCX
+        varTrend <- rowSums((Xk_CkhiChXh %*% invXinvCX) * Xk_CkhiChXh)
+        predVars[ikThis] <- Ck - rowSums((Ckh %*% invC) * Ckh) + varTrend
+      }
+    }
+  } 
+    
+  return(list('pred' = pred , 'predVars' = predVars))
 }
 
 ###################################################################
@@ -812,10 +863,15 @@ compLikXVLMM2.Subsets <- function(c , z , X , blocks , iCBlocks , nBlocks1 = len
           tmp1 <- lndetANDinvCb(vkFull[[1]] , zkFull[,1])
           tmp2 <- lndetANDinvCb(vkFull[[2]] , zkFull[,2])
 
-          tmp3 <- lndetANDinvCb(chol2inv(tmp1$cholC) + chol2inv(tmp2$cholC) , tmp1$invCb +tmp2$invCb)
+#          tmp3 <- lndetANDinvCb(chol2inv(tmp1$cholC) + chol2inv(tmp2$cholC) , tmp1$invCb +tmp2$invCb)
+### no longer returning also cholC, so:
+          m3Tmp <- chol2inv(chol(vkFull[[1]])) + chol2inv(chol(vkFull[[2]]))
+          tmp3 <- lndetANDinvCb(m3Tmp , tmp1$invCb +tmp2$invCb)
 
           zkFull <- tmp3$invCb
-          vkFull <- nLevels * chol2inv(tmp3$cholC) # because based on likelihood for two copies of data
+#          vkFull <- nLevels * chol2inv(tmp3$cholC) # because based on likelihood for two copies of data
+### no longer returning also cholC, so:
+          vkFull <- nLevels * chol2inv(chol(m3Tmp)) # because based on likelihood for two copies of data
         
 ### alt - which level gave block with the best coverage of prediction block?
           n0.L1 <- length(which(vkFullFinal.AllLevels[[1]] == 0))
@@ -964,8 +1020,8 @@ defineCLMM2 <- function(c0 , c1 , a1 , c2 , a2 , D , covModel , nSpatStructs){
 ### sensible in future to align all parameterizations (st a is effective range)
 ### although if using in iak work, attention that iaCov functions are based on the distance (not eff range) parameterization
         nu <- as.numeric(substr(covModel , 7 , nchar(covModel)))
-        C <-  c0 * (D == 0) + c1 * maternCov(D = D , pars = c(1 , a1 , nu)) 
-        if(nSpatStructs == 2){ C <- C + c2 * maternCov(D = D , pars = c(1 , a2 , nu)) }else{}
+        C <-  c0 * (D == 0) + c1 * maternCov4fLMM2(D = D , pars = c(1 , a1 , nu)) 
+        if(nSpatStructs == 2){ C <- C + c2 * maternCov4fLMM2(D = D , pars = c(1 , a2 , nu)) }else{}
 
     }else{}
 
@@ -1021,7 +1077,7 @@ checkBlocks <- function(blocks , nBlocks1 , n){
 ##################################################################
 ### the matern covariance function...
 ##################################################################
-maternCov <- function(D , pars){
+maternCov4fLMM2 <- function(D , pars){
 	c1 <- pars[1]
 	a <- pars[2]
 	nu <- pars[3]
