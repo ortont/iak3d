@@ -20,7 +20,7 @@ mapNow <- FALSE
 ##############################################################
 library(sp)
 library(raster)
-# rasterOptions(tmpdir="/scratch/tmp/")
+if(Sys.info()[1] != 'Windows'){ rasterOptions(tmpdir="/scratch/tmp/") }else{}
 library(rgdal)
 library(Cubist)
 library(mgcv)
@@ -36,15 +36,20 @@ library(GSIF)
 library(ithir)
 library(parallel)
 
-# wDir <- '/export/home/ortont/scripts/'
-# iakDir <- '/export/home/ortont/scripts/iakTests'
-# lmm2Dir <- '/export/home/ortont/scripts/fLMM2'
-# dataDir <- '/scratch/rsc6/ortont/Data/soilConstraints2/soilData/ecMap2000s'
+# GSIF              NA                                                         "GPL"                                    NA              NA                    NA        NA     "no"             "3.6.1"
+# ithir             NA                                                         "GPL-2"                          NA              NA                    NA        NA     "no"             "3.6.1"
 
-wDir <- 'U://scripts/'
-iakDir <- 'U://scripts/iakTests'
-lmm2Dir <- 'U://scripts/fLMM2'
-dataDir <- 'Z://ortont/Data/edgeroiEg'
+if(Sys.info()[1] == 'Windows'){
+  wDir <- 'U://scripts/'
+  iakDir <- 'U://scripts/iakTests'
+  lmm2Dir <- 'U://scripts/fLMM2'
+  dataDir <- 'Z://ortont/Data/edgeroiEg'
+}else{
+  wDir <- '/export/home/ortont/scripts/'
+  iakDir <- '/export/home/ortont/scripts/iakTests'
+  lmm2Dir <- '/export/home/ortont/scripts/fLMM2'
+  dataDir <- '/scratch/rsc2/ortont/Data/soilConstraints2/soilData/ecMap2000s'
+}
 
 setwd(wDir)
 source(paste0(iakDir , '/fitIAK3D.R'))
@@ -109,16 +114,16 @@ testCL <- FALSE # use the composite likelihood approximation (to speed up for bi
 ### load the edgeroi dataset (from GSIF package) and put into format for iak3d...
 ##############################################
 tmp <- getEdgeroiData()
-cFit <- tmp$cFit 
-dIFit <- tmp$dIFit 
-covsFit <- tmp$covsFit 
-zFit <- tmp$zFit 
-profIDFit <- tmp$profIDFit 
+cFit <- tmp$cFit
+dIFit <- tmp$dIFit
+covsFit <- tmp$covsFit
+zFit <- tmp$zFit
+profIDFit <- tmp$profIDFit
 
-cVal <- tmp$cVal 
-dIVal <- tmp$dIVal 
-covsVal <- tmp$covsVal 
-zVal <- tmp$zVal 
+cVal <- tmp$cVal
+dIVal <- tmp$dIVal
+covsVal <- tmp$covsVal
+zVal <- tmp$zVal
 profIDVal <- tmp$profIDVal
 
 rList <- tmp$rList
@@ -224,7 +229,7 @@ if(fitModelNow){
 ### some plots of the fitted covariance model...
 ###########################################################################
 if(plotVargiogramFit){
-  dIPlot <- data.frame('dU' = c(0 , 20 , 50 , 90)/100 , 'dL' = c(10 , 30 , 60 , 100)/100)
+  dIPlot <- data.frame('dU' = c(0 , 20 , 50 , 90 , 150 , 190)/100 , 'dL' = c(10 , 30 , 60 , 100 , 160 , 200)/100)
   hx <- seq(0 , 20 , 1)
   pdf(file = paste0(dataDir , '/varioFit.pdf'))
   tmp <- plotCovx(lmm.fit = lmm.fit.selected , hx = hx , dIPlot = dIPlot , addExpmntlV = TRUE , hzntlUnits = 'km')
