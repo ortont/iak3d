@@ -2,6 +2,10 @@ fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'mate
                 sdfdType_cd1 = 0 , sdfdType_cxd0 = 0 , sdfdType_cxd1 = 0 , cmeOpt = 0 , prodSum = TRUE , 
                 lnTfmdData = FALSE , useReml = TRUE , compLikMats = list('compLikOptn' = 0) , namePlot = NA , lmmFit = list() , rqrBTfmdPreds = TRUE , parsInit = NULL , attachBigMats = TRUE , testMC = TRUE){
 
+  
+  # if(!identical(class(xData) , 'matrix')){ stop('Stopping - for fitIAKD3D function, enter xData as a matrix') }else{}
+  # if(!identical(class(dIData) , 'matrix')){ stop('Stopping - for fitIAKD3D function, enter dIData as a matrix with 2 columns') }else{}
+  
 ########################################################
 ### if xData or dIData were dataframes, convert to matrices here.
 ### and make sure all are numeric...
@@ -429,6 +433,7 @@ nllIAK3D <- function(pars , zData , XData , vXU , iU , modelx , nud ,
     if(any(is.na(c(parsBTfmd$sdfdPars_cd1,parsBTfmd$sdfdPars_cxd0,parsBTfmd$sdfdPars_cxd1))) || 
        any(is.nan(c(parsBTfmd$sdfdPars_cd1,parsBTfmd$sdfdPars_cxd0,parsBTfmd$sdfdPars_cxd1))) ||
        any(is.infinite(c(parsBTfmd$sdfdPars_cd1,parsBTfmd$sdfdPars_cxd0,parsBTfmd$sdfdPars_cxd1)))){
+      
       parsOK <- FALSE
       A <- NA
       sigma2Vec <- NA
@@ -436,6 +441,7 @@ nllIAK3D <- function(pars , zData , XData , vXU , iU , modelx , nud ,
       if(is.null(p)){ p <- 1 }else{}
       
     }else{
+      
       tmp <- setCIAK3D(parsBTfmd = parsBTfmd , modelx = modelx , 
                        sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , 
                        cmeOpt = cmeOpt , setupMats = setupMats)
@@ -443,13 +449,12 @@ nllIAK3D <- function(pars , zData , XData , vXU , iU , modelx , nud ,
       A <- tmp$C
       sigma2Vec <- tmp$sigma2Vec
       remove(tmp) ; 
-      
+
       parsOK <- T
       if(max(is.na(A)) == 1){ parsOK <- F }else{}
       if(is.infinite(parsBTfmd$cx0) | is.infinite(parsBTfmd$cx1) | is.infinite(parsBTfmd$cd1) | is.infinite(parsBTfmd$cxd0) | is.infinite(parsBTfmd$cxd1)){ parsOK <- F }else{}
     }
-      
-   
+    
     if(parsOK){
         n <- length(zData)
         XData <- as.matrix(XData , nrow = n)
@@ -457,7 +462,7 @@ nllIAK3D <- function(pars , zData , XData , vXU , iU , modelx , nud ,
         W <- cbind(XData,zData)
 
 ### just to make sure numerical errors have not made it non-symmetric...  		
-        if(class(A) != 'dspMatrix'){ A <- forceSymmetric(A) }else{}
+        if(!is(A , 'dspMatrix')){ A <- forceSymmetric(A) }else{}
 
         if(lnTfmdData){
             tmp <- nrUpdatesIAK3DlnN(zData = zData , XData = XData , vXU = vXU , iU = iU , C = A , sigma2Vec = sigma2Vec)
@@ -508,7 +513,7 @@ nllIAK3D <- function(pars , zData , XData , vXU , iU , modelx , nud ,
           iAW <- matrix(iAW , ncol = ncol(W))
 
           WiAW <- t(W) %*% iAW
-          if(class(WiAW) != 'dspMatrix'){ WiAW <- forceSymmetric(WiAW) }else{}
+          if(!is(WiAW , 'dspMatrix')){ WiAW <- forceSymmetric(WiAW) }else{}
           
           if(forCompLik){
             return(list('pars' = pars , 'parsBTfmd' = parsBTfmd , 'sigma2Vec' = sigma2Vec , 'WiAW' = WiAW , 'lndetA' = lndetA , 'A' = A , 'iAW' = iAW))
@@ -650,10 +655,10 @@ setCIAK3D <- function(parsBTfmd , modelx ,
   
   n <- nrow(setupMats$Kx)
   C <- sparseMatrix(i=seq(n),j=seq(n),x=parsBTfmd$cme , symmetric = TRUE) # initiate with just meas err on diag. , dims = as.integer(c(n,n))
- 
+
   ### adding Cx0...
   C <- C + parsBTfmd$cx0 * forceSymmetric(setupMats$Kx %*% t(setupMats$Kx))
-  
+
   if (modelx == 'matern'){
     phix1 <- maternCov(setupMats$Dx , c(1 , parsBTfmd$ax , parsBTfmd$nux))
   }else if(modelx == 'nugget'){
@@ -731,6 +736,7 @@ setCIAK3D <- function(parsBTfmd , modelx ,
       C <- C + new("dspMatrix" , Dim = as.integer(c(nrow(setupMats$Kd),nrow(setupMats$Kd))), x =  phid_cd1@x[setupMats$utriKdIdxdKd])
     }
     remove(phid_cd1)
+
     if(modelx == 'nugget'){
       if(exists('KphidKStat')){ remove(KphidKStat) ;  }else{}
       Cx1 <- Cxd1 <- 0
@@ -743,7 +749,7 @@ setCIAK3D <- function(parsBTfmd , modelx ,
       rm(phix1)
 ### adding Cx1...
       C <- C + parsBTfmd$cx1 * Kphix1K
-      
+
 ### adding Cxd1...
       if(sdfdType_cxd1 == 0){
         C <- C + parsBTfmd$cxd1 * Kphix1K * KphidKStat
@@ -751,6 +757,7 @@ setCIAK3D <- function(parsBTfmd , modelx ,
         if(exists('KphidKStat')){ remove(KphidKStat) ;  }else{}
         C <- C + parsBTfmd$cxd1 * Kphix1K * new("dspMatrix" , Dim = as.integer(c(nrow(setupMats$Kd),nrow(setupMats$Kd))), x =  phid_cxd1@x[setupMats$utriKdIdxdKd])
       }
+
       remove(Kphix1K) ; 
     }
     if(exists('KphidKStat')){ remove(KphidKStat) ;  }else{}
@@ -1120,7 +1127,8 @@ updateLmmFitNames <- function(lmmFit){
   iX <- which(names(lmmFit) == 'X')
   if (length(iX) == 1){ names(lmmFit)[iX] <- 'XData' }else{}
   
-  if(class(lmmFit$modelX) == "cubist"){
+  # if(class(lmmFit$modelX) == "cubist"){
+  if(is(lmmFit$modelX , "cubist")){
     lmmFit$modelX$allKnotsd <- lmmFit$allKnotsd
     if(length(lmmFit$modelX$allKnotsd) > 0){
       nparSpline <- ncol(lmmFit$XData) - length(lmmFit$modelX$names4XCubist)
@@ -1304,7 +1312,8 @@ lndetANDinvCb <- function(C , b = NULL){
   if (is.character(invCb)){
     lndetC <- invCb <- NA
   }else{
-    if(class(C) == 'dspMatrix'){
+    # if(class(C) == 'dspMatrix'){
+    if(is(C , 'dspMatrix')){
       ### side effect of solve should have added BunchKaufman factorization (not used by determinant fn, so doing it here)...     
       lndetC <- sum(log(diag(C@factors$pBunchKaufman)))
     }else{
@@ -1405,7 +1414,8 @@ colMeansAndModes <- function(dfIn , na.rm = FALSE){
   if(ncol(dfIn) > 0){
     jFactor <- c()
     for (j in 1:ncol(dfIn)){
-      if(class(dfIn[,j]) == 'factor'){
+      # if(class(dfIn[,j]) == 'factor'){
+      if(is(dfIn[,j] , 'factor')){
         jFactor <- c(jFactor , j)
       }else{}
     }
