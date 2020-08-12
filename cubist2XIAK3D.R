@@ -163,18 +163,35 @@ cubist2XGivenSetup <- function(cubistModel , dataFit){
 ###########################################################    
     if(length(cubistModel$allKnotsd) > 0){
       
-      intKnots <- cubistModel$allKnotsd[-1]
-      intKnots <- intKnots[-length(intKnots)]
-      bdryKnots <- c(cubistModel$allKnotsd[1] , cubistModel$allKnotsd[length(cubistModel$allKnotsd)])
-
-      XSpline <- bs(dataFit$dIMidPts , knots = intKnots , degree = 3 , intercept = F , Boundary.knots = bdryKnots)
-      colnames(XSpline) <- paste0('dSpline.' , seq(ncol(XSpline)))
+      XSpline <- allKnotsd2X(dIMidPts = dataFit$dIMidPts, allKnotsd = cubistModel$allKnotsd)
       X <- cbind(X , XSpline)
 
     }else{}
     
     return(list('X' = X , 'matRuleData' = matRuleData))
 
+}
+
+###############################################################
+### fn to make X given knots and dIMidPts. 
+### dIMidPts is a vector, evaluated as pt-support for these depths
+### intercept is not included.
+###############################################################
+allKnotsd2X <- function(dIMidPts , allKnotsd){
+
+  dIMidPts <- as.numeric(dIMidPts)
+  if(length(allKnotsd) > 0){
+    intKnots <- allKnotsd[-1]
+    intKnots <- intKnots[-length(intKnots)]
+    bdryKnots <- c(allKnotsd[1] , allKnotsd[length(allKnotsd)])
+    
+    XSpline <- bs(dI , knots = intKnots , degree = 3 , intercept = F , Boundary.knots = bdryKnots)
+    colnames(XSpline) <- paste0('dSpline.' , seq(ncol(XSpline)))
+  }else{
+    XSpline <- matrix(NA , n , 0)
+  }
+  
+  return(XSpline)
 }
 
 cubist2XSetup <- function(cubistModel , dataFit , zFit = NULL , profIDFit = NULL , allKnotsd = c() , removeColinCols = TRUE , refineCubistModel = FALSE){

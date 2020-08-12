@@ -82,7 +82,8 @@ makeXvX <- function(covData = NA , dIData , modelX , allKnotsd = c() , iU = NA ,
   	  namesX <- modelX
 	    p <- length(namesX)
 
-    }else if(length(class(modelX)) == 1 && class(modelX) == "cubist"){
+    # }else if(length(class(modelX)) == 1 && class(modelX) == "cubist"){
+    }else if(is(modelX , "cubist")){
 ########################################
 ### assume cubist model was fitted with covariates covData
 ### and that 'dIMidPts' is included in covData
@@ -105,7 +106,8 @@ makeXvX <- function(covData = NA , dIData , modelX , allKnotsd = c() , iU = NA ,
       namesX <- modelX$namesX
       p <- length(namesX)
       
-    }else if(is.element('gam' , class(modelX))){
+    # }else if(is.element('gam' , class(modelX))){
+    }else if(is(modelX , 'gam')){
 ########################################
 ### assume gam model was fitted with covariates covData
 ### and that 'dIMidPts' is included in covData
@@ -338,6 +340,10 @@ makeXvX <- function(covData = NA , dIData , modelX , allKnotsd = c() , iU = NA ,
 ### new block. 12-2-20. quicker averaging of cubist model X over depth intervals if vX not required        
         alldBreaks <- getAlldBreaks(modelX)
         
+        # if(length(allKnotsd) > 0){
+        #   stop('Not sure this block of makeXvX is correct when spline function included.')
+        # }
+        
         # jRulesdInRules <- getRulesWithdInCondits(cubistModel)
         # 
         # ruleNumbersByCol <- getRuleNumbersFromColNames(cubistModel)
@@ -392,6 +398,19 @@ makeXvX <- function(covData = NA , dIData , modelX , allKnotsd = c() , iU = NA ,
             X <- matrix(mapply(replaceGT , x = t(X) , ulim = XLims[2,] , replaceZeros = FALSE , SIMPLIFY = TRUE) , nrow = nrow(X) , ncol = ncol(X) , byrow = TRUE)
           }else{}
         }
+
+### added 12-8-20 to average spline properly...
+        if(length(allKnotsd) > 0){
+          
+          colsSpline <- which(substr(names(X) , 1 , 8) == 'dSpline.')
+          XTmp <- matrix(0 , n , length(colsSpline))
+          for(idisc in 1:nDiscPts){
+            XTmp <- XTmp + allKnotsd2X(dIMidPts = dIData[,1] + ((idisc-1) / (nDiscPts - 1)) * (dIData[,2] - dIData[,1]) , allKnotsd = allKnotsd)
+          }
+          XTmp <- XTmp / nDiscPts
+          X[,colsSpline] <- XTmp
+          
+        }else{}
 
         ### all variables within Cubist rules are continuous, so...
         pX <- 1 + integer(p)
@@ -530,7 +549,7 @@ makeXvX <- function(covData = NA , dIData , modelX , allKnotsd = c() , iU = NA ,
           iU <- which(namesX == 'd' | namesX == 'd2' | substr(namesX , 1 , 2) == 'd.' | substr(namesX , 1 , 3) == 'd2.' | substr(namesX , 1 , 3) == 'd3.' | substr(namesX , 1 , 8) == 'dSpline.') 
           iK <- setdiff(seq(p) , iU)
           
-        }else if(modelType == 'cubist'){
+        }else if(modelType == 'cubist' | modelType == 'gam'){
 ### iU for cubist model is all columns. add spline cols if necessary...
 ### even if d not part of rule conditions or predictor, 
 ### d can affect the prob of being in a rule (eg if 3 rules are apt for d = 0.1 but only 2 for d = 0.2)
@@ -580,7 +599,8 @@ scaleCovs <- function(covsData , scalePars = matrix(NA)){
     }
     
     for (j in 1:dim(covsData)[[2]]){
-      if(class(covsData[[j]]) != 'factor'){
+      # if(class(covsData[[j]]) != 'factor'){
+      if(!is(covsData[[j]] , 'factor')){
         if(calcScaleParsNow){
           jThis <- j
           scalePars[1,jThis] <- mean(covsData[[j]])

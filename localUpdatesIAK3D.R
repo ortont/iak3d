@@ -312,7 +312,7 @@ updateSplineNames <- function(lmmFit){
 ################################################################
 updateCubistModel <- function(lmmFit){
 
-  if(class(lmmFit$modelX) == 'cubist'){
+  if(is(lmmFit$modelX , 'cubist')){
     
 ### add a couple of things (if missing) that weren't kept in older version of code...    
     if(!is.element('allKnotsd' , names(lmmFit$modelX))){

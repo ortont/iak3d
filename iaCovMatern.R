@@ -396,12 +396,13 @@ maternCov <- function(D , pars){
     # 
     # C <- as(C , class(D)) # takes a bit longer, but should save memory. not sure why class changes when C[D==0] <- c1 is done.
 
-    if(class(D) == "dspMatrix"){
+    # if(class(D) == "dspMatrix"){
+    if(is(D , "dspMatrix")){
       xC <- 0 * D@x # initiate.
       xC[D@x==0] <- c1
       xC[D@x > 0] <- c1 * exp(nu * log(sqrt2nuOVERa * D@x[D@x > 0]) - (nu - 1) * log(2) - lgamma(nu) + log(besselK(sqrt2nuOVERa * D@x[D@x > 0] , nu)))
       xC[is.infinite(xC)] <- c1
-      C <- D 
+      C <- D
       C@x <- xC
 
     }else{
@@ -743,8 +744,17 @@ xyDist <- function(xData , yData){
     yData <- matrix(yData , ncol = 1)
   }else{}
   
-  if(!is.element(class(xData) , c('matrix' , 'Matrix' , 'dgeMatrix' , 'data.frame'))){ stop('Error - xyDist function programmed for matrices or data.frames!') }
-  if(!is.element(class(yData) , c('matrix' , 'Matrix' , 'dgeMatrix' , 'data.frame'))){ stop('Error - xyDist function programmed for matrices or data.frames!') }
+  # if((length(class(xData)) > 1)){
+  #   print('class of xData is:')
+  #   print(class(xData))
+  #   print(head(xData))
+  #   stop('Stopping.')
+  # }
+  
+  # if(!is.element(class(xData) , c('matrix' , 'Matrix' , 'dgeMatrix' , 'data.frame'))){ stop('Error - xyDist function programmed for matrices or data.frames!') }
+  # if(!is.element(class(yData) , c('matrix' , 'Matrix' , 'dgeMatrix' , 'data.frame'))){ stop('Error - xyDist function programmed for matrices or data.frames!') }
+  if(!(is.matrix(xData) | is.data.frame(xData))){ stop('Error - xyDist function programmed for matrices or data.frames!') }
+  if(!(is.matrix(yData) | is.data.frame(yData))){ stop('Error - xyDist function programmed for matrices or data.frames!') }
   
   nd <- ncol(xData)
   if(ncol(yData) != nd){ stop('Error - both xData and yData must have the same number of columns!') }else{}
@@ -785,8 +795,9 @@ plotCovx <- function(lmm.fit , hx , dIPlot , addExpmntlV = TRUE , hzntlUnits = '
     hrmnzdResDataEAS <- tmp$hrmnzdDataEAS    
     xDataH <- data.frame('profIDDataH' = profIDDataH)
     df2Tmp <- data.frame('profIDDataH' = profIDTmp , 'Eastings' = lmm.fit$xData[,1] , 'Northings' = lmm.fit$xData[,2])
+    df2Tmp <- df2Tmp[!duplicated(df2Tmp),,drop=FALSE] # line added 11/8/20
     xDataH <- merge(x = xDataH, y = df2Tmp, by = "profIDDataH", all.x = TRUE)
-    xDataH <- as.matrix(xDataH[,c('Eastings','Northings',drop=FALSE)])
+    xDataH <- as.matrix(xDataH[,c('Eastings','Northings'),drop=FALSE])
     rm(df2Tmp , profIDTmp , tmp)
 
   }else{
@@ -954,8 +965,9 @@ getCovs4Plot <- function(lmm.fit = NULL , dIPlot , roundTo = NULL , singlesByReg
     
     xDataH <- data.frame('profIDDataH' = profIDDataH)
     df2Tmp <- data.frame('profIDDataH' = profIDTmp , 'Eastings' = lmm.fit$xData[,1] , 'Northings' = lmm.fit$xData[,2])
+    df2Tmp <- df2Tmp[!duplicated(df2Tmp),,drop=FALSE] # line added 11/8/20
     xDataH <- merge(x = xDataH, y = df2Tmp, by = "profIDDataH", all.x = TRUE)
-    xDataH <- as.matrix(xDataH[,c('Eastings','Northings',drop=FALSE)])
+    xDataH <- as.matrix(xDataH[,c('Eastings','Northings'),drop=FALSE])
     rm(df2Tmp , profIDTmp , tmp)
 
     nProfs <- nrow(xDataH)
@@ -1011,9 +1023,9 @@ getCovs4Plot <- function(lmm.fit = NULL , dIPlot , roundTo = NULL , singlesByReg
   return(list('empiricalC' = empiricalC , 'nempiricalC' = nempiricalC , 'modelC' = modelC , 'dfCovariances' = dfCovariances))
 }
 
-plotCovd <- function(lmm.fit , dIPlot , vrtclUnits = 'm' , breaksVec = NULL , addScalebar = FALSE , roundTo = NULL , overlapsByRegression = TRUE){
+plotCovd <- function(lmm.fit , dIPlot , vrtclUnits = 'm' , breaksVec = NULL , addScalebar = FALSE , roundTo = NULL , singlesByRegression = TRUE){
   
-  tmp <- getCovs4Plot(lmm.fit = lmm.fit , dIPlot = dIPlot , roundTo = roundTo , overlapsByRegression = overlapsByRegression)
+  tmp <- getCovs4Plot(lmm.fit = lmm.fit , dIPlot = dIPlot , roundTo = roundTo , singlesByRegression = singlesByRegression)
   empiricalC <- tmp$empiricalC 
   modelC <- tmp$modelC 
   dfCovariances <- tmp$dfCovariances
