@@ -1,16 +1,8 @@
 # iak3d
 Increment-averaged kriging for 3D prediction of soil properties
 
+Downlad the git repository, open the RStudio project `iak3d.Rproj`
 
-Save files to a directory, and edit the following four lines near the top of the egEdgeroi.R file:
+Run the script `egEdgeroi.R` in thefrom the project to make the example from Edgeroi dataset (data from GSIF and ithir packages) run to predict clay content.
 
-wDir <- 'U://scripts/'
-iakDir <- 'U://scripts/iakTests'
-lmm2Dir <- 'U://scripts/fLMM2'
-dataDir <- 'Z://ortont/Data/edgeroiEg'
-
-wDir is your working directory
-iakDir is where you save the iak files, and lmm2Dir is where you save the fLMM2.R file (could be the same place)
-dataDir is where you want output to be saved
-
-Example from Edgeroi dataset (data from GSIF and ithir packages) predicting clay content
+Successful completion should look like `Error in eval(ei, envir) : Fitting and validation done!`
