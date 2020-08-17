@@ -35,14 +35,21 @@ library(aqp)
 library(GSIF)
 library(ithir)
 library(parallel)
-
 library(here)
-
 # GSIF              NA                                                         "GPL"                                    NA              NA                    NA        NA     "no"             "3.6.1"
 # ithir             NA                                                         "GPL-2"                          NA              NA                    NA        NA     "no"             "3.6.1"
 
+
+
+
+
+
+
 wDir <- here::here()
+
+
 dataDir <- here::here('Data/edgeroiEg')
+
 
 setwd(wDir)
 source(here::here('fitIAK3D.R'))
