@@ -393,16 +393,17 @@ makeXvX <- function(covData = NA , dIData , modelX , allKnotsd = c() , iU = NA ,
           XLims[2,] <- apply(X , 2 , maxNonZero)
         }else{
           if(!infBnds){
+            colnamesXTmp <- colnames(X)
             ### apply the given constraints to the point-support design matrix...
             X <- matrix(mapply(replaceLT , x = t(X) , llim = XLims[1,] , replaceZeros = FALSE , SIMPLIFY = TRUE) , nrow = nrow(X) , ncol = ncol(X) , byrow = TRUE)
             X <- matrix(mapply(replaceGT , x = t(X) , ulim = XLims[2,] , replaceZeros = FALSE , SIMPLIFY = TRUE) , nrow = nrow(X) , ncol = ncol(X) , byrow = TRUE)
+            colnames(X) <- colnamesXTmp
           }else{}
         }
 
 ### added 12-8-20 to average spline properly...
         if(length(allKnotsd) > 0){
-          
-          colsSpline <- which(substr(names(X) , 1 , 8) == 'dSpline.')
+          colsSpline <- which(substr(colnames(X) , 1 , 8) == 'dSpline.')
           XTmp <- matrix(0 , n , length(colsSpline))
           for(idisc in 1:nDiscPts){
             XTmp <- XTmp + allKnotsd2X(dIMidPts = dIData[,1] + ((idisc-1) / (nDiscPts - 1)) * (dIData[,2] - dIData[,1]) , allKnotsd = allKnotsd)

@@ -707,10 +707,15 @@ lmGivenX <- function(zData , XData , method = 'ML' , XFULL = NULL){
     zRes <- zData - XData %*% betahat
     if(method == 'ML'){
         if(!is.null(XFULL)){ stop('Error - XFULL should only be included for comparison based on REML fits!') }else{}
-        sigma2hat <- t(zRes) %*% zRes / n
+        sigma2hat <- as.numeric(t(zRes) %*% zRes / n)
         nll <- 0.5 * n * (log(2 * pi) + log(sigma2hat) + 1)
+        
+        vbetahat <- sigma2hat * solve(XX)
+        
     }else if(method == 'REML'){
-        sigma2hat <- t(zRes) %*% zRes / (n - p)
+        sigma2hat <- as.numeric(t(zRes) %*% zRes / (n - p))
+        vbetahat <- sigma2hat * solve(XX)
+        
         if(is.null(XFULL)){
             nll <- 0.5 * (n - p) * (log(2 * pi) + log(sigma2hat) + 1) + 0.5 * lndetXX
         }else{
@@ -728,5 +733,5 @@ lmGivenX <- function(zData , XData , method = 'ML' , XFULL = NULL){
         stop('Method should be ML or REML!')
     }
 
-    return(list('nll' = nll , 'AIC' = 2 * nll + 2 * p , 'betahat' = betahat))
+    return(list('nll' = nll , 'AIC' = 2 * nll + 2 * p , 'AICc' = 2 * nll + 2 * p + 2 * p * (p + 1) / (n - p - 1) , 'betahat' = betahat , 'vbetahat' = vbetahat))
 }

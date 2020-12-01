@@ -1,6 +1,7 @@
 fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'matern' , nud = 0.5 , allKnotsd = c() , 
-                sdfdType_cd1 = 0 , sdfdType_cxd0 = 0 , sdfdType_cxd1 = 0 , cmeOpt = 0 , prodSum = TRUE , 
-                lnTfmdData = FALSE , useReml = TRUE , compLikMats = list('compLikOptn' = 0) , namePlot = NA , lmmFit = list() , rqrBTfmdPreds = TRUE , parsInit = NULL , attachBigMats = TRUE , testMC = TRUE){
+                sdfdType_cd1 = 0 , sdfdType_cxd0 = 0 , sdfdType_cxd1 = 0 , cmeOpt = 0 , sdfdKnots = NULL , prodSum = TRUE , 
+                lnTfmdData = FALSE , useReml = TRUE , compLikMats = list('compLikOptn' = 0) , namePlot = NA , 
+                lmmFit = list() , rqrBTfmdPreds = TRUE , parsInit = NULL , attachBigMats = TRUE , testMC = TRUE){
 
   
   # if(!identical(class(xData) , 'matrix')){ stop('Stopping - for fitIAKD3D function, enter xData as a matrix') }else{}
@@ -99,15 +100,48 @@ fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'mate
         sdfdType_cd1 <- -9 
     }else{}
 
+################################################
+### if using gam2, all knot info will be in modelX$listfefdKnots...
+### other info will be in modelX$incInts and modelX$colnamesXcns
+################################################
+    if(identical(modelX$type , 'gam2')){
+      if(length(allKnotsd) > 0){ stop('Error - if using gam2 for trend, enter knot info in modelX$listfefdKnots (you can use function makelistfefdKnots to do this); do not use allKnotsd.\n
+                                      Note, modelX should also set modelX$incInts and modelX$comnamesXcns')}else{}
+    }else{}
+
+################################################
+### for sdfd as spline fn (if sdfdType > 0) set knots if not given...
+################################################
+    if(is.null(sdfdKnots)){
+      sdfdKnots <- setKnots4sdfd(dIData , sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1)
+    }else{
+      if(sdfdType_cd1 > 0 | sdfdType_cxd0 > 0 | sdfdType_cxd1 > 0){
+        if(is.null(sdfdKnots$bdryKnots) | ((sdfdType_cd1 > 0) & (length(sdfdKnots$intKnots_cd1) != sdfdType_cd1)) |
+         ((sdfdType_cxd0 > 0) & (length(sdfdKnots$intKnots_cxd0) != sdfdType_cxd0)) | 
+         ((sdfdType_cxd1 > 0) & (length(sdfdKnots$intKnots_cxd1) != sdfdType_cxd1))){
+          stop('Error - sdfdKnots incorrectly defined for sdfdType - check this!')
+        }else{}
+      }else{}
+    }
+    
 ######################################################
 ### set up fixed-effect design matrices...
 ######################################################
-    tmp <- makeXvX(covData = covsData , dIData = dIData , modelX = modelX , allKnotsd = allKnotsd , nDiscPts = 1000 , lnTfmdData = lnTfmdData)
-    XData <- tmp$X
-    vXU <- tmp$vXU
-    iU <- tmp$iU
-    namesX <- tmp$namesX
-    XLims <- tmp$XLims
+    if(identical(modelX$type , 'gam2')){
+      tmp <- makeXvX_gam2(covData = covsData , dIData = dIData , listfefdKnots = modelX$listfefdKnots , incInts = modelX$incInts , intMthd = modelX$intMthd , colnamesXcns = modelX$colnamesX , nDiscPts = 1000 , lnTfmdData = lnTfmdData)
+      XData <- tmp$X
+      vXU <- tmp$vXU
+      iU <- tmp$iU
+      namesX <- tmp$namesX
+      XLims <- NA
+    }else{
+      tmp <- makeXvX(covData = covsData , dIData = dIData , modelX = modelX , allKnotsd = allKnotsd , nDiscPts = 1000 , lnTfmdData = lnTfmdData)
+      XData <- tmp$X
+      vXU <- tmp$vXU
+      iU <- tmp$iU
+      namesX <- tmp$namesX
+      XLims <- tmp$XLims
+    }
 
     remove(tmp) ; gc(verbose = FALSE)
 
@@ -129,9 +163,13 @@ fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'mate
 ### setup random-effects design matrices...
 ######################################################
     if (compLikMats$compLikOptn == 0){
-      setupMats <- setupIAK3D(xData , dIData , nDscPts = 0)
+      # setupMats <- setupIAK3D(xData , dIData , nDscPts = 0) 
+      setupMats <- setupIAK3D(xData , dIData , nDscPts = 0 ,
+                              sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , sdfdKnots = sdfdKnots)
     }else{
-      setupMats <- setupIAK3D_CL(xData , dIData , nDscPts = 0 , compLikMats = compLikMats)
+      # setupMats <- setupIAK3D_CL(xData , dIData , nDscPts = 0 , compLikMats = compLikMats)
+      setupMats <- setupIAK3D_CL(xData , dIData , nDscPts = 0 , compLikMats = compLikMats ,
+                                 sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , sdfdKnots = sdfdKnots)
     }
       
 ######################################################
@@ -160,8 +198,8 @@ fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'mate
                 cmeOpt = cmeOpt , prodSum = prodSum , parBnds = parBnds , lnTfmdData = lnTfmdData)
 
           initC <- setCIAK3D(parsBTfmd = parsBTfmd , modelx = modelx , 
-                sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , 
-                cmeOpt = cmeOpt , setupMats = setupMats)$C
+              sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , 
+              cmeOpt = cmeOpt , setupMats = setupMats)$C
 
           parsInit <- setInitsIAK3D(xData = xData , dIData = dIData , zData = zData , XData = XData , vXU = vXU , iU = iU , modelx = modelx , nud = nud , 
             sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , 
@@ -301,7 +339,7 @@ fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'mate
 ### also attach everything that was used to call the function to lmmFit...
 ############################################
     lmmFit <- attachSettings2lmmFit(lmmFit , xData , dIData , zData , covsData , modelX , namesX , modelx , nud , allKnotsd , XLims , 
-               sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1 , cmeOpt , prodSum , setupMats , lnTfmdData , useReml , parBnds , fitRange , compLikMats)
+               sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1 , cmeOpt , prodSum , sdfdKnots , setupMats , lnTfmdData , useReml , parBnds , fitRange , compLikMats)
 
     if (!is.na(namePlot)){
 ##############################################
@@ -405,6 +443,9 @@ nllIAK3D <- function(pars , zData , XData , vXU , iU , modelx , nud ,
     WiAW <- NA
     lndetA <- NA
 
+    p <- ncol(XData)
+    n <- length(zData)
+    
     if(exists("printnllTime") && printnllTime){
       ptm <- proc.time()
     }else{}
@@ -443,9 +484,9 @@ nllIAK3D <- function(pars , zData , XData , vXU , iU , modelx , nud ,
     }else{
       
       tmp <- setCIAK3D(parsBTfmd = parsBTfmd , modelx = modelx , 
-                       sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , 
-                       cmeOpt = cmeOpt , setupMats = setupMats)
-      
+                         sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , 
+                         cmeOpt = cmeOpt , setupMats = setupMats)
+
       A <- tmp$C
       sigma2Vec <- tmp$sigma2Vec
       remove(tmp) ; 
@@ -648,6 +689,12 @@ nllIAK3D <- function(pars , zData , XData , vXU , iU , modelx , nud ,
 setCIAK3D <- function(parsBTfmd , modelx , 
                         sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1 , cmeOpt , setupMats){
 
+### check sdfdTypes - if any > 0, use the approx version...  
+  if(max(c(sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1)) > 0){
+    return(setCApproxIAK3D(parsBTfmd = parsBTfmd , modelx = modelx , 
+                     sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , cmeOpt = cmeOpt , setupMats = setupMats))
+  }else{}
+  
 ### if setupMats doesn't include 'Kx', it should include 'xData' and 'dIData', so that proper setupMats can be made now...
   if(is.null(setupMats$Kx)){
     setupMats <- setupIAK3D(xData = setupMats$xData , dIData = as.data.frame(setupMats$dIData) , nDscPts = 0) 
@@ -784,6 +831,12 @@ setCIAK3D <- function(parsBTfmd , modelx ,
 ################################################################
 setCIAK3D2 <- function(parsBTfmd , modelx , 
                        sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1 , cmeOpt , setupMats){
+
+  ### check sdfdTypes - if any > 0, use the approx version...  
+  if(max(c(sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1)) > 0){
+    return(setCApproxIAK3D2(parsBTfmd = parsBTfmd , modelx = modelx , 
+                     sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , cmeOpt = cmeOpt , setupMats = setupMats))
+  }else{}
   
   ### if setupMats doesn't include 'Kx', it should include 'xData', 'dIData', 'xData2' and 'dIData2', so that proper setupMats can be made now...
   if(is.null(setupMats$Kx)){
@@ -1053,7 +1106,7 @@ readPars <- function(pars , modelx , nud , sdfdType_cd1 , sdfdType_cxd0 , sdfdTy
 ### used if approximating average covariances numerically with dicretization points
 ### not being used in the current code, but left in as might be used for checking in future.
 ##########################################
-sdfd <- function(d , sdfdPars , sdfdType){
+sdfd <- function(d , sdfdPars , sdfdType , XsdfdSpline){
 
     if (sdfdType == 0){
         sdfdVal <- matrix(1 , length(d) , 1)
@@ -1061,6 +1114,9 @@ sdfd <- function(d , sdfdPars , sdfdType){
         sdfdVal <- (1 - sdfdPars[1]) + sdfdPars[1] * exp(-sdfdPars[2] * d)
     }else if (sdfdType == -9){
         sdfdVal <- matrix(1 , length(d) , 1)
+    }else if(sdfdType > 0){
+      # sdfdVal <- XsdfdSpline %*% matrix(sdfdPars , ncol = 1) # assuming XsdfdSpline was created on point support
+      sdfdVal <- XsdfdSpline %*% matrix(c(1 , sdfdPars) , ncol = 1) # assuming XsdfdSpline was created on point support
     }else{
         stop('sdfd option not yet programmed')
     }
@@ -1070,6 +1126,32 @@ sdfd <- function(d , sdfdPars , sdfdType){
 	
     return(sdfdVal)
 }
+
+##########################################
+### increment-averaged version of the sdfd
+##########################################
+iasdfd <- function(dI , sdfdPars , sdfdType , XsdfdSpline){
+  
+  if (sdfdType == 0){
+    sdfdVal <- matrix(1 , nrow(dI) , 1)
+  }else if(sdfdType == -1){
+    # sdfdVal <- (1 - sdfdPars[1]) + sdfdPars[1] * exp(-sdfdPars[2] * d)
+    sdfdVal <- (1 - sdfdPars[1]) - (sdfdPars[1] / sdfdPars[2]) * (exp(-sdfdPars[2] * dI[,2]) - exp(-sdfdPars[2] * dI[,1])) / (dI[,2] - dI[,1])
+  }else if (sdfdType == -9){
+    sdfdVal <- matrix(1 , nrow(d) , 1)
+  }else if(sdfdType > 0){
+    # sdfdVal <- XsdfdSpline %*% matrix(sdfdPars , ncol = 1)  # assuming XsdfdSpline was created on ia support
+    sdfdVal <- XsdfdSpline %*% matrix(c(1 , sdfdPars) , ncol = 1)  # assuming XsdfdSpline was created on ia support
+  }else{
+    stop('sdfd option not yet programmed')
+  }
+  
+  ### check sdfdDsc, return just NA if not ok...
+  # if (min(sdfdVal) < 0){ sdfdVal <- NA }else{}
+  
+  return(sdfdVal)
+}
+
 
 sdfdRead <- function(pars , sdfdType , inext , parBnds){
     if (sdfdType == 0){
@@ -1086,6 +1168,14 @@ sdfdRead <- function(pars , sdfdType , inext , parBnds){
         sdfdPars <- tauTfm(parsIn = pars[inext:(inext+1)] , parBnds = parBnds , invt = T)
 
         inext <- inext + 2
+    }else if(sdfdType > 0){
+### natural spline, clamped to grad = 0 at upper bdry knot; sdfdType internal knots (sdfdType free pars if forced to 1 at d=0)       
+
+      sdfdPars <- pars[inext:(inext+sdfdType-1)] 
+      inext <- inext + sdfdType
+      
+      # stop('Not ready yet.')      
+      
     }else if(sdfdType == -9){
         sdfdPars <- c()
     }else{
@@ -1144,7 +1234,7 @@ updateLmmFitNames <- function(lmmFit){
 }
 
 attachSettings2lmmFit <- function(lmmFit , xData , dIData , zData , covsData , modelX , namesX , modelx , nud , allKnotsd , XLims , 
-               sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1 , cmeOpt , prodSum , setupMats , lnTfmdData , useReml , parBnds , fitRange , compLikMats){
+               sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1 , cmeOpt , prodSum , sdfdKnots , setupMats , lnTfmdData , useReml , parBnds , fitRange , compLikMats){
     lmmFit$xData <- xData
     lmmFit$dIData <- dIData
     lmmFit$zData <- zData
@@ -1164,6 +1254,11 @@ attachSettings2lmmFit <- function(lmmFit , xData , dIData , zData , covsData , m
     lmmFit$sdfdType_cxd1 <- sdfdType_cxd1
     lmmFit$cmeOpt <- cmeOpt
     lmmFit$prodSum <- prodSum
+    if(!is.null(sdfdKnots)){
+      lmmFit$sdfdKnots <- sdfdKnots
+    }else{  
+      lmmFit['sdfdKnots'] <- list(NULL)
+    }
     lmmFit$setupMats <- setupMats
     lmmFit$lnTfmdData <- lnTfmdData
     lmmFit$useReml <- useReml
@@ -1518,8 +1613,8 @@ gradnllIAK3D.mc <- function(pars , zData , XData , vXU , iU , modelx , nud ,
   parsList <- split(parsMtx, rep(1:ncol(parsMtx), each = nrow(parsMtx)))
 
   if (Sys.info()[1] == "Windows"){
-    listRqd4nll <- c("setupIAK3D" , "nllIAK3D" , "readPars" , "setCIAK3D" , 
-                          "printnllTime" , "verboseOptim" , "logitab" , "sdfdRead" , "tauTfm" , 
+    listRqd4nll <- c("setupIAK3D" , "nllIAK3D" , "readPars" , "setCIAK3D" , "setCApproxIAK3D" ,  
+                          "printnllTime" , "verboseOptim" , "logitab" , "sdfdRead" , "tauTfm" , "iasdfd" ,
                           "maternCov" , "iaCovMatern" , "intRy" , "intRy12" , "intRy34" , "intTy" , "gammafnInt" , "poly2Exp" , "diagBlocksKdMKd" ,
                           "sparseMatrix" , "t" , "summary" , "diag" , "determinant" , "lndetANDinvCb")
     cl <- makeCluster(numCores)
@@ -1560,8 +1655,8 @@ gradnllIAK3D_CL.mc <- function(pars , zData , XData , modelx , nud ,
   parsList <- split(parsMtx, rep(1:ncol(parsMtx), each = nrow(parsMtx)))
 
   if (Sys.info()[1] == "Windows"){
-    listRqd4nll <- c("setupIAK3D" , "nllIAK3D" , "nllIAK3D_CL" , "readPars" , "setCIAK3D" , 
-                           "printnllTime" , "verboseOptim" , "logitab" , "sdfdRead" , "tauTfm" , 
+    listRqd4nll <- c("setupIAK3D" , "nllIAK3D" , "nllIAK3D_CL" , "readPars" , "setCIAK3D" , "setCApproxIAK3D" , 
+                           "printnllTime" , "verboseOptim" , "logitab" , "sdfdRead" , "tauTfm" , "iasdfd" ,
                            "maternCov" , "iaCovMatern" , "intRy" , "intRy12" , "intRy34" , "intTy" , "gammafnInt" , "poly2Exp" , "diagBlocksKdMKd" ,
                            "sparseMatrix" , "t" , "summary" , "diag" , "determinant" , "lndetANDinvCb")
     cl <- makeCluster(numCores)
@@ -1638,5 +1733,297 @@ gradnllIAK3D_CL <- function(pars , zData , XData , modelx , nud ,
   grad[is.na(grad)] <- 0 # set any NAs to grad 0
   
   return(grad)
+}
+
+###############################################################################
+### uses C = avCor * avsdfd1 * avsdfd2, 
+### rather than the proper vs which uses C = av[Cor * sdfd1 * sdfd2]  
+### allows other sdfd fns to be used that haven't had proper int avd cov fn worked out
+### while should be quicker than discretisation approx
+###############################################################################
+setCApproxIAK3D <- function(parsBTfmd , modelx , 
+                            sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1 , cmeOpt , setupMats){
+  
+  ### if setupMats doesn't include 'Kx', it should include 'xData' and 'dIData', so that proper setupMats can be made now...
+  if(is.null(setupMats$Kx)){
+    setupMats <- setupIAK3D(xData = setupMats$xData , dIData = as.data.frame(setupMats$dIData) , nDscPts = 0) 
+  }else{}
+  
+  n <- nrow(setupMats$Kx)
+  C <- sparseMatrix(i=seq(n),j=seq(n),x=parsBTfmd$cme , symmetric = TRUE) # initiate with just meas err on diag. , dims = as.integer(c(n,n))
+  
+  ### adding Cx0...
+  C <- C + parsBTfmd$cx0 * forceSymmetric(setupMats$Kx %*% t(setupMats$Kx))
+  
+  if (modelx == 'matern'){
+    phix1 <- maternCov(setupMats$Dx , c(1 , parsBTfmd$ax , parsBTfmd$nux))
+  }else if(modelx == 'nugget'){
+    phix1 <- 0
+  }else{
+    stop('Not ready!')
+  }
+  
+  ### get stationary cov mtx...
+  tmp <- iaCovMatern(dIData = setupMats$dIU , ad = parsBTfmd$ad , nud = parsBTfmd$nud , sdfdPars = c(1 , 0 , 1) , sdfdType = 0 , abcd = setupMats$dIUabcd , iUElements = setupMats$dIUiUElements)
+  phidStat <- tmp$avCovMtx
+  avVardStat <- tmp$avVarVec
+  remove(tmp) ;
+  
+  if(sdfdType_cd1 == 0){
+    phid_cd1 <- phidStat
+    avVard_cd1 <- avVardStat
+    avsdfd_cd1 <- sqrt(avVard_cd1)
+  }else if(sdfdType_cd1 == -9){
+    phid_cd1 <- 0
+    avVard_cd1 <- 0
+    avsdfd_cd1 <- 0
+  }else{
+    
+    avsdfd_cd1 <- iasdfd(dI = setupMats$dIU , sdfdPars = parsBTfmd$sdfdPars_cd1 , sdfdType = sdfdType_cd1 , XsdfdSpline = setupMats$XsdfdSplineU_cd1)
+    avVard_cd1 <- avsdfd_cd1 ^ 2
+    phid_cd1 <- phidStat
+    phid_cd1@x <- phid_cd1@x * avsdfd_cd1[rep(seq(nrow(setupMats$dIU)) , times = seq(1,nrow(setupMats$dIU)))] * avsdfd_cd1[unlist(lapply(seq(nrow(setupMats$dIU)) , function(i){ seq(1,i) }))]
+    
+    # tmp <- iaCovMatern(dIData = setupMats$dIU , ad = parsBTfmd$ad , nud = parsBTfmd$nud , sdfdPars = parsBTfmd$sdfdPars_cd1 , sdfdType = sdfdType_cd1 , abcd = setupMats$dIUabcd , iUElements = setupMats$dIUiUElements)
+    # phid_cd1 <- tmp$avCovMtx
+    # avVard_cd1 <- tmp$avVarVec
+    # remove(tmp) ; 
+  }
+  
+  if(sdfdType_cxd0 == 0){
+    phid_cxd0 <- phidStat
+    avVard_cxd0 <- avVardStat
+    avsdfd_cxd0 <- sqrt(avVard_cxd0)
+  }else{
+    
+    avsdfd_cxd0 <- iasdfd(dI = setupMats$dIU , sdfdPars = parsBTfmd$sdfdPars_cxd0 , sdfdType = sdfdType_cxd0 , XsdfdSpline = setupMats$XsdfdSplineU_cxd0)
+    avVard_cxd0 <- avsdfd_cxd0 ^ 2
+    phid_cxd0 <- phidStat
+    phid_cxd0@x <- phid_cxd0@x * avsdfd_cxd0[rep(seq(nrow(setupMats$dIU)) , times = seq(1,nrow(setupMats$dIU)))] * avsdfd_cxd0[unlist(lapply(seq(nrow(setupMats$dIU)) , function(i){ seq(1,i) }))]
+    
+    # tmp <- iaCovMatern(dIData = setupMats$dIU , ad = parsBTfmd$ad , nud = parsBTfmd$nud , sdfdPars = parsBTfmd$sdfdPars_cxd0 , sdfdType = sdfdType_cxd0 , abcd = setupMats$dIUabcd , iUElements = setupMats$dIUiUElements)
+    # phid_cxd0 <- tmp$avCovMtx
+    # avVard_cxd0 <- tmp$avVarVec
+    # remove(tmp) ; 
+    
+  }
+  
+  if(modelx == 'nugget'){
+    phid_cxd1 <- 0
+    avVard_cxd1 <- 0
+    avsdfd_cxd1 <- 0
+  }else{
+    if(sdfdType_cxd1 == 0){
+      phid_cxd1 <- phidStat
+      avVard_cxd1 <- avVardStat
+      avsdfd_cxd1 <- sqrt(avVard_cxd1)
+    }else{
+      avsdfd_cxd1 <- iasdfd(dI = setupMats$dIU , sdfdPars = parsBTfmd$sdfdPars_cxd1 , sdfdType = sdfdType_cxd1 , XsdfdSpline = setupMats$XsdfdSplineU_cxd1)
+      avVard_cxd1 <- avsdfd_cxd1 ^ 2
+      phid_cxd1 <- phidStat
+      phid_cxd1@x <- phid_cxd1@x * avsdfd_cxd1[rep(seq(nrow(setupMats$dIU)) , times = seq(1,nrow(setupMats$dIU)))] * avsdfd_cxd1[unlist(lapply(seq(nrow(setupMats$dIU)) , function(i){ seq(1,i) }))]
+      
+      # tmp <- iaCovMatern(dIData = setupMats$dIU , ad = parsBTfmd$ad , nud = parsBTfmd$nud , sdfdPars = parsBTfmd$sdfdPars_cxd1 , sdfdType = sdfdType_cxd1 , abcd = setupMats$dIUabcd , iUElements = setupMats$dIUiUElements)
+      # phid_cxd1 <- tmp$avCovMtx
+      # avVard_cxd1 <- tmp$avVarVec
+      # remove(tmp) ; 
+    }
+  }
+  
+  parsOK <- T
+  if((max(is.na(phid_cd1)) == 1) | (max(is.na(phid_cxd0)) == 1) | (max(is.na(phid_cxd1)) == 1)){ parsOK <- F } else{}
+  if((min(avsdfd_cd1) < 0) | (min(avsdfd_cxd0) < 0) | (min(avsdfd_cxd1) < 0)){ parsOK <- FALSE }else{}
+  
+  if(parsOK){
+    ### adding Cxd0...
+    C <- C + parsBTfmd$cxd0 * sparseMatrix(i=setupMats$summKxKx$i , j=setupMats$summKxKx$j,x = phid_cxd0@x[setupMats$utriKdIdxdKd][setupMats$summKxKx$idxUtri],symmetric = TRUE)
+    remove(phid_cxd0)
+    
+    ### without using diagBlocks fn...    
+    KphidKStat <- new("dspMatrix" , Dim = as.integer(c(nrow(setupMats$Kd),nrow(setupMats$Kd))), x =  phidStat@x[setupMats$utriKdIdxdKd])
+    
+    ### adding Cd...
+    if(sdfdType_cd1 == 0){
+      C <- C + parsBTfmd$cd1 * KphidKStat
+    }else if(sdfdType_cd1 == -9){
+      Cd <- 0
+    }else{
+      C <- C + new("dspMatrix" , Dim = as.integer(c(nrow(setupMats$Kd),nrow(setupMats$Kd))), x =  phid_cd1@x[setupMats$utriKdIdxdKd])
+    }
+    remove(phid_cd1)
+    
+    if(modelx == 'nugget'){
+      if(exists('KphidKStat')){ remove(KphidKStat) ;  }else{}
+      Cx1 <- Cxd1 <- 0
+    }else{
+      if(sdfdType_cxd1 != 0){ # if not rqd, free up mem...
+        if(exists('KphidKStat')){ remove(KphidKStat) ;  }else{}
+      }else{}
+      
+      Kphix1K <- new("dspMatrix" , Dim = as.integer(c(nrow(setupMats$Kx),nrow(setupMats$Kx))), x =  phix1@x[setupMats$utriKxIdxxKx])
+      rm(phix1)
+      ### adding Cx1...
+      C <- C + parsBTfmd$cx1 * Kphix1K
+      
+      ### adding Cxd1...
+      if(sdfdType_cxd1 == 0){
+        C <- C + parsBTfmd$cxd1 * Kphix1K * KphidKStat
+      }else{
+        if(exists('KphidKStat')){ remove(KphidKStat) ;  }else{}
+        C <- C + parsBTfmd$cxd1 * Kphix1K * new("dspMatrix" , Dim = as.integer(c(nrow(setupMats$Kd),nrow(setupMats$Kd))), x =  phid_cxd1@x[setupMats$utriKdIdxdKd])
+      }
+      
+      remove(Kphix1K) ; 
+    }
+    if(exists('KphidKStat')){ remove(KphidKStat) ;  }else{}
+    if(exists('phid_cxd1')){ remove(phid_cxd1) ;  }else{}
+    
+    sigma2Vec <- parsBTfmd$cx0 + parsBTfmd$cx1 + parsBTfmd$cd1 * avVard_cd1 + parsBTfmd$cxd0 * avVard_cxd0 + parsBTfmd$cxd1 * avVard_cxd1 + parsBTfmd$cme
+    sigma2Vec <- setupMats$Kd %*%sigma2Vec 
+    
+  }else{        
+    C <- NA
+    sigma2Vec <- NA
+    print('Bad parameters...not sure how this can happen')
+    print(parsBTfmd)
+  }
+  
+  return(list('C' = C , 'sigma2Vec' = sigma2Vec))
+  #	return(list('C' = C , 'sigma2Vec' = sigma2Vec , 'dC' = list(Cx0 , Cx1 , Cd , Cxd0 , Cxd1) , 'phi' = list(phix0 , phix1 , phid_cd1 , phid_cxd0 , phid_cxd1)))
+}
+
+################################################################
+### use setCApproxIAK3D2 for covs between different sets of data (setupMats will also contain xU2, dIU2, etc)
+### uses C = avCor * avsdfd1 * avsdfd2, 
+### rather than the proper vs which uses C = av[Cor * sdfd1 * sdfd2]  
+### allows other sdfd fns to be used that haven't had proper int avd cov fn worked out
+### while should be quicker than discretisation approx
+################################################################
+setCApproxIAK3D2 <- function(parsBTfmd , modelx , 
+                              sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1 , cmeOpt , setupMats){
+  
+  ### if setupMats doesn't include 'Kx', it should include 'xData', 'dIData', 'xData2' and 'dIData2', so that proper setupMats can be made now...
+  if(is.null(setupMats$Kx)){
+    setupMats <- setupIAK3D2(xData = setupMats$xData , dIData = setupMats$dIData , xData2 = setupMats$xData2 , dIData2 = setupMats$dIData2) 
+  }else{}
+  
+  ### starting with Cx0...
+  ### defined for the unique locations...
+  ijTmp <- which(setupMats$Dx == 0 , arr.ind = TRUE)
+  if(nrow(ijTmp) > 0){
+    phix0 <- sparseMatrix(i = ijTmp[,1] , j = ijTmp[,2] , x = 1 , dims = c(nrow(setupMats$Dx) , ncol(setupMats$Dx)))
+    C <- parsBTfmd$cx0 * setupMats$Kx %*% phix0 %*% t(setupMats$Kx2)
+  }else{
+    phix0 <- sparseMatrix(i = 1 , ,j=1 , x=0 , dims = c(nrow(setupMats$Dx),ncol(setupMats$Dx)))
+    C <- sparseMatrix(i=1,j=1,x=0,dims = c(nrow(setupMats$Kx),nrow(setupMats$Kx2)))
+  }
+  
+  if (modelx == 'matern'){
+    phix1 <- maternCov(setupMats$Dx , c(1 , parsBTfmd$ax , parsBTfmd$nux))
+  }else if(modelx == 'nugget'){
+    phix1 <- 0
+  }else{
+    stop('Not ready!')
+  }
+  
+  ### get stationary cov mtx...
+  phidStat <- iaCovMatern2(dIData = setupMats$dIU , dIData2 = setupMats$dIU2 , ad = parsBTfmd$ad , nud = parsBTfmd$nud , sdfdPars = c(1 , 0 , 1) , sdfdType = 0)
+  
+  if(sdfdType_cd1 == 0){
+    phid_cd1 <- phidStat
+    avsdfd_cd11 <- avsdfd_cd12 <- 1
+  }else if(sdfdType_cd1 == -9){
+    phid_cd1 <- 0
+    avsdfd_cd11 <- avsdfd_cd12 <- 0
+  }else{
+    
+    avsdfd_cd11 <- iasdfd(dI = setupMats$dIU , sdfdPars = parsBTfmd$sdfdPars_cd1 , sdfdType = sdfdType_cd1 , XsdfdSpline = setupMats$XsdfdSplineU_cd1)
+    avsdfd_cd12 <- iasdfd(dI = setupMats$dIU2 , sdfdPars = parsBTfmd$sdfdPars_cd1 , sdfdType = sdfdType_cd1 , XsdfdSpline = setupMats$XsdfdSplineU_cd12)
+    phid_cd1 <- phidStat * matrix(avsdfd_cd11 , length(avsdfd_cd11) , length(avsdfd_cd12)) * matrix(avsdfd_cd12 , length(avsdfd_cd11) , length(avsdfd_cd12) , byrow = T) 
+    
+    # phid_cd1 <- iaCovMatern2(dIData = setupMats$dIU , dIData2 = setupMats$dIU2 , ad = parsBTfmd$ad , nud = parsBTfmd$nud , sdfdPars = parsBTfmd$sdfdPars_cd1 , sdfdType = sdfdType_cd1)
+  }
+  
+  if(sdfdType_cxd0 == 0){
+    phid_cxd0 <- phidStat
+    avsdfd_cxd01 <- avsdfd_cxd02 <- 1
+  }else{
+    avsdfd_cxd01 <- iasdfd(dI = setupMats$dIU , sdfdPars = parsBTfmd$sdfdPars_cxd0 , sdfdType = sdfdType_cxd0 , XsdfdSpline = setupMats$XsdfdSplineU_cxd0)
+    avsdfd_cxd02 <- iasdfd(dI = setupMats$dIU2 , sdfdPars = parsBTfmd$sdfdPars_cxd0 , sdfdType = sdfdType_cxd0 , XsdfdSpline = setupMats$XsdfdSplineU_cxd02)
+    phid_cxd0 <- phidStat * matrix(avsdfd_cxd01 , length(avsdfd_cxd01) , length(avsdfd_cxd02)) * matrix(avsdfd_cxd02 , length(avsdfd_cxd01) , length(avsdfd_cxd02) , byrow = T) 
+    
+    # phid_cxd0 <- iaCovMatern2(dIData = setupMats$dIU , dIData2 = setupMats$dIU2 , ad = parsBTfmd$ad , nud = parsBTfmd$nud , sdfdPars = parsBTfmd$sdfdPars_cxd0 , sdfdType = sdfdType_cxd0)
+  }
+  
+  if(modelx == 'nugget'){
+    phid_cxd1 <- 0
+    avsdfd_cxd11 <- avsdfd_cxd12 <- 0
+  }else{
+    if(sdfdType_cxd1 == 0){
+      phid_cxd1 <- phidStat
+      avsdfd_cxd11 <- avsdfd_cxd12 <- 1
+    }else{
+      avsdfd_cxd11 <- iasdfd(dI = setupMats$dIU , sdfdPars = parsBTfmd$sdfdPars_cxd1 , sdfdType = sdfdType_cxd1 , XsdfdSpline = setupMats$XsdfdSplineU_cxd1)
+      avsdfd_cxd12 <- iasdfd(dI = setupMats$dIU2 , sdfdPars = parsBTfmd$sdfdPars_cxd1 , sdfdType = sdfdType_cxd1 , XsdfdSpline = setupMats$XsdfdSplineU_cxd12)
+      phid_cxd1 <- phidStat * matrix(avsdfd_cxd11 , length(avsdfd_cxd11) , length(avsdfd_cxd12)) * matrix(avsdfd_cxd12 , length(avsdfd_cxd11) , length(avsdfd_cxd12) , byrow = T) 
+      
+      # phid_cxd1 <- iaCovMatern2(dIData = setupMats$dIU , dIData2 = setupMats$dIU2 , ad = parsBTfmd$ad , nud = parsBTfmd$nud , sdfdPars = parsBTfmd$sdfdPars_cxd1 , sdfdType = sdfdType_cxd1)
+    }
+  }
+  
+  parsOK <- T
+  if((max(is.na(phid_cd1)) == 1) | (max(is.na(phid_cxd0)) == 1) | (max(is.na(phid_cxd1)) == 1)){ parsOK <- F } else{}
+  if(min(c(avsdfd_cd11 , avsdfd_cd12 , avsdfd_cxd01 , avsdfd_cxd02 , avsdfd_cxd11 , avsdfd_cxd12)) < 0){ parsOK <- F } else{}
+  
+  if(parsOK){
+    
+    ### adding Cxd0...    
+    if(modelx == 'nugget' & sdfdType_cd1 == -9){
+      KphidKStat <- (setupMats$Kx %*% phix0 %*% t(setupMats$Kx2)) * (setupMats$Kd %*% phidStat %*% t(setupMats$Kd2))
+      C <- C + parsBTfmd$cxd0 * (setupMats$Kx %*% phix0 %*% t(setupMats$Kx2)) * (setupMats$Kd %*% phid_cxd0 %*% t(setupMats$Kd2))
+    }else{        
+      KphidKStat <- setupMats$Kd %*% phidStat %*% t(setupMats$Kd2)	
+      C <- C + parsBTfmd$cxd0 * (setupMats$Kx %*% phix0 %*% t(setupMats$Kx2)) * (setupMats$Kd %*% phid_cxd0 %*% t(setupMats$Kd2))
+    }
+    
+    ### adding Cd...    
+    if(sdfdType_cd1 == 0){
+      C <- C + parsBTfmd$cd1 * KphidKStat
+    }else if(sdfdType_cd1 == -9){
+      Cd <- 0
+    }else{
+      C <- C + parsBTfmd$cd1 * (setupMats$Kd %*% phid_cd1 %*% t(setupMats$Kd2))
+    }
+    
+    ### adding Cx0...        
+    Kphix0K <- setupMats$Kx %*% phix0 %*% t(setupMats$Kx2)
+    C <- C + parsBTfmd$cx0 * Kphix0K 
+    remove(Kphix0K) ; 
+    
+    if(modelx == 'nugget'){
+      Cx1 <- Cxd1 <- 0
+    }else{
+      Kphix1K <- setupMats$Kx %*% phix1 %*% t(setupMats$Kx2)
+      ### adding Cx1...    
+      C <- C + parsBTfmd$cx1 * Kphix1K 
+      ### adding Cxd1...    
+      if(sdfdType_cxd1 == 0){
+        C <- C + parsBTfmd$cxd1 * Kphix1K * KphidKStat 
+      }else{
+        C <- C + parsBTfmd$cxd1 * Kphix1K * (setupMats$Kd %*% phid_cxd1 %*% t(setupMats$Kd2))
+      }
+      remove(Kphix1K) ; 
+    }
+    if(exists('KphidKStat')){ remove(KphidKStat) ;  }else{}
+    
+    ### note, no meas err being added to cov between distinct data...
+    
+  }else{        
+    C <- NA
+    print('Bad parameters...not sure how this can happen')
+    print(parsBTfmd)
+  }
+  
+  return(C)
 }
 

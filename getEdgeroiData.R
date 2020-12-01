@@ -25,7 +25,7 @@ getEdgeroiData <- function(){
       idTmp[i] <- iThis
 
       cTmp[i,] <- coordinates(sites)[iThis,]
-      
+
       # 899_Forrest_48_1 and 899_Forrest_49_1 have exatly the same coords - shift 899_Forrest_49_1 east by 1m...
       if(as.character(edgeroi$horizons$SOURCEID[i]) == '899_Forrest_49_1'){
         cTmp[i,1] <- cTmp[i,1] + 1

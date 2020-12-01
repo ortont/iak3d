@@ -185,7 +185,7 @@ allKnotsd2X <- function(dIMidPts , allKnotsd){
     intKnots <- intKnots[-length(intKnots)]
     bdryKnots <- c(allKnotsd[1] , allKnotsd[length(allKnotsd)])
     
-    XSpline <- bs(dI , knots = intKnots , degree = 3 , intercept = F , Boundary.knots = bdryKnots)
+    XSpline <- bs(dIMidPts , knots = intKnots , degree = 3 , intercept = F , Boundary.knots = bdryKnots)
     colnames(XSpline) <- paste0('dSpline.' , seq(ncol(XSpline)))
   }else{
     XSpline <- matrix(NA , n , 0)
@@ -1086,7 +1086,8 @@ makeProfID <- function(cAll , useOldVersion = TRUE){
   if(is.null(cAll)){
     return(NULL)
   }else{
-    if(!is.element(class(cAll) , c('data.frame' , 'matrix'))){ stop('Error - makeProfID assumes cAll entered as matrix or data.frame.') }else{}
+    # if(!is.element(class(cAll) , c('data.frame' , 'matrix'))){ stop('Error - makeProfID assumes cAll entered as matrix or data.frame.') }else{}
+    if(!(is(cAll ,'data.frame') | is(cAll , 'matrix'))){ stop('Error - makeProfID assumes cAll entered as matrix or data.frame.') }else{}
     
     ndim <- ncol(cAll)
     

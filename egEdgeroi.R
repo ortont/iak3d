@@ -68,14 +68,20 @@ source(paste0(iakDir , '/mpspline.source.R'))
 source(paste0(iakDir , '/getEdgeroiData.R')) 
 source(paste0(lmm2Dir , '/fLMM2.R')) 
 
+source(paste0(iakDir , '/splineBasisFns.R'))
+source(paste0(iakDir , '/makeXvX_gam2.R'))
+
 printnllTime <<- FALSE
 
 crsAusAlbers <- CRS("+proj=aea +lat_1=-18 +lat_2=-36 +lat_0=0 +lon_0=132 +x_0=0 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs")
+crsAusAlbersNEW <- CRS("+proj=aea +lat_1=-18 +lat_2=-36 +lat_0=0 +lon_0=132 +x_0=0 +y_0=0 +ellps=WGS84 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs")
 crsLongLat <- CRS('+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
 
 ##########################################################
 ### set some options for iak...
 ##########################################################
+useCubistForTrend <- TRUE # otherwise, will use a spline model
+
 nRules <- 5 # number of rules for Cubist model. If NA, then a x val routine to select nRules will be used. 
 
 refineCubistModel <- TRUE # use a stepwise algorithm (refineXIAK3D in cubist2XIAK3D.R) to remove predictors from the fitted Cubist model? # If NA, a x val routine will be used to select T/F
@@ -97,12 +103,23 @@ rqrBTfmdPreds <- FALSE # only relevant if data were log-transformed - back trans
 useReml <- TRUE
 #useReml <- FALSE
 
-allKnotsd <- c() # use this to have no d spline, d sum component will be included in cov model then
-# allKnotsd <- c(0 , 0.3 , 1 , 7.13) # final is the max lower depth. d component will not be included in cov model in this case
-if(length(allKnotsd) > 0){ incdSpline <- TRUE }else{ incdSpline <- FALSE }
+if(useCubistForTrend){
+  allKnotsd <- c() # use this to have no d spline, d sum component will be included in cov model then
+  # allKnotsd <- c(0 , 0.3 , 1 , 7.13) # final is the max lower depth. d component will not be included in cov model in this case
+  if(length(allKnotsd) > 0){ incdSpline <- TRUE }else{ incdSpline <- FALSE }
+}else{
+  allKnotsd <- c() # spline info will be included in modelX, added below in script
+  incdSpline <- FALSE
+}
 
 if(length(allKnotsd) == 0){
-  sdfdTypeANDcmeInit <- c(0 , -1 , -1 , 1) # stationary d component in prodSum model (0), non-stat cxd0 (-1) and cxd1 (-1), meas err included (1)
+  # sdfdTypeANDcmeInit <- c(0 , -1 , -1 , 1) # stationary d component in prodSum model (0), non-stat cxd0 (-1) and cxd1 (-1), meas err included (1)
+  # sdfdTypeANDcmeInit <- c(0 , 2 , 2 , 1) # stationary d component in prodSum model (0), non-stat cxd0 (-1) and cxd1 (-1), meas err included (1)
+  # sdfdTypeANDcmeInit <- c(0 , 2 , 0 , 1) # stationary d component in prodSum model (0), non-stat cxd0 (-1) and cxd1 (-1), meas err included (1)
+  # sdfdTypeANDcmeInit <- c(0 , 0 , 3 , 1) # stationary d component in prodSum model (0), non-stat cxd0 (-1) and cxd1 (-1), meas err included (1)
+  # sdfdTypeANDcmeInit <- c(0 , 3 , 0 , 1) # stationary d component in prodSum model (0), non-stat cxd0 (-1) and cxd1 (-1), meas err included (1)
+  # sdfdTypeANDcmeInit <- c(-9 , 0 , 0 , 1) # stationary d component in prodSum model (0), non-stat cxd0 (-1) and cxd1 (-1), meas err included (1)
+  sdfdTypeANDcmeInit <- c(-9 , 2 , 2 , 1) # stationary d component in prodSum model (0), non-stat cxd0 (-1) and cxd1 (-1), meas err included (1)
 }else{
   sdfdTypeANDcmeInit <- c(-9 , -1 , -1 , 1) # no d component in prodSum model because spline used instead (-9), non-stat cxd0 (-1) and cxd1 (-1), meas err included (1)
   #sdfdTypeANDcmeInit <- c(-9 , 0 , 0 , 1) # no d component in prodSum model because spline used instead (-9), stat cxd0 (0) and cxd1 (0), meas err included (1)
@@ -128,42 +145,107 @@ profIDVal <- tmp$profIDVal
 
 rList <- tmp$rList
 
+# load(file = paste0(dataDir , '/zTest.RData'))
+# load(file = paste0(dataDir , '/xTest.RData'))
+# load(file = paste0(dataDir , '/dITest.RData'))
+# 
+# cFit <- xTest
+# zFit <- zTest
+# dIFit <- dITest
+# covsFit <- data.frame('dIMidPts' = rowMeans(dITest))
+# profIDFit <- makeProfID(cFit)
+# 
+# 
+# cVal <- cFit[1:10,] + 10
+# dIVal <- dIFit[1:10,]
+# covsVal <- covsFit[1:10,,drop=FALSE]
+# zVal <- zFit[1:10]
+# profIDVal <- makeProfID(cVal)
+# 
+# rm(xTest , zTest , dITest)
+
+#################################################################################################
+### set knots for sdfd spline fn (if used)
+#################################################################################################
+sdfdKnots <- setKnots4sdfd(dIFit , sdfdType_cd1 = sdfdTypeANDcmeInit[1] , sdfdType_cxd0 = sdfdTypeANDcmeInit[2] , sdfdType_cxd1 = sdfdTypeANDcmeInit[3])
+
+if(useCubistForTrend){
 #################################################################################################
 ### an algorithm to select number of rules for cubist model, with dSpline included (if selected), 
 ### and rdm effect in lmm for profileID (ie so that lots of data from one profile don't contribute too much spatial info)
 #################################################################################################
-if(is.na(nRules) | is.na(refineCubistModel)){
-  if(is.na(nRules)){ nRulesVec <- seq(20) }else{ nRulesVec <- nRules }
-  if(is.na(refineCubistModel)){ refineCubistModelVec <- c(FALSE , TRUE) }else{ refineCubistModelVec <- refineCubistModel }
-  tmp <- selectCubistOptsXV(cFit = cFit , zFit = zFit , covsFit = covsFit , allKnotsd = allKnotsd , nRulesVec = nRulesVec , refineCubistModelVec = refineCubistModelVec)
-  nRules <- tmp$nRules
-  refineCubistModel <- tmp$refineCubistModel
-  rmseMatList <- tmp$rmseMatList
-  warningFlagFitList <- tmp$warningFlagFitList
-}else{}
-
+  if(is.na(nRules) | is.na(refineCubistModel)){
+    if(is.na(nRules)){ nRulesVec <- seq(20) }else{ nRulesVec <- nRules }
+    if(is.na(refineCubistModel)){ refineCubistModelVec <- c(FALSE , TRUE) }else{ refineCubistModelVec <- refineCubistModel }
+    tmp <- selectCubistOptsXV(cFit = cFit , zFit = zFit , covsFit = covsFit , allKnotsd = allKnotsd , nRulesVec = nRulesVec , refineCubistModelVec = refineCubistModelVec)
+    nRules <- tmp$nRules
+    refineCubistModel <- tmp$refineCubistModel
+    rmseMatList <- tmp$rmseMatList
+    warningFlagFitList <- tmp$warningFlagFitList
+  }else{}
+  
 #################################################################
 ### fit or load the Cubist model...
 #################################################################
-if(fitCubistModelNow){
-### fit cubist model...
-  cmFit <- cubist(x = covsFit , y = zFit , committees = 1 , cubistControl(rules = nRules))
-
-  print(summary(cmFit))
-
-### convert to des mtx
-  tmp <- cubist2X(cubistModel = cmFit, dataFit = covsFit , zFit = zFit , profIDFit = profIDFit , allKnotsd = allKnotsd , refineCubistModel = refineCubistModel)
-  cmFit <- tmp$cubistModel
-  XFit <- tmp$X
-  matRulesFit <- tmp$matRuleData
-
-  save(cmFit , file = paste0(dataDir , '/cmFit.RData'))
-
+  if(fitCubistModelNow){
+    ### fit cubist model...
+    cmFit <- cubist(x = covsFit , y = zFit , committees = 1 , cubistControl(rules = nRules))
+    
+    print(summary(cmFit))
+    
+    ### convert to des mtx
+    tmp <- cubist2X(cubistModel = cmFit, dataFit = covsFit , zFit = zFit , profIDFit = profIDFit , allKnotsd = allKnotsd , refineCubistModel = refineCubistModel)
+    cmFit <- tmp$cubistModel
+    XFit <- tmp$X
+    matRulesFit <- tmp$matRuleData
+    
+    save(cmFit , file = paste0(dataDir , '/cmFit.RData'))
+    
+  }else{
+    
+    load(file = paste0(dataDir , '/cmFit.RData'))
+    
+  }
+  
+  modelX <- cmFit
+  
 }else{
+  ###################################################################################
+  ### alternatively, set up for fitting a spline model.
+  ### include interactions between depth and spatial covariates (but here not between different spatial covariates)
+  ###################################################################################
+  modelX <- list('type' = 'gam2')
 
-  load(file = paste0(dataDir , '/cmFit.RData'))
+  # covNames <- c('dIMidPts' , 'elevation_SCALED' , 'twi_SCALED' , 'radK_SCALED' , 'landsat_b3_SCALED' , 'landsat_b4_SCALED')
+  covNames <- c()
+  
+  ### add any scaled variables (_SCALED) to covs dfs...
+  tmp <- addScaledCovs2df(dfFit = covsFit , dfPred = covsVal , covNames = covNames)
+  covsFit <- tmp$dfFit
+  covsVal <- tmp$dfPred
 
+# for bdry knot positions for depth fn, use 5th ptile (not clamped) to stop it being too wiggly at the surface.   
+# and 95th ptile for other boundary - this is clamped, which will force a plateau
+# for other (spatial) covariates, boundary knots at 1st and 99th ptiles, which together with clamping at both ends will stop extrapolation.
+  q4BdryKnots <- c(0.05 , rep(0.01 , 5)) 
+  q4BdryKnots <- cbind(q4BdryKnots , 1 - q4BdryKnots)
+  nIntKnots <- c(4 , rep(5 , 5))
+  sType <- c('nscug' , rep('nsclug' , 5))
+  modelX$listfefdKnots <- makelistfefdKnots(dfFit = covsFit , covNames = covNames , nIntKnots = nIntKnots , q4BdryKnots = q4BdryKnots , sType = sType)
+### to include interactions between depth and the other spatial covariates...  
+  modelX$incInts <- list('dIMidPts' , c('elevation_SCALED' , 'twi_SCALED' , 'radK_SCALED' , 'landsat_b3_SCALED' , 'landsat_b4_SCALED'))
+  modelX$intMthd <- 0
+
+  source(paste0(iakDir , '/splineBasisFns.R'))
+  
+### just to get names of columns...  
+  XcnsTmp <- makeXcns(dfCovs = covsFit , dIData = dIFit , listfefdKnots = modelX$listfefdKnots , incInts = modelX$incInts , colnamesX = NULL , intMthd = modelX$intMthd) # intMthd = 1 for now. 0 = simpler
+
+  modelX$colnamesX <- colnames(XcnsTmp)
+  
+  rm(tmp , XcnsTmp , q4BdryKnots , nIntKnots , sType , covNames)
 }
+
 
 if(testCL){
 ### if fitting different models, save out the compLikMats so that it is the same each time.
@@ -180,7 +262,7 @@ if(testCL){
 }
 
 lmmFitFile <- paste0(dataDir , '/lmm.fit.selected.RData') # for the fitted model
-nmplt <- paste0(dataDir , '/plot.selected.pdf') # for a plot with the internal 'predictions' = predictions through profiles of sampled profiles (not validation, can be a check of what's going on)
+nmplt <- paste0(dataDir , '/plot.selected.gam2.pdf') # for a plot with the internal 'predictions' = predictions through profiles of sampled profiles (not validation, can be a check of what's going on)
 
 if(fitModelNow){
 
@@ -208,9 +290,9 @@ if(fitModelNow){
 ### refit cubist model as lmm...if selectCovIAK3D was run don't need to do this bit
   start_time <- Sys.time()
   
-  tmp <- fitIAK3D(xData = cFit , dIData = dIFit , zData = zFit , covsData = covsFit , modelX = cmFit , modelx = 'matern' , nud = nud , allKnotsd = allKnotsd , 
+  tmp <- fitIAK3D(xData = cFit , dIData = dIFit , zData = zFit , covsData = covsFit , modelX = modelX , modelx = 'matern' , nud = nud , allKnotsd = allKnotsd , 
                     sdfdType_cd1 = sdfdTypeANDcmeInit[1] , sdfdType_cxd0 = sdfdTypeANDcmeInit[2] , sdfdType_cxd1 = sdfdTypeANDcmeInit[3] , 
-                    cmeOpt = sdfdTypeANDcmeInit[4] , prodSum = prodSum , lnTfmdData = lnTfmdData , useReml = useReml , compLikMats = compLikMats ,
+                    cmeOpt = sdfdTypeANDcmeInit[4] , sdfdKnots = sdfdKnots , prodSum = prodSum , lnTfmdData = lnTfmdData , useReml = useReml , compLikMats = compLikMats ,
                     namePlot = nmplt , rqrBTfmdPreds = rqrBTfmdPreds) 
 
   end_time <- Sys.time()
@@ -231,7 +313,7 @@ if(fitModelNow){
 if(plotVargiogramFit){
   dIPlot <- data.frame('dU' = c(0 , 20 , 50 , 90 , 150 , 190)/100 , 'dL' = c(10 , 30 , 60 , 100 , 160 , 200)/100)
   hx <- seq(0 , 20 , 1)
-  pdf(file = paste0(dataDir , '/varioFit.pdf'))
+  pdf(file = paste0(dataDir , '/varioFitgam22.pdf'))
   tmp <- plotCovx(lmm.fit = lmm.fit.selected , hx = hx , dIPlot = dIPlot , addExpmntlV = TRUE , hzntlUnits = 'km')
   dev.off()
   
@@ -251,8 +333,7 @@ if(plotVargiogramFit){
   dPlot <- seq(0 , 2 , 0.01)
   plotVarComps(lmm.fit = lmm.fit.selected , dPlot = dPlot)
   dev.off()
-  
-  
+
 }else{}
 
 #########################################################

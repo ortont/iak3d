@@ -1,4 +1,4 @@
-fitLMM2 <- function(c , z , X , covModel = 'exponential' , nSpatStructs = 1 , optionML = F , verbose = FALSE , mina = NULL , maxa = NULL , parsInit = NULL , attachBigMats = TRUE){
+fitLMM2 <- function(c , z , X , covModel = 'exponential' , nSpatStructs = 1 , incNugget = T , optionML = F , verbose = FALSE , mina = NULL , maxa = NULL , parsInit = NULL , attachBigMats = TRUE){
 
   ina <- which(is.na(z))
   if(length(ina) > 0){
@@ -14,12 +14,22 @@ fitLMM2 <- function(c , z , X , covModel = 'exponential' , nSpatStructs = 1 , op
   if(is.null(maxa)){ maxa <- max(D) / 2 }else{}
 
   if(is.null(parsInit)){
-    if(nSpatStructs == 1){
-      parsInit <- c(0.6 , 0.5 * mina + 0.5 * maxa)
-    }else if(nSpatStructs == 2){
-      parsInit <- c(0.3 , 0.9 * mina + 0.1 * maxa , 0.3 , 0.3 * mina + 0.7 * maxa)
+    if(incNugget){
+      if(nSpatStructs == 1){
+        parsInit <- c(0.6 , 0.5 * mina + 0.5 * maxa)
+      }else if(nSpatStructs == 2){
+        parsInit <- c(0.3 , 0.9 * mina + 0.1 * maxa , 0.3 , 0.3 * mina + 0.7 * maxa)
+      }else{
+        stop('Error - generalise fitLMM2 for other values of nSpatStructs!')
+      }
     }else{
-      stop('Error - generalise fitLMM2 for other values of nSpatStructs!')
+      if(nSpatStructs == 1){
+        parsInit <- c(0.5 * mina + 0.5 * maxa)
+      }else if(nSpatStructs == 2){
+        parsInit <- c(0.5 , 0.9 * mina + 0.1 * maxa , 0.3 * mina + 0.7 * maxa)
+      }else{
+        stop('Error - generalise fitLMM2 for other values of nSpatStructs!')
+      }
     }
   }else{}
   
@@ -27,28 +37,36 @@ fitLMM2 <- function(c , z , X , covModel = 'exponential' , nSpatStructs = 1 , op
 ### run to get initial lik val...
 #####################################################    
   ftLMM2Init <- fLMM2(pars = parsInit , c = c , z = z , X = X , D = D , 
-                    covModel = covModel , nSpatStructs = nSpatStructs , returnAll = FALSE , optionML = optionML , 
+                    covModel = covModel , nSpatStructs = nSpatStructs , incNugget = incNugget , returnAll = FALSE , optionML = optionML , 
                     verbose = TRUE , forCompLik = FALSE , mina = mina , maxa = maxa)
 
 #####################################################    
 ### fit model with temporal correlation accounted for...
 #####################################################    
   badNll <- 9E99
-  tmp <- optimIt(par = parsInit , fn = fLMM2 , methodOptim = c('Nelder-Mead') , c = c , z = z , X = X , D = D ,
-               covModel = covModel , nSpatStructs = nSpatStructs , returnAll = FALSE , optionML = optionML , 
+  if(length(parsInit) > 1){
+    tmp <- optimIt(par = parsInit , fn = fLMM2 , methodOptim = c('Nelder-Mead') , c = c , z = z , X = X , D = D ,
+               covModel = covModel , nSpatStructs = nSpatStructs , incNugget = incNugget , returnAll = FALSE , optionML = optionML , 
                verbose = verbose , forCompLik = FALSE , mina = mina , maxa = maxa , badNll = badNll)
-
+    parsFit <- tmp$par
+  }else{    
+    tmp <- optimize(f = fLMM2 , lower = mina , upper = maxa , c = c , z = z , X = X , D = D ,
+               covModel = covModel , nSpatStructs = nSpatStructs , incNugget = incNugget , returnAll = FALSE , optionML = optionML , 
+               verbose = verbose , forCompLik = FALSE , mina = mina , maxa = maxa , badNll = badNll)
+    parsFit <- tmp$minimum
+  }
+  
 #####################################################    
 ### run again to get final lik val + other info...
 #####################################################    
-  ftLMM2Fit <- fLMM2(pars = tmp$par , c = c , z = z , X = X , D = D , 
-                      covModel = covModel , nSpatStructs = nSpatStructs , returnAll = TRUE , optionML = optionML , 
+  ftLMM2Fit <- fLMM2(pars = parsFit , c = c , z = z , X = X , D = D , 
+                      covModel = covModel , nSpatStructs = nSpatStructs , incNugget = incNugget , returnAll = TRUE , optionML = optionML , 
                       verbose = TRUE , forCompLik = FALSE , mina = mina , maxa = maxa , attachBigMats = attachBigMats)
   
   return(ftLMM2Fit)
 }
 
-fLMM2 <- function(pars , c , z , X , D , covModel , nSpatStructs , returnAll , optionML , verbose , forCompLik = FALSE , mina = NULL , maxa = NULL , badNll = 9E99 , attachBigMats = TRUE){
+fLMM2 <- function(pars , c , z , X , D , covModel , nSpatStructs , incNugget = T , returnAll , optionML , verbose , forCompLik = FALSE , mina = NULL , maxa = NULL , badNll = 9E99 , attachBigMats = TRUE){
     N <- length(z)
     np <- dim(X)[2]
 
@@ -65,12 +83,22 @@ fLMM2 <- function(pars , c , z , X , D , covModel , nSpatStructs , returnAll , o
 ### pars will be..
 ### if nSpatStructs = 1...s,a
 ### if nSpatStructs = 2, will be ...s1,a1,s2,a2
-    if (nSpatStructs == 1){
+    if(incNugget){
+      if (nSpatStructs == 1){
         s1 <- pars[1] ; a1 <- pars[2] ; s2 <- 0 ; a2 <- a1 ; s0 <- 1 - s1
         if((s1 < 0) | (s1 > 1) | (a1 < mina) | (a1 > maxa)){ paramsOK <- F }else{ paramsOK = T } 
-    }else{
+      }else{
         s1 <- pars[1] ; a1 <- pars[2]; s2 <- pars[3] ; a2 <- pars[4] ; s0 <- 1 - (s1 + s2)
         if((s1 < 0) | (s1 > 1) | (s2 < 0) | (s2 > 1) | ((s1 + s2) > 1) | (a2 < a1)  | (a1 < mina) | (a2 > maxa)){ paramsOK <- F }else{ paramsOK = T } 
+      }
+    }else{
+      if (nSpatStructs == 1){
+        s1 <- 1 ; a1 <- pars[1] ; s2 <- 0 ; a2 <- a1 ; s0 <- 0
+        if((s1 < 0) | (s1 > 1) | (a1 < mina) | (a1 > maxa)){ paramsOK <- F }else{ paramsOK = T } 
+      }else{
+        s1 <- pars[1] ; a1 <- pars[2]; s2 <- 1 - s1 ; a2 <- pars[3] ; s0 <- 0
+        if((s1 < 0) | (s1 > 1) | (s2 < 0) | (s2 > 1) | ((s1 + s2) > 1) | (a2 < a1)  | (a1 < mina) | (a2 > maxa)){ paramsOK <- F }else{ paramsOK = T } 
+      }
     }
     
     parsOut <- paste0('s1=' , round(s1, digits = 3) , ', a1=' , round(a1, digits = 2))
@@ -199,7 +227,7 @@ fLMM2 <- function(pars , c , z , X , D , covModel , nSpatStructs , returnAll , o
 ### possibly two levels of blocks, bricked, so that both sets include all data 
 ### (ie each data point appears once in level 1 blocks and once in level 2 blocks)
 #############################################################################
-compLikLMM2 <- function(pars , c , z , X , DBlocks , blocks , nBlocks1 = length(blocks) , covModel , nSpatStructs , returnAll = FALSE , optionML = FALSE , verbose = TRUE , mina = NULL , maxa = NULL , partOfBiggerModel = F , badNll = 9E99){
+compLikLMM2 <- function(pars , c , z , X , DBlocks , blocks , nBlocks1 = length(blocks) , covModel , nSpatStructs , incNugget = TRUE , returnAll = FALSE , optionML = FALSE , verbose = TRUE , mina = NULL , maxa = NULL , partOfBiggerModel = F , badNll = 9E99){
 
     n <- dim(X)[[1]]
     p <- dim(X)[[2]]
@@ -244,7 +272,7 @@ compLikLMM2 <- function(pars , c , z , X , DBlocks , blocks , nBlocks1 = length(
     for (i in 1:length(blocks)){    
       if(paramsOK){  
           tmp <- fLMM2(pars = pars , c = c[blocks[[i]],] , z = z[blocks[[i]]] , X = X[blocks[[i]],] , D = DBlocks[[i]] , 
-                    covModel = covModel , nSpatStructs = nSpatStructs , returnAll = returnAll , optionML = optionML , verbose = T , forCompLik = TRUE , mina = mina , maxa = maxa  , badNll = badNll)
+                    covModel = covModel , nSpatStructs = nSpatStructs , incNugget = incNugget , returnAll = returnAll , optionML = optionML , verbose = T , forCompLik = TRUE , mina = mina , maxa = maxa  , badNll = badNll)
 
           if(i == 1){ 
             parsOut <- tmp$parsOut 
