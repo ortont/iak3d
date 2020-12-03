@@ -610,31 +610,37 @@ setInitsIAK3D <- function(xData , dIData , zData , XData , vXU , iU , modelx , n
 
 getParNamesIAK3D <- function(modelx , sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1 , prodSum , cmeOpt , lnTfmdData){
   
-  if(max(c(sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1)) > 0){ stop('Update getParNamesIAK3D function for sdfdType > 0!') }else{}
+#  if(max(c(sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1)) > 0){ stop('Update getParNamesIAK3D function for sdfdType > 0!') }else{}
   
   if(modelx == 'matern'){
     if(!lnTfmdData){
       ### beta,cxd[d=0] auto    
       parNames <- c('ax.lt' , 'nux.lt' , 'ad.lt')
-      if(!prodSum){ parNames <- c(parNames , 'cx0OVERcxd.l') }else{}
-      if(!prodSum){ parNames <- c(parNames , 'cx1OVERcxd.l') }else{}
-      if((!prodSum) & (sdfdType_cd1 != -9)){ parNames <- c(parNames , 'cd1OVERcxd.l') }else{}
+      if(prodSum){ parNames <- c(parNames , 'cx0OVERcxd.l') }else{}
+      if(prodSum){ parNames <- c(parNames , 'cx1OVERcxd.l') }else{}
+      if(prodSum & (sdfdType_cd1 != -9)){ parNames <- c(parNames , 'cd1OVERcxd.l') }else{}
       parNames <- c(parNames , 'cxd1OVERcxd.lt')
       if(sdfdType_cd1 == -1){ parNames <- c(parNames , c('taud1.1.tfm' , 'taud1.2.tfm')) }else{}
+      if(sdfdType_cd1 > 0){ parNames <- c(parNames , paste0('taud1.' , seq(sdfdType_cd1))) }else{}
       if(sdfdType_cxd0 == -1){ parNames <- c(parNames , c('tauxd0.1.tfm' , 'tauxd0.2.tfm')) }else{}
+      if(sdfdType_cxd0 > 0){ parNames <- c(parNames , paste0('tauxd0.' , seq(sdfdType_cxd0))) }else{}
       if(sdfdType_cxd1 == -1){ parNames <- c(parNames , c('tauxd1.1.tfm' , 'tauxd1.2.tfm')) }else{}
+      if(sdfdType_cxd1 > 0){ parNames <- c(parNames , paste0('tauxd1.' , seq(sdfdType_cxd1))) }else{}
       if(cmeOpt == 1){ parNames <- c(parNames , 'cmeOVERcxd.l') }else{}
     }else{
       ### beta by nr
       parNames <- c('ax.lt' , 'nux.lt' , 'ad.lt')
-      if(!prodSum){ parNames <- c(parNames , 'cx0.l') }else{}
-      if(!prodSum){ parNames <- c(parNames , 'cx1.l') }else{}
-      if((!prodSum) & (sdfdType_cd1 != -9)){ parNames <- c(parNames , 'cd1.l') }else{}
+      if(prodSum){ parNames <- c(parNames , 'cx0.l') }else{}
+      if(prodSum){ parNames <- c(parNames , 'cx1.l') }else{}
+      if(prodSum & (sdfdType_cd1 != -9)){ parNames <- c(parNames , 'cd1.l') }else{}
       if(sdfdType_cxd0 != -9){ parNames <- c(parNames , 'cxd0.l') }else{}
       if(sdfdType_cxd1 != -9){ parNames <- c(parNames , 'cxd1.l') }else{}
       if(sdfdType_cd1 == -1){ parNames <- c(parNames , c('taud1.1.tfm' , 'taud1.2.tfm')) }else{}
+      if(sdfdType_cd1 > 0){ parNames <- c(parNames , paste0('taud1.' , seq(sdfdType_cd1))) }else{}
       if(sdfdType_cxd0 == -1){ parNames <- c(parNames , c('tauxd0.1.tfm' , 'tauxd0.2.tfm')) }else{}
+      if(sdfdType_cxd0 > 0){ parNames <- c(parNames , paste0('tauxd0.' , seq(sdfdType_cxd0))) }else{}
       if(sdfdType_cxd1 == -1){ parNames <- c(parNames , c('tauxd1.1.tfm' , 'tauxd1.2.tfm')) }else{}
+      if(sdfdType_cxd1 > 0){ parNames <- c(parNames , paste0('tauxd1.' , seq(sdfdType_cxd1))) }else{}
       if(cmeOpt == 1){ parNames <- c(parNames , 'cme.l') }else{}
     }
     
@@ -642,19 +648,23 @@ getParNamesIAK3D <- function(modelx , sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cx
     if(!lnTfmdData){
       ### beta,cxd[d=0] auto    
       parNames <- c('ad.lt')
-      if(!prodSum){ parNames <- c(parNames , 'cx0OVERcxd.l') }else{}
-      if((!prodSum) & (sdfdType_cd1 != -9)){ parNames <- c(parNames , 'cd1OVERcxd.l') }else{}
+      if(prodSum){ parNames <- c(parNames , 'cx0OVERcxd.l') }else{}
+      if(prodSum & (sdfdType_cd1 != -9)){ parNames <- c(parNames , 'cd1OVERcxd.l') }else{}
       if(sdfdType_cd1 == -1){ parNames <- c(parNames , c('taud1.1.tfm' , 'taud1.2.tfm')) }else{}
+      if(sdfdType_cd1 > 0){ parNames <- c(parNames , paste0('taud1.' , seq(sdfdType_cd1))) }else{}
       if(sdfdType_cxd0 == -1){ parNames <- c(parNames , c('tauxd0.1.tfm' , 'tauxd0.2.tfm')) }else{}
+      if(sdfdType_cxd0 > 0){ parNames <- c(parNames , paste0('tauxd0.' , seq(sdfdType_cxd0))) }else{}
       if(cmeOpt == 1){ parNames <- c(parNames , 'cmeOVERcxd.l') }else{}
     }else{
       ### beta by nr
       parNames <- c('ad.lt' , 'cx0.l')
-      if(!prodSum){ parNames <- c(parNames , 'cx0.l') }else{}
-      if((!prodSum) & (sdfdType_cd1 != -9)){ parNames <- c(parNames , 'cd1.l') }else{}
+      if(prodSum){ parNames <- c(parNames , 'cx0.l') }else{}
+      if(prodSum & (sdfdType_cd1 != -9)){ parNames <- c(parNames , 'cd1.l') }else{}
       parNames <- c(parNames , 'cxd0.l')
       if(sdfdType_cd1 == -1){ parNames <- c(parNames , c('taud1.1.tfm' , 'taud1.2.tfm')) }else{}
+      if(sdfdType_cd1 > 0){ parNames <- c(parNames , paste0('taud1.' , seq(sdfdType_cd1))) }else{}
       if(sdfdType_cxd0 == -1){ parNames <- c(parNames , c('tauxd0.1.tfm' , 'tauxd0.2.tfm')) }else{}
+      if(sdfdType_cxd0 > 0){ parNames <- c(parNames , paste0('tauxd0.' , seq(sdfdType_cxd0))) }else{}
       if(cmeOpt == 1){ parNames <- c(parNames , 'cme.l') }else{}
     }
     
