@@ -210,6 +210,7 @@ predictIAK3D <- function(xMap , dIMap , covsMap , lmmFit , rqrBTfmdPreds = TRUE 
               }else{
                 vMapThis[iOKInThis] <- Ckk - CkhiCChk #TEMP WITHOUT beta unc...
               }
+
             }else{
               ### don't include uncerainty due to fixed effects as not correct formula in lognomral case. Could do as TS-FIM approx in future. 
               vMapThis[iOKInThis] <- Ckk - CkhiCChk
@@ -230,6 +231,7 @@ predictIAK3D <- function(xMap , dIMap , covsMap , lmmFit , rqrBTfmdPreds = TRUE 
       } # end of iBatch loop
 
     } # end of i loop
+    
     pi90LMap <- zMap - 1.645 * sqrt(vMap)
     pi90UMap <- zMap + 1.645 * sqrt(vMap)
     

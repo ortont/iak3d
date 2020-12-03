@@ -355,12 +355,19 @@ fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'mate
 #      dIPred <- cbind(seq(0 , 14.98 , 0.02) , seq(0.02 , 15 , 0.02))
       dIPred <- cbind(seq(0 , parBnds$maxd-0.02 , 0.02) , seq(0.02 , parBnds$maxd , 0.02))
 
+### below 1m, only do every 5th one of these depth intervals...
+      iKeep1 <- which(dIPred[,1] < 1)
+      iKeep2 <- which(dIPred[,1] >= 1)
+      if(length(iKeep2) > 0){ iKeep2 <- iKeep2[seq(1,length(iKeep2),5)] }else{}
+      dIPred <- dIPred[c(iKeep1,iKeep2),,drop=FALSE]
+      rm(iKeep1,iKeep2)
+
       dIPred <- round(dIPred , digits = 2)
       ndIPred <- nrow(dIPred)
 
       iTmp <- which(!duplicated(xData))
       
-      maxnProfPlot <- 200
+      maxnProfPlot <- 100
       if(length(iTmp) > maxnProfPlot){
 ### take a subsample of 200 profiles to plot...      
 ### so that repeatable, don't make it random...
@@ -499,7 +506,7 @@ nllIAK3D <- function(pars , zData , XData , vXU , iU , modelx , nud ,
     if(parsOK){
         n <- length(zData)
         XData <- as.matrix(XData , nrow = n)
-        p <- dim(XData)[[2]]
+        p <- ncol(XData)
         W <- cbind(XData,zData)
 
 ### just to make sure numerical errors have not made it non-symmetric...  		
@@ -697,6 +704,7 @@ setCIAK3D <- function(parsBTfmd , modelx ,
   
 ### if setupMats doesn't include 'Kx', it should include 'xData' and 'dIData', so that proper setupMats can be made now...
   if(is.null(setupMats$Kx)){
+    if(max(c(sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1)) > 0){ stop('Not ready to run setCIAK3D without passing in setupMats yet, because this requires passing in sdfdKnots - update the function!') }else{}
     setupMats <- setupIAK3D(xData = setupMats$xData , dIData = as.data.frame(setupMats$dIData) , nDscPts = 0) 
   }else{}
   
@@ -810,14 +818,17 @@ setCIAK3D <- function(parsBTfmd , modelx ,
     if(exists('KphidKStat')){ remove(KphidKStat) ;  }else{}
     if(exists('phid_cxd1')){ remove(phid_cxd1) ;  }else{}
 
-    sigma2Vec <- parsBTfmd$cx0 + parsBTfmd$cx1 + parsBTfmd$cd1 * avVard_cd1 + parsBTfmd$cxd0 * avVard_cxd0 + parsBTfmd$cxd1 * avVard_cxd1 + parsBTfmd$cme
-    sigma2Vec <- setupMats$Kd %*%sigma2Vec 
-    
+    ### add the variances...
+    sigma2Vec <- parsBTfmd$cxd0 * avVard_cxd0 + parsBTfmd$cxd1 * avVard_cxd1 + parsBTfmd$cme + parsBTfmd$cx0 + parsBTfmd$cx1 + parsBTfmd$cd1 * avVard_cd1
+
+    ### expand for all sampled depths (from the unique ones)...    
+    sigma2Vec <- setupMats$Kd %*% sigma2Vec
+
   }else{        
     C <- NA
     sigma2Vec <- NA
-    print('Bad parameters...not sure how this can happen')
-    print(parsBTfmd)
+    #    print('Bad parameters...not sure how this can happen')
+#    print(parsBTfmd)
   }
   
   return(list('C' = C , 'sigma2Vec' = sigma2Vec))
@@ -840,6 +851,7 @@ setCIAK3D2 <- function(parsBTfmd , modelx ,
   
   ### if setupMats doesn't include 'Kx', it should include 'xData', 'dIData', 'xData2' and 'dIData2', so that proper setupMats can be made now...
   if(is.null(setupMats$Kx)){
+    if(max(c(sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1)) > 0){ stop('Not ready to run setCIAK3D2 without passing in setupMats yet, because this requires passing in sdfdKnots - update the function!') }else{}
     setupMats <- setupIAK3D2(xData = setupMats$xData , dIData = setupMats$dIData , xData2 = setupMats$xData2 , dIData2 = setupMats$dIData2) 
   }else{}
   
@@ -920,11 +932,6 @@ setCIAK3D2 <- function(parsBTfmd , modelx ,
       C <- C + parsBTfmd$cd1 * (setupMats$Kd %*% phid_cd1 %*% t(setupMats$Kd2))
     }
 
-### adding Cx0...        
-    Kphix0K <- setupMats$Kx %*% phix0 %*% t(setupMats$Kx2)
-    C <- C + parsBTfmd$cx0 * Kphix0K 
-    remove(Kphix0K) ; 
-    
     if(modelx == 'nugget'){
       Cx1 <- Cxd1 <- 0
     }else{
@@ -945,8 +952,8 @@ setCIAK3D2 <- function(parsBTfmd , modelx ,
     
   }else{        
     C <- NA
-    print('Bad parameters...not sure how this can happen')
-    print(parsBTfmd)
+#    print('Bad parameters...not sure how this can happen')
+#    print(parsBTfmd)
   }
   
   return(C)
@@ -1616,7 +1623,7 @@ gradnllIAK3D.mc <- function(pars , zData , XData , vXU , iU , modelx , nud ,
     listRqd4nll <- c("setupIAK3D" , "nllIAK3D" , "readPars" , "setCIAK3D" , "setCApproxIAK3D" ,  
                           "printnllTime" , "verboseOptim" , "logitab" , "sdfdRead" , "tauTfm" , "iasdfd" ,
                           "maternCov" , "iaCovMatern" , "intRy" , "intRy12" , "intRy34" , "intTy" , "gammafnInt" , "poly2Exp" , "diagBlocksKdMKd" ,
-                          "sparseMatrix" , "t" , "summary" , "diag" , "determinant" , "lndetANDinvCb")
+                          "sparseMatrix" , "t" , "summary" , "diag" , "determinant" , "lndetANDinvCb" , "xyDist")
     cl <- makeCluster(numCores)
     clusterExport(cl, listRqd4nll)
     clusterEvalQ(cl, library("Matrix"))
@@ -1658,7 +1665,7 @@ gradnllIAK3D_CL.mc <- function(pars , zData , XData , modelx , nud ,
     listRqd4nll <- c("setupIAK3D" , "nllIAK3D" , "nllIAK3D_CL" , "readPars" , "setCIAK3D" , "setCApproxIAK3D" , 
                            "printnllTime" , "verboseOptim" , "logitab" , "sdfdRead" , "tauTfm" , "iasdfd" ,
                            "maternCov" , "iaCovMatern" , "intRy" , "intRy12" , "intRy34" , "intTy" , "gammafnInt" , "poly2Exp" , "diagBlocksKdMKd" ,
-                           "sparseMatrix" , "t" , "summary" , "diag" , "determinant" , "lndetANDinvCb")
+                           "sparseMatrix" , "t" , "summary" , "diag" , "determinant" , "lndetANDinvCb" , "xyDist")
     cl <- makeCluster(numCores)
     clusterExport(cl, listRqd4nll)
     clusterEvalQ(cl, library("Matrix"))
@@ -1746,6 +1753,7 @@ setCApproxIAK3D <- function(parsBTfmd , modelx ,
   
   ### if setupMats doesn't include 'Kx', it should include 'xData' and 'dIData', so that proper setupMats can be made now...
   if(is.null(setupMats$Kx)){
+    if(max(c(sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1)) > 0){ stop('Not ready to run setCIAK3D without passing in setupMats yet, because this requires passing in sdfdKnots - update the function!') }else{}
     setupMats <- setupIAK3D(xData = setupMats$xData , dIData = as.data.frame(setupMats$dIData) , nDscPts = 0) 
   }else{}
   
@@ -1884,8 +1892,8 @@ setCApproxIAK3D <- function(parsBTfmd , modelx ,
   }else{        
     C <- NA
     sigma2Vec <- NA
-    print('Bad parameters...not sure how this can happen')
-    print(parsBTfmd)
+#    print('Bad parameters...not sure how this can happen')
+#    print(parsBTfmd)
   }
   
   return(list('C' = C , 'sigma2Vec' = sigma2Vec))
@@ -1904,6 +1912,7 @@ setCApproxIAK3D2 <- function(parsBTfmd , modelx ,
   
   ### if setupMats doesn't include 'Kx', it should include 'xData', 'dIData', 'xData2' and 'dIData2', so that proper setupMats can be made now...
   if(is.null(setupMats$Kx)){
+    if(max(c(sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1)) > 0){ stop('Not ready to run setCIAK3D without passing in setupMats yet, because this requires passing in sdfdKnots - update the function!') }else{}
     setupMats <- setupIAK3D2(xData = setupMats$xData , dIData = setupMats$dIData , xData2 = setupMats$xData2 , dIData2 = setupMats$dIData2) 
   }else{}
   
@@ -2020,8 +2029,8 @@ setCApproxIAK3D2 <- function(parsBTfmd , modelx ,
     
   }else{        
     C <- NA
-    print('Bad parameters...not sure how this can happen')
-    print(parsBTfmd)
+#    print('Bad parameters...not sure how this can happen')
+#    print(parsBTfmd)
   }
   
   return(C)

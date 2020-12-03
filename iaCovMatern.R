@@ -461,7 +461,8 @@ setupIAK3D <- function(xData , dIData , nDscPts = 0 , partSetup = FALSE , sdfdTy
   ### can return here if partSetup is TRUE...
   #################################################    
   if(partSetup){
-    return(list('xU' = xU , 'Kx' = Kx , 'dIU' = dIU , 'Kd' = Kd , 'maxd' = maxd))  
+    ### added 3/12/2020 - add sdfdKnots to setupMats...
+    return(list('xU' = xU , 'Kx' = Kx , 'dIU' = dIU , 'Kd' = Kd , 'maxd' = maxd , 'sdfdKnots' = sdfdKnots))  
   }else{}
   
   Dx <- xyDist(xU , xU) # save as symmetric matrix, upper triangle saved.
@@ -535,11 +536,12 @@ setupIAK3D <- function(xData , dIData , nDscPts = 0 , partSetup = FALSE , sdfdTy
     XsdfdSplineU_cxd1 <- NULL
   }
   
+  ### added 3/12/2020 - add sdfdKnots to setupMats...
   return(list('xU' = xU , 'Kx' = Kx , 'Dx' = Dx , 'dIU' = dIU , 'Kd' = Kd ,  
               'dDsc' = dDsc , 'KdDsc' = KdDsc , 'DdDsc' = DdDsc , 'nDscPts' = nDscPts , 
-              'dIUabcd' = abcd , 'dIUiUElements' = iUElements , 'maxd' = maxd , 
+              'dIUabcd' = abcd , 'dIUiUElements' = iUElements , 'maxd' = maxd ,
               'utriKxIdxxKx' = utriKxIdxxKx , 'utriKdIdxdKd' = utriKdIdxdKd , 'summKxKx' = summKxKx , 
-              'XsdfdSplineU_cd1' = XsdfdSplineU_cd1 , 'XsdfdSplineU_cxd0' = XsdfdSplineU_cxd0 , 'XsdfdSplineU_cxd1' = XsdfdSplineU_cxd1))  
+              'XsdfdSplineU_cd1' = XsdfdSplineU_cd1 , 'XsdfdSplineU_cxd0' = XsdfdSplineU_cxd0 , 'XsdfdSplineU_cxd1' = XsdfdSplineU_cxd1 , 'sdfdKnots' = sdfdKnots))  
 }
 
 ### compLik version...
@@ -662,10 +664,10 @@ setupIAK3D2 <- function(xData , dIData , xData2 , dIData2 , sdfdType_cd1 = 0 , s
     XsdfdSplineU_cxd1 <- XsdfdSplineU_cxd12 <- NULL
   }
   
-  
+  ### added 3/12/2020 - add sdfdKnots to setupMats...
   return(list('xU' = xU , 'Kx' = Kx , 'Dx' = Dx , 'dIU' = dIU , 'Kd' = Kd , 'xU2' = xU2 , 'Kx2' = Kx2 , 'dIU2' = dIU2 , 'Kd2' = Kd2 , 
               'XsdfdSplineU_cd1' = XsdfdSplineU_cd1 , 'XsdfdSplineU_cxd0' = XsdfdSplineU_cxd0 , 'XsdfdSplineU_cxd1' = XsdfdSplineU_cxd1 , 
-              'XsdfdSplineU_cd12' = XsdfdSplineU_cd12 , 'XsdfdSplineU_cxd02' = XsdfdSplineU_cxd02 , 'XsdfdSplineU_cxd12' = XsdfdSplineU_cxd12))  
+              'XsdfdSplineU_cd12' = XsdfdSplineU_cd12 , 'XsdfdSplineU_cxd02' = XsdfdSplineU_cxd02 , 'XsdfdSplineU_cxd12' = XsdfdSplineU_cxd12 , 'sdfdKnots' = sdfdKnots))  
 }
 
 ################################################################################
