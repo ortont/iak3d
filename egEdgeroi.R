@@ -35,38 +35,29 @@ library(aqp)
 library(GSIF)
 library(ithir)
 library(parallel)
-
+library(here)
 # GSIF              NA                                                         "GPL"                                    NA              NA                    NA        NA     "no"             "3.6.1"
 # ithir             NA                                                         "GPL-2"                          NA              NA                    NA        NA     "no"             "3.6.1"
 
-if(Sys.info()[1] == 'Windows'){
-  wDir <- 'U://scripts/'
-  iakDir <- 'U://scripts/iakTests'
-  lmm2Dir <- 'U://scripts/fLMM2'
-  dataDir <- 'Z://ortont/Data/edgeroiEg'
-}else{
-  wDir <- '/export/home/ortont/scripts/'
-  iakDir <- '/export/home/ortont/scripts/iakTests'
-  lmm2Dir <- '/export/home/ortont/scripts/fLMM2'
-  dataDir <- '/scratch/rsc2/ortont/Data/soilConstraints2/soilData/ecMap2000s'
-}
+wDir <- here::here()
+dataDir <- here::here('Data','edgeroiEg')
 
-setwd(wDir)
-source(paste0(iakDir , '/fitIAK3D.R'))
-source(paste0(iakDir , '/setInitsIAK3D.R'))
-source(paste0(iakDir , '/iaCovMatern.R'))
-source(paste0(iakDir , '/nrUpdatesIAK3D.R'))
-source(paste0(iakDir , '/nrUpdatesIAK3DlnN.R'))
-source(paste0(iakDir , '/makeXvX.R'))
-source(paste0(iakDir , '/optifix.R'))
-source(paste0(iakDir , '/cubist2XIAK3D.R')) 
-source(paste0(iakDir , '/gam2XIAK3D.R')) 
-source(paste0(iakDir , '/predictIAK3D.R')) 
-source(paste0(iakDir , '/modelSelectIAK3D.R')) 
-source(paste0(iakDir , '/compositeLikIAK3D.R')) 
-source(paste0(iakDir , '/mpspline.source.R')) 
-source(paste0(iakDir , '/getEdgeroiData.R')) 
-source(paste0(lmm2Dir , '/fLMM2.R')) 
+setwd(wDir) # probably don't need this anymore
+source(here::here('fitIAK3D.R'))
+source(here::here('setInitsIAK3D.R'))
+source(here::here('iaCovMatern.R'))
+source(here::here('nrUpdatesIAK3D.R'))
+source(here::here('nrUpdatesIAK3DlnN.R'))
+source(here::here('makeXvX.R'))
+source(here::here('optifix.R'))
+source(here::here('cubist2XIAK3D.R')) 
+source(here::here('gam2XIAK3D.R')) 
+source(here::here('predictIAK3D.R')) 
+source(here::here('modelSelectIAK3D.R')) 
+source(here::here('compositeLikIAK3D.R')) 
+source(here::here('mpspline.source.R')) 
+source(here::here('getEdgeroiData.R')) 
+source(here::here('fLMM2.R')) 
 
 source(paste0(iakDir , '/splineBasisFns.R'))
 source(paste0(iakDir , '/makeXvX_gam2.R'))
