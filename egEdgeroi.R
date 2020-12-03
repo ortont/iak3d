@@ -80,7 +80,7 @@ crsLongLat <- CRS('+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
 ##########################################################
 ### set some options for iak...
 ##########################################################
-useCubistForTrend <- TRUE # otherwise, will use a spline model
+useCubistForTrend <- FALSE # otherwise, will use a spline model
 
 nRules <- 5 # number of rules for Cubist model. If NA, then a x val routine to select nRules will be used. 
 
@@ -112,17 +112,17 @@ if(useCubistForTrend){
   incdSpline <- FALSE
 }
 
-if(length(allKnotsd) == 0){
-  # sdfdTypeANDcmeInit <- c(0 , -1 , -1 , 1) # stationary d component in prodSum model (0), non-stat cxd0 (-1) and cxd1 (-1), meas err included (1)
+if((!useCubistForTrend) | (length(allKnotsd) > 0)){
+  sdfdTypeANDcmeInit <- c(-9 , -1 , -1 , 1) # no d component in prodSum model because spline used instead (-9), non-stat cxd0 (-1) and cxd1 (-1), meas err included (1)
+  #sdfdTypeANDcmeInit <- c(-9 , 0 , 0 , 1) # no d component in prodSum model because spline used instead (-9), stat cxd0 (0) and cxd1 (0), meas err included (1)
+}else{
+  sdfdTypeANDcmeInit <- c(0 , -1 , -1 , 1) # stationary d component in prodSum model (0), non-stat cxd0 (-1) and cxd1 (-1), meas err included (1)
   # sdfdTypeANDcmeInit <- c(0 , 2 , 2 , 1) # stationary d component in prodSum model (0), non-stat cxd0 (-1) and cxd1 (-1), meas err included (1)
   # sdfdTypeANDcmeInit <- c(0 , 2 , 0 , 1) # stationary d component in prodSum model (0), non-stat cxd0 (-1) and cxd1 (-1), meas err included (1)
   # sdfdTypeANDcmeInit <- c(0 , 0 , 3 , 1) # stationary d component in prodSum model (0), non-stat cxd0 (-1) and cxd1 (-1), meas err included (1)
   # sdfdTypeANDcmeInit <- c(0 , 3 , 0 , 1) # stationary d component in prodSum model (0), non-stat cxd0 (-1) and cxd1 (-1), meas err included (1)
   # sdfdTypeANDcmeInit <- c(-9 , 0 , 0 , 1) # stationary d component in prodSum model (0), non-stat cxd0 (-1) and cxd1 (-1), meas err included (1)
-  sdfdTypeANDcmeInit <- c(-9 , 2 , 2 , 1) # stationary d component in prodSum model (0), non-stat cxd0 (-1) and cxd1 (-1), meas err included (1)
-}else{
-  sdfdTypeANDcmeInit <- c(-9 , -1 , -1 , 1) # no d component in prodSum model because spline used instead (-9), non-stat cxd0 (-1) and cxd1 (-1), meas err included (1)
-  #sdfdTypeANDcmeInit <- c(-9 , 0 , 0 , 1) # no d component in prodSum model because spline used instead (-9), stat cxd0 (0) and cxd1 (0), meas err included (1)
+  # sdfdTypeANDcmeInit <- c(-9 , 2 , 2 , 1) # stationary d component in prodSum model (0), non-stat cxd0 (-1) and cxd1 (-1), meas err included (1)
 }
 
 testCL <- FALSE # use the composite likelihood approximation (to speed up for big datasets)?
@@ -216,27 +216,36 @@ if(useCubistForTrend){
   ###################################################################################
   modelX <- list('type' = 'gam2')
 
-  # covNames <- c('dIMidPts' , 'elevation_SCALED' , 'twi_SCALED' , 'radK_SCALED' , 'landsat_b3_SCALED' , 'landsat_b4_SCALED')
-  covNames <- c()
-  
+  scaleCovs <- TRUE
+  nIntKnotsd <- 4 # number of internal knots for the spline function (nat spline, clamped to have grad=0 at upper bdry) of depth; if this is complex enough, probably no need for the depth component in prod-sum covariance model
+  nIntKnotss <- 4 # number of internal knots for the spline functions (nat spline, clamped to have grad=0 at upper and lower bdries) of covariates
+
+  ### don't include depth here.   
+  spatialCovs <- c('elevation' , 'twi' , 'radK' , 'landsat_b3' , 'landsat_b4')
+  if(scaleCovs){
+    ### to work with scaled covariates
+    spatialCovs <- paste0(spatialCovs , '_SCALED')
+  }else{
+    ### to work with unscaled (raw) covariates
+    spatialCovs <- spatialCovs # no change here
+  } 
+
   ### add any scaled variables (_SCALED) to covs dfs...
-  tmp <- addScaledCovs2df(dfFit = covsFit , dfPred = covsVal , covNames = covNames)
+  tmp <- addScaledCovs2df(dfFit = covsFit , dfPred = covsVal , covNames = spatialCovs)
   covsFit <- tmp$dfFit
   covsVal <- tmp$dfPred
 
 # for bdry knot positions for depth fn, use 5th ptile (not clamped) to stop it being too wiggly at the surface.   
 # and 95th ptile for other boundary - this is clamped, which will force a plateau
 # for other (spatial) covariates, boundary knots at 1st and 99th ptiles, which together with clamping at both ends will stop extrapolation.
-  q4BdryKnots <- c(0.05 , rep(0.01 , 5)) 
+  q4BdryKnots <- c(0.05 , rep(0.01 , length(spatialCovs))) 
   q4BdryKnots <- cbind(q4BdryKnots , 1 - q4BdryKnots)
-  nIntKnots <- c(4 , rep(5 , 5))
-  sType <- c('nscug' , rep('nsclug' , 5))
-  modelX$listfefdKnots <- makelistfefdKnots(dfFit = covsFit , covNames = covNames , nIntKnots = nIntKnots , q4BdryKnots = q4BdryKnots , sType = sType)
-### to include interactions between depth and the other spatial covariates...  
-  modelX$incInts <- list('dIMidPts' , c('elevation_SCALED' , 'twi_SCALED' , 'radK_SCALED' , 'landsat_b3_SCALED' , 'landsat_b4_SCALED'))
+  nIntKnots <- c(nIntKnotsd , rep(nIntKnotss , length(spatialCovs)))
+  sType <- c('nscug' , rep('nsclug' , length(spatialCovs)))
+  modelX$listfefdKnots <- makelistfefdKnots(dfFit = covsFit , covNames = c('dIMidPts' , spatialCovs) , nIntKnots = nIntKnots , q4BdryKnots = q4BdryKnots , sType = sType)
+  ### to include interactions between depth and the other spatial covariates...  
+  modelX$incInts <- list('dIMidPts' , spatialCovs)
   modelX$intMthd <- 0
-
-  source(paste0(iakDir , '/splineBasisFns.R'))
   
 ### just to get names of columns...  
   XcnsTmp <- makeXcns(dfCovs = covsFit , dIData = dIFit , listfefdKnots = modelX$listfefdKnots , incInts = modelX$incInts , colnamesX = NULL , intMthd = modelX$intMthd) # intMthd = 1 for now. 0 = simpler
