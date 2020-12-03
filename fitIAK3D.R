@@ -164,6 +164,7 @@ fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'mate
 ######################################################
     if (compLikMats$compLikOptn == 0){
       # setupMats <- setupIAK3D(xData , dIData , nDscPts = 0) 
+      
       setupMats <- setupIAK3D(xData , dIData , nDscPts = 0 ,
                               sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , sdfdKnots = sdfdKnots)
     }else{
@@ -338,8 +339,15 @@ fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'mate
 ############################################
 ### also attach everything that was used to call the function to lmmFit...
 ############################################
-    lmmFit <- attachSettings2lmmFit(lmmFit , xData , dIData , zData , covsData , modelX , namesX , modelx , nud , allKnotsd , XLims , 
-               sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1 , cmeOpt , prodSum , sdfdKnots , setupMats , lnTfmdData , useReml , parBnds , fitRange , compLikMats)
+    lmmFit <- attachSettings2lmmFit(lmmFit = lmmFit , xData = xData , dIData = dIData , zData = zData , covsData = covsData , 
+                                    modelX = modelX , namesX = namesX , modelx = modelx , nud = nud , allKnotsd = allKnotsd , XLims = XLims , 
+                                    sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , cmeOpt = cmeOpt , 
+                                    prodSum = prodSum , sdfdKnots = sdfdKnots , setupMats = setupMats , lnTfmdData = lnTfmdData , 
+                                    useReml = useReml , parBnds = parBnds , fitRange = fitRange , compLikMats = compLikMats)
+
+print('After attaching...')
+print(lmmFit$sdfdKnots)
+print(head(lmmFit$setupMats$XsdfdSplineU_cxd0))
 
     if (!is.na(namePlot)){
 ##############################################
@@ -705,7 +713,8 @@ setCIAK3D <- function(parsBTfmd , modelx ,
 ### if setupMats doesn't include 'Kx', it should include 'xData' and 'dIData', so that proper setupMats can be made now...
   if(is.null(setupMats$Kx)){
     if(max(c(sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1)) > 0){ stop('Not ready to run setCIAK3D without passing in setupMats yet, because this requires passing in sdfdKnots - update the function!') }else{}
-    setupMats <- setupIAK3D(xData = setupMats$xData , dIData = as.data.frame(setupMats$dIData) , nDscPts = 0) 
+    setupMats <- setupIAK3D(xData = setupMats$xData , dIData = as.data.frame(setupMats$dIData) , nDscPts = 0 , 
+                            sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1) 
   }else{}
   
   n <- nrow(setupMats$Kx)
@@ -852,7 +861,8 @@ setCIAK3D2 <- function(parsBTfmd , modelx ,
   ### if setupMats doesn't include 'Kx', it should include 'xData', 'dIData', 'xData2' and 'dIData2', so that proper setupMats can be made now...
   if(is.null(setupMats$Kx)){
     if(max(c(sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1)) > 0){ stop('Not ready to run setCIAK3D2 without passing in setupMats yet, because this requires passing in sdfdKnots - update the function!') }else{}
-    setupMats <- setupIAK3D2(xData = setupMats$xData , dIData = setupMats$dIData , xData2 = setupMats$xData2 , dIData2 = setupMats$dIData2) 
+    setupMats <- setupIAK3D2(xData = setupMats$xData , dIData = setupMats$dIData , xData2 = setupMats$xData2 , dIData2 = setupMats$dIData2 , 
+                            sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1) 
   }else{}
   
   ### starting with Cx0...
@@ -1754,7 +1764,8 @@ setCApproxIAK3D <- function(parsBTfmd , modelx ,
   ### if setupMats doesn't include 'Kx', it should include 'xData' and 'dIData', so that proper setupMats can be made now...
   if(is.null(setupMats$Kx)){
     if(max(c(sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1)) > 0){ stop('Not ready to run setCIAK3D without passing in setupMats yet, because this requires passing in sdfdKnots - update the function!') }else{}
-    setupMats <- setupIAK3D(xData = setupMats$xData , dIData = as.data.frame(setupMats$dIData) , nDscPts = 0) 
+    setupMats <- setupIAK3D(xData = setupMats$xData , dIData = as.data.frame(setupMats$dIData) , nDscPts = 0 , 
+                            sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1) 
   }else{}
   
   n <- nrow(setupMats$Kx)
@@ -1913,7 +1924,8 @@ setCApproxIAK3D2 <- function(parsBTfmd , modelx ,
   ### if setupMats doesn't include 'Kx', it should include 'xData', 'dIData', 'xData2' and 'dIData2', so that proper setupMats can be made now...
   if(is.null(setupMats$Kx)){
     if(max(c(sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1)) > 0){ stop('Not ready to run setCIAK3D without passing in setupMats yet, because this requires passing in sdfdKnots - update the function!') }else{}
-    setupMats <- setupIAK3D2(xData = setupMats$xData , dIData = setupMats$dIData , xData2 = setupMats$xData2 , dIData2 = setupMats$dIData2) 
+    setupMats <- setupIAK3D2(xData = setupMats$xData , dIData = setupMats$dIData , xData2 = setupMats$xData2 , dIData2 = setupMats$dIData2 , 
+                            sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1) 
   }else{}
   
   ### starting with Cx0...
@@ -2003,11 +2015,6 @@ setCApproxIAK3D2 <- function(parsBTfmd , modelx ,
     }else{
       C <- C + parsBTfmd$cd1 * (setupMats$Kd %*% phid_cd1 %*% t(setupMats$Kd2))
     }
-    
-    ### adding Cx0...        
-    Kphix0K <- setupMats$Kx %*% phix0 %*% t(setupMats$Kx2)
-    C <- C + parsBTfmd$cx0 * Kphix0K 
-    remove(Kphix0K) ; 
     
     if(modelx == 'nugget'){
       Cx1 <- Cxd1 <- 0

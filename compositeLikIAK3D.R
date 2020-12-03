@@ -248,8 +248,10 @@ predMatsIAK3D_CL <- function(z_muhat , XData , xMap , dIMap , iData = seq(length
       }else{}
 
       if(oldSetC){
-        setupMatsMap <- setupIAK3D(xData = rbind(lmmFit$xData[iThis,,drop=FALSE] , xMap) , dIData = rbind(as.matrix(lmmFit$dIData[iThis,,drop=FALSE]) , dIMap) , nDscPts = 0)
-
+        # setupMatsMap <- setupIAK3D(xData = rbind(lmmFit$xData[iThis,,drop=FALSE] , xMap) , dIData = rbind(as.matrix(lmmFit$dIData[iThis,,drop=FALSE]) , dIMap) , nDscPts = 0)
+        setupMatsMap <- setupIAK3D(xData = rbind(lmmFit$xData[iThis,,drop=FALSE] , xMap) , dIData = rbind(as.matrix(lmmFit$dIData[iThis,,drop=FALSE]) , dIMap) , nDscPts = 0 , 
+                                   sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , sdfdKnots = lmmFit$sdfdKnots)
+        
         tmp <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx ,
                 sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 ,
                 cmeOpt = lmmFit$cmeOpt , setupMats = setupMatsMap)
@@ -260,8 +262,10 @@ predMatsIAK3D_CL <- function(z_muhat , XData , xMap , dIMap , iData = seq(length
         ChThis <- tmp$C[1:length(iThis),1:length(iThis),drop = FALSE]
       }else{
         if(i == 1){ 
-          setupMatsMap <- setupIAK3D(xData = xMap , dIData = dIMap , nDscPts = 0)
-          
+          # setupMatsMap <- setupIAK3D(xData = xMap , dIData = dIMap , nDscPts = 0)
+          setupMatsMap <- setupIAK3D(xData = xMap , dIData = dIMap , nDscPts = 0 , 
+                                     sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , sdfdKnots = lmmFit$sdfdKnots)
+
           tmp <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx , 
                            sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , 
                            cmeOpt = lmmFit$cmeOpt , setupMats = setupMatsMap)
@@ -270,8 +274,10 @@ predMatsIAK3D_CL <- function(z_muhat , XData , xMap , dIMap , iData = seq(length
           rm(setupMatsMap , tmp)
         }else{}
         
+        # setupMatsMap <- setupIAK3D2(xData = lmmFit$xData[iThis,,drop=FALSE] , dIData = as.matrix(lmmFit$dIData[iThis,,drop=FALSE]) ,
+        #                             xData2 = xMap , dIData2 = dIMap)
         setupMatsMap <- setupIAK3D2(xData = lmmFit$xData[iThis,,drop=FALSE] , dIData = as.matrix(lmmFit$dIData[iThis,,drop=FALSE]) ,
-                                    xData2 = xMap , dIData2 = dIMap)
+                                    xData2 = xMap , dIData2 = dIMap , sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , sdfdKnots = lmmFit$sdfdKnots)
         
         ChkThis <- setCIAK3D2(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx ,
                               sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 ,
@@ -280,7 +286,9 @@ predMatsIAK3D_CL <- function(z_muhat , XData , xMap , dIMap , iData = seq(length
         # ChThis <- tmp$C[1:length(iThis),1:length(iThis),drop = FALSE]
         ### Ch should be in the stored lmmFit object?
         print('Testing ChThis is correct')
-        setupMatsMap <- setupIAK3D(xData = rbind(lmmFit$xData[iThis,,drop=FALSE] , xMap) , dIData = rbind(as.matrix(lmmFit$dIData[iThis,,drop=FALSE]) , dIMap) , nDscPts = 0)
+        # setupMatsMap <- setupIAK3D(xData = rbind(lmmFit$xData[iThis,,drop=FALSE] , xMap) , dIData = rbind(as.matrix(lmmFit$dIData[iThis,,drop=FALSE]) , dIMap) , nDscPts = 0)
+        setupMatsMap <- setupIAK3D(xData = rbind(lmmFit$xData[iThis,,drop=FALSE] , xMap) , dIData = rbind(as.matrix(lmmFit$dIData[iThis,,drop=FALSE]) , dIMap) , nDscPts = 0 , 
+                                   sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , sdfdKnots = lmmFit$sdfdKnots)
         
         tmp <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx ,
                          sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 ,
@@ -316,8 +324,10 @@ predMatsIAK3D_CL <- function(z_muhat , XData , xMap , dIMap , iData = seq(length
       }else{}
 
       if(oldSetC){
-        setupMatsMap <- setupIAK3D(xData = rbind(lmmFit$xData[iThis,,drop=FALSE] , xMap) , dIData = rbind(as.matrix(lmmFit$dIData[iThis,,drop=FALSE]) , dIMap) , nDscPts = 0)
-
+        # setupMatsMap <- setupIAK3D(xData = rbind(lmmFit$xData[iThis,,drop=FALSE] , xMap) , dIData = rbind(as.matrix(lmmFit$dIData[iThis,,drop=FALSE]) , dIMap) , nDscPts = 0)
+        setupMatsMap <- setupIAK3D(xData = rbind(lmmFit$xData[iThis,,drop=FALSE] , xMap) , dIData = rbind(as.matrix(lmmFit$dIData[iThis,,drop=FALSE]) , dIMap) , nDscPts = 0 , 
+                                   sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , sdfdKnots = lmmFit$sdfdKnots)
+        
         tmp <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx ,
                 sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 ,
                 cmeOpt = lmmFit$cmeOpt , setupMats = setupMatsMap)
@@ -325,14 +335,18 @@ predMatsIAK3D_CL <- function(z_muhat , XData , xMap , dIMap , iData = seq(length
         ChkThis <- tmp$C[1:length(iThis),(length(iThis)+1):(length(iThis)+nxMap),drop = FALSE]
         ChThis <- tmp$C[1:length(iThis),1:length(iThis),drop = FALSE]
       }else{
+        # setupMatsMap <- setupIAK3D2(xData = lmmFit$xData[iThis,,drop=FALSE] , dIData = as.matrix(lmmFit$dIData[iThis,,drop=FALSE]) , 
+        #                             xData2 = xMap , dIData2 = dIMap)
         setupMatsMap <- setupIAK3D2(xData = lmmFit$xData[iThis,,drop=FALSE] , dIData = as.matrix(lmmFit$dIData[iThis,,drop=FALSE]) , 
-                                    xData2 = xMap , dIData2 = dIMap)
+                                    xData2 = xMap , dIData2 = dIMap , sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , sdfdKnots = lmmFit$sdfdKnots)
         ChkThis <- setCIAK3D2(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx , 
                               sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , 
                               cmeOpt = lmmFit$cmeOpt , setupMats = setupMatsMap)
         
         print('Testing old and long way...')    
-        setupMatsMap <- setupIAK3D(xData = rbind(lmmFit$xData[iThis,,drop=FALSE] , xMap) , dIData = rbind(as.matrix(lmmFit$dIData[iThis,,drop=FALSE]) , dIMap) , nDscPts = 0)
+        # setupMatsMap <- setupIAK3D(xData = rbind(lmmFit$xData[iThis,,drop=FALSE] , xMap) , dIData = rbind(as.matrix(lmmFit$dIData[iThis,,drop=FALSE]) , dIMap) , nDscPts = 0)
+        setupMatsMap <- setupIAK3D(xData = rbind(lmmFit$xData[iThis,,drop=FALSE] , xMap) , dIData = rbind(as.matrix(lmmFit$dIData[iThis,,drop=FALSE]) , dIMap) , nDscPts = 0 , 
+                                   sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , sdfdKnots = lmmFit$sdfdKnots)
         
         tmp <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx ,
                          sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 ,
@@ -440,8 +454,10 @@ predMatsIAK3D_CL_ByBlock <- function(z_muhat , XData , xMap , dIMap , iData = se
 ### note different order to other stuff (preds first here) for consistency with Eidsvik...
         oldSetC <- TRUE # new way to be checked.
         if(oldSetC){
-          setupMatsMap <- setupIAK3D(xData = rbind(xMapThis , lmmFit$xData[iThis,,drop=FALSE]) , dIData = rbind(dIMapThis , as.matrix(lmmFit$dIData[iThis,,drop=FALSE])) , nDscPts = 0)
-
+          # setupMatsMap <- setupIAK3D(xData = rbind(xMapThis , lmmFit$xData[iThis,,drop=FALSE]) , dIData = rbind(dIMapThis , as.matrix(lmmFit$dIData[iThis,,drop=FALSE])) , nDscPts = 0)
+          setupMatsMap <- setupIAK3D(xData = rbind(xMapThis , lmmFit$xData[iThis,,drop=FALSE]) , dIData = rbind(dIMapThis , as.matrix(lmmFit$dIData[iThis,,drop=FALSE])) , nDscPts = 0 , 
+                                     sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , sdfdKnots = lmmFit$sdfdKnots)
+          
           tmp <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx ,
                   sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 ,
                   cmeOpt = lmmFit$cmeOpt , setupMats = setupMatsMap)
@@ -453,7 +469,9 @@ predMatsIAK3D_CL_ByBlock <- function(z_muhat , XData , xMap , dIMap , iData = se
           ChThis <- tmp$C[(nxMapThis+1):(nxMapThis+length(iThis)),(nxMapThis+1):(nxMapThis+length(iThis)),drop = FALSE]
         }else{
           if(i == 1){ 
-            setupMatsMap <- setupIAK3D(xData = xMapThis , dIData = dIMapThis , nDscPts = 0)
+            # setupMatsMap <- setupIAK3D(xData = xMapThis , dIData = dIMapThis , nDscPts = 0)
+            setupMatsMap <- setupIAK3D(xData = xMapThis , dIData = dIMapThis , nDscPts = 0 , 
+                                       sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , sdfdKnots = lmmFit$sdfdKnots)
             
             tmp <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx , 
                              sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , 
@@ -461,8 +479,10 @@ predMatsIAK3D_CL_ByBlock <- function(z_muhat , XData , xMap , dIMap , iData = se
             
             diagCkk[iMapThis,1] <- diag(tmp$C) 
           }else{}
+          # setupMatsMap <- setupIAK3D2(xData = lmmFit$xData[iThis,,drop=FALSE] , dIData = as.matrix(lmmFit$dIData[iThis,,drop=FALSE]) , 
+          #                             xData2 = xMapThis , dIData2 = dIMapThis)
           setupMatsMap <- setupIAK3D2(xData = lmmFit$xData[iThis,,drop=FALSE] , dIData = as.matrix(lmmFit$dIData[iThis,,drop=FALSE]) , 
-                                      xData2 = xMapThis , dIData2 = dIMapThis)
+                                      xData2 = xMapThis , dIData2 = dIMapThis , sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , sdfdKnots = lmmFit$sdfdKnots)
           
           ChkThis <- setCIAK3D2(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx ,
                                 sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 ,
@@ -470,7 +490,9 @@ predMatsIAK3D_CL_ByBlock <- function(z_muhat , XData , xMap , dIMap , iData = se
           # ChThis <- tmp$C[(nxMapThis+1):(nxMapThis+length(iThis)),(nxMapThis+1):(nxMapThis+length(iThis)),drop = FALSE]
           
           print('testing old long way')
-          setupMatsMap <- setupIAK3D(xData = rbind(xMapThis , lmmFit$xData[iThis,,drop=FALSE]) , dIData = rbind(dIMapThis , as.matrix(lmmFit$dIData[iThis,,drop=FALSE])) , nDscPts = 0)
+          # setupMatsMap <- setupIAK3D(xData = rbind(xMapThis , lmmFit$xData[iThis,,drop=FALSE]) , dIData = rbind(dIMapThis , as.matrix(lmmFit$dIData[iThis,,drop=FALSE])) , nDscPts = 0)
+          setupMatsMap <- setupIAK3D(xData = rbind(xMapThis , lmmFit$xData[iThis,,drop=FALSE]) , dIData = rbind(dIMapThis , as.matrix(lmmFit$dIData[iThis,,drop=FALSE])) , nDscPts = 0 , 
+                                     sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , sdfdKnots = lmmFit$sdfdKnots)
           
           tmp <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx ,
                            sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 ,
@@ -569,7 +591,9 @@ predMatsIAK3D_CLEV_ByBlock <- function(z_muhat , XData , xMap , dIMap , iData = 
 
       iThis <- c(iDatak , iDatalAll)
 ### note different order to other stuff (preds first here) for consistency with Eidsvik...
-      setupMatsMap <- setupIAK3D(xData = rbind(xMapThis , lmmFit$xData[iThis,,drop=FALSE]) , dIData = rbind(dIMapThis , as.matrix(lmmFit$dIData[iThis,,drop=FALSE])) , nDscPts = 0)
+      # setupMatsMap <- setupIAK3D(xData = rbind(xMapThis , lmmFit$xData[iThis,,drop=FALSE]) , dIData = rbind(dIMapThis , as.matrix(lmmFit$dIData[iThis,,drop=FALSE])) , nDscPts = 0)
+      setupMatsMap <- setupIAK3D(xData = rbind(xMapThis , lmmFit$xData[iThis,,drop=FALSE]) , dIData = rbind(dIMapThis , as.matrix(lmmFit$dIData[iThis,,drop=FALSE])) , nDscPts = 0 , 
+                                 sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , sdfdKnots = lmmFit$sdfdKnots)
 
       C0klAll <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx , 
                 sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , 
