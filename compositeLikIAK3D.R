@@ -4,7 +4,7 @@
 ### should have no depth sum component in cov model (include via spline instead)
 ###################################################################
 nllIAK3D_CL <- function(pars , zData , XData , modelx , nud ,  
-                     sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1 , cmeOpt , prodSum , setupMats = NULL , parBnds , useReml , compLikMats , rtnAll = F , attachBigMats = TRUE){
+                     sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1 , cmeOpt , prodSum , setupMats = NULL , parBnds , useReml , compLikMats , parallel_nll_4cl = TRUE , rtnAll = F , attachBigMats = rtnAll , nCores = min(detectCores() , 8)){ # attachBigMats = TRUE
 
     if(exists("printnllTime") && printnllTime){
       ptm <- proc.time()
@@ -23,7 +23,12 @@ nllIAK3D_CL <- function(pars , zData , XData , modelx , nud ,
       nllTmp <- c(nllTrace4Optim , NA) # for this trace, use NA for failed evaluation.
       assign("nllTrace4Optim" , nllTmp , envir = .GlobalEnv)
     }else{}
-    
+
+    if(Sys.info()[1] == 'Windows' & parallel_nll_4cl){
+      print('Not ready for windows parallel cl nll yet, so using std loop vs! Code this!')
+      parallel_nll_4cl <- FALSE
+    }else{}
+  
     badnll <- 9E99
     cxdhat <- NA
        
@@ -35,26 +40,57 @@ nllIAK3D_CL <- function(pars , zData , XData , modelx , nud ,
     if(rtnAll){ listiCkl_kl <- listCkl_kl <- listiAXkl_kl <- listiAzkl_kl <- list() }else{}
 
     if(compLikMats$compLikOptn < 4){
-      for(i in 1:nrow(compLikMats$subsetPairsAdj)){
-        iThis <- c(compLikMats$listBlocks[[compLikMats$subsetPairsAdj[i,1]]]$i , compLikMats$listBlocks[[compLikMats$subsetPairsAdj[i,2]]]$i)
-        tmp <- nllIAK3D(pars = pars , zData = zData[iThis] , XData = XData[iThis,,drop = FALSE] , vXU = NA , iU = NA , modelx = modelx , nud = nud , 
-                        sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , 
-                        cmeOpt = cmeOpt , prodSum = prodSum , setupMats = setupMats[[i]] , parBnds = parBnds , useReml = useReml , lnTfmdData = lnTfmdData , rtnAll = TRUE , forCompLik = TRUE)	      
-        XziAXz_SUM <- XziAXz_SUM + tmp$WiAW
-        lndetA_SUM <- lndetA_SUM + tmp$lndetA
-        n_SUM <- n_SUM + length(iThis)
-        parsBTfmd <- tmp$parsBTfmd
-        sigma2Vec <- tmp$sigma2Vec
+      
+      if(parallel_nll_4cl){
         
-        if(rtnAll){ 
-          if(attachBigMats){
-            listCkl_kl[[i]] <- tmp$A
-          #        listiCkl_kl[[i]] <- lndetANDinvCb(tmp$A)$invCb
-            listiCkl_kl[[i]] <- chol2inv(chol(tmp$A)) # should make code better as already solved a system in nll function.
+        if(Sys.info()[1] == 'Windows'){
+          stop('Not ready for windows parallel cl yet!')
+        }else{
+          listiThis <- list()
+          for(i in 1:nrow(compLikMats$subsetPairsAdj)){
+            listiThis[[i]] <- c(compLikMats$listBlocks[[compLikMats$subsetPairsAdj[i,1]]]$i , compLikMats$listBlocks[[compLikMats$subsetPairsAdj[i,2]]]$i)
+            n_SUM <- n_SUM + length(listiThis[[i]])
+          }
+          tmp <- mcmapply(FUN = nllIAK3D , mc.cores = nCores , 
+                          zData = lapply(listiThis , function(i){ return(zData[i])}) , 
+                          XData = lapply(listiThis , function(i){ return(XData[i,,drop=FALSE])}) , 
+                          setupMats = setupMats[1:nrow(compLikMats$subsetPairsAdj)] ,
+                          MoreArgs = list(pars = pars , vXU = NA , iU = NA , modelx = modelx , nud = nud , 
+                                          sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , 
+                                          cmeOpt = cmeOpt , prodSum = prodSum , parBnds = parBnds , useReml = useReml , lnTfmdData = lnTfmdData , rtnAll = rtnAll , attachBigMats = attachBigMats , forCompLik = TRUE) , 
+                          SIMPLIFY = FALSE) 
+          
+          XziAXz_SUM <- Reduce('+', lapply(tmp , '[[' , 'WiAW'))
+          lndetA_SUM <- sum(unlist(lapply(tmp , '[[' , 'lndetA')))
+          parsBTfmd <- tmp[[1]]$parsBTfmd
+### note sigma2Vec should not be used as is (only rqd for lnN stuff, which not yet coded for complik) - just returned from the final subset.          
+          sigma2Vec <- tmp[[length(tmp)]]$sigma2Vec
+          
+          if(rtnAll & attachBigMats){
+            listCkl_kl <- lapply(tmp , '[[' , 'A')
+            listiCkl_kl <- lapply(listCkl_kl , function(mtxIn){ return(chol2inv(chol(mtxIn))) }) # should make code better as already solved a system in nll function.
           }else{}
-          # listiAXkl_kl[[i]] <- tmp$iAW[,1:p,drop=FALSE]
-          # listiAzkl_kl[[i]] <- tmp$iAW[,p+1,drop=FALSE]
-        }else{}
+        }
+        
+      }else{
+        for(i in 1:nrow(compLikMats$subsetPairsAdj)){
+          iThis <- c(compLikMats$listBlocks[[compLikMats$subsetPairsAdj[i,1]]]$i , compLikMats$listBlocks[[compLikMats$subsetPairsAdj[i,2]]]$i)
+          tmp <- nllIAK3D(pars = pars , zData = zData[iThis] , XData = XData[iThis,,drop = FALSE] , vXU = NA , iU = NA , modelx = modelx , nud = nud , 
+                          sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , 
+                          cmeOpt = cmeOpt , prodSum = prodSum , setupMats = setupMats[[i]] , parBnds = parBnds , useReml = useReml , lnTfmdData = lnTfmdData , rtnAll = rtnAll , attachBigMats = attachBigMats , forCompLik = TRUE)	      # rtnAll = TRUE ,
+          XziAXz_SUM <- XziAXz_SUM + tmp$WiAW
+          lndetA_SUM <- lndetA_SUM + tmp$lndetA
+          n_SUM <- n_SUM + length(iThis)
+          parsBTfmd <- tmp$parsBTfmd
+          sigma2Vec <- tmp$sigma2Vec
+          
+          if(rtnAll){ 
+            if(attachBigMats){
+              listCkl_kl[[i]] <- tmp$A
+              listiCkl_kl[[i]] <- chol2inv(chol(tmp$A)) # should make code better as already solved a system in nll function.
+            }else{}
+          }else{}
+        }
       }
     }else{}
 
@@ -65,27 +101,57 @@ nllIAK3D_CL <- function(pars , zData , XData , modelx , nud ,
         nadjSubsets <- nrow(compLikMats$subsetPairsAdj)
         XziAXz_BLOCKS <- list() # mayeb try as array in future?
         lndetA_BLOCKS <- NA * numeric(length(compLikMats$listBlocks))
-        for(i in 1:length(compLikMats$listBlocks)){
-          iThis <- compLikMats$listBlocks[[i]]$i
-          tmp <- nllIAK3D(pars = pars , zData = zData[iThis] , XData = XData[iThis,,drop = FALSE] , vXU = NA , iU = NA , modelx = modelx , nud = nud , 
-                sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , 
-                cmeOpt = cmeOpt , prodSum = prodSum , setupMats = setupMats[[i+nadjSubsets]] , parBnds = parBnds , useReml = useReml , lnTfmdData = lnTfmdData , rtnAll = TRUE , forCompLik = TRUE)	      
-          XziAXz_BLOCKS[[i]] <- tmp$WiAW
-          lndetA_BLOCKS[i] <- tmp$lndetA
-          if(compLikMats$compLikOptn == 4){
-            parsBTfmd <- tmp$parsBTfmd
-            sigma2Vec <- tmp$sigma2Vec
-          }else{}
+
+        if(parallel_nll_4cl){ 
+          if(Sys.info()[1] == 'Windows'){
+            stop('Not ready for windows parallel cl yet!')
+          }else{
+            listiThis <- list()
+            for(i in 1:length(compLikMats$listBlocks)){
+              listiThis[[i]] <- compLikMats$listBlocks[[i]]$i
+            }
+            tmp <- mcmapply(FUN = nllIAK3D , mc.cores = nCores , 
+                            zData = lapply(listiThis , function(i){ return(zData[i])}) , 
+                            XData = lapply(listiThis , function(i){ return(XData[i,,drop=FALSE])}) , 
+                            setupMats = setupMats[(nadjSubsets+1):(nadjSubsets+length(compLikMats$listBlocks))] ,
+                            MoreArgs = list(pars = pars , vXU = NA , iU = NA , modelx = modelx , nud = nud , 
+                                            sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , 
+                                            cmeOpt = cmeOpt , prodSum = prodSum , parBnds = parBnds , useReml = useReml , lnTfmdData = lnTfmdData , rtnAll = rtnAll , attachBigMats = attachBigMats , forCompLik = TRUE) , 
+                            SIMPLIFY = FALSE) 
+            
+            XziAXz_BLOCKS <- lapply(tmp , '[[' , 'WiAW')
+            lndetA_BLOCKS <- unlist(lapply(tmp , '[[' , 'lndetA'))
+            if(compLikMats$compLikOptn == 4){ # just cos won't have been got before with mthd 4...
+              parsBTfmd <- tmp[[1]]$parsBTfmd
+              ### note sigma2Vec should not be used as is (only rqd for lnN stuff, which not yet coded for complik) - just returned from the final subset.          
+              sigma2Vec <- tmp[[length(tmp)]]$sigma2Vec
+            }else{}
+            
+            if(rtnAll & attachBigMats){
+              listCkl_kl[(nadjSubsets+1):(nadjSubsets+length(compLikMats$listBlocks))] <- lapply(tmp , '[[' , 'A')
+              listiCkl_kl[(nadjSubsets+1):(nadjSubsets+length(compLikMats$listBlocks))] <- lapply(listCkl_kl[(nadjSubsets+1):(nadjSubsets+length(compLikMats$listBlocks))] , function(mtxIn){ return(chol2inv(chol(mtxIn))) }) # should make code better as already solved a system in nll function.
+            }else{}
+          }
           
-          if(rtnAll){ # these ones are for a single block, not for a pair 
-            if(attachBigMats){
+        }else{
+### doing as loop in series...          
+          for(i in 1:length(compLikMats$listBlocks)){
+            iThis <- compLikMats$listBlocks[[i]]$i
+            tmp <- nllIAK3D(pars = pars , zData = zData[iThis] , XData = XData[iThis,,drop = FALSE] , vXU = NA , iU = NA , modelx = modelx , nud = nud , 
+                            sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , 
+                            cmeOpt = cmeOpt , prodSum = prodSum , setupMats = setupMats[[i+nadjSubsets]] , parBnds = parBnds , useReml = useReml , lnTfmdData = lnTfmdData , rtnAll = TRUE , forCompLik = TRUE)	      
+            XziAXz_BLOCKS[[i]] <- tmp$WiAW
+            lndetA_BLOCKS[i] <- tmp$lndetA
+            if(compLikMats$compLikOptn == 4){
+              parsBTfmd <- tmp$parsBTfmd
+              sigma2Vec <- tmp$sigma2Vec
+            }else{}
+            
+            if(rtnAll & attachBigMats){ # these ones are for a single block, not for a pair 
               listCkl_kl[[i+nadjSubsets]] <- tmp$A
-              #            listiCkl_kl[[i+nadjSubsets]] <- lndetANDinvCb(tmp$A)$invCb
               listiCkl_kl[[i+nadjSubsets]] <- chol2inv(chol(tmp$A))
             }else{}
-            # listiAXkl_kl[[i+nadjSubsets]] <- tmp$iAW[,1:p,drop=FALSE]
-            # listiAzkl_kl[[i+nadjSubsets]] <- tmp$iAW[,p+1,drop=FALSE]
-          }else{}
+          }
         }
 
         if(compLikMats$compLikOptn == 1 || compLikMats$compLikOptn == 3){
@@ -121,7 +187,7 @@ nllIAK3D_CL <- function(pars , zData , XData , modelx , nud ,
       XziAXz <- XziAXz_SUM 
       lndetA <- lndetA_SUM 
     }
-        
+            
     if(p > 0){
       betahat <- lndetANDinvCb(XziAXz[1:p,1:p,drop = FALSE] , XziAXz[1:p,p+1,drop = FALSE])
       lndetXiAX <- betahat$lndetC
@@ -147,6 +213,7 @@ nllIAK3D_CL <- function(pars , zData , XData , modelx , nud ,
         cxdhat <- resiAres / n 
       }
     }
+    
 ### update the values in parsBTfmd so that it makes sense when returned to user.          
     parsBTfmd$cx0 <- cxdhat * parsBTfmd$cx0
     parsBTfmd$cx1 <- cxdhat * parsBTfmd$cx1
@@ -164,7 +231,22 @@ nllIAK3D_CL <- function(pars , zData , XData , modelx , nud ,
     resiCres <- resiAres / cxdhat
 
     if(rtnAll){ 
-        vbetahat <- cxdhat * solve(XziAXz[1:p,1:p,drop = FALSE]) 
+        if(compLikMats$compLikOptn == 2 || compLikMats$compLikOptn == 3){
+          print('Calculation of vbetahat should be via sandwich form, see Eq 8 of Eidsvik.')
+          print('For now using approx based on XiAX being approximated by sum of XiAX for multiple copies of data (each subset should be included same number of times for this really, so careful)')
+          print('This approach needs more testing.')
+          XziAXz_APPROX <- n * XziAXz / n_SUM
+          vbetahat <- cxdhat * solve(XziAXz_APPROX[1:p,1:p,drop = FALSE])
+          
+###############################          
+
+        }else{
+          
+          n_SUM <- NA # not needed.
+          
+          XziAXz_APPROX <- XziAXz
+          vbetahat <- cxdhat * solve(XziAXz_APPROX[1:p,1:p,drop = FALSE])
+        }
         sigma2Vec <- cxdhat * sigma2Vec 
         if(attachBigMats){
           listiCReskl_kl <- list()
@@ -214,10 +296,10 @@ nllIAK3D_CL <- function(pars , zData , XData , modelx , nud ,
     if(rtnAll){ 
       if(attachBigMats){
         return(list('nll' = nll , 'pars' = pars , 'parsBTfmd' = parsBTfmd , 'betahat' = betahat , 'vbetahat' = vbetahat , 'cxdhat' = cxdhat , 
-                    'sigma2Vec' = sigma2Vec , 'XData' = XData , 'listCkl_kl' = listCkl_kl , 'listiCkl_kl' = listiCkl_kl))
+                    'sigma2Vec' = sigma2Vec , 'XData' = XData , 'listCkl_kl' = listCkl_kl , 'listiCkl_kl' = listiCkl_kl , 'XziAXz_APPROX' = XziAXz_APPROX , 'XziAXz_SUM' = XziAXz_SUM , 'n_SUM' = n_SUM))
       }else{
         return(list('nll' = nll , 'pars' = pars , 'parsBTfmd' = parsBTfmd , 'betahat' = betahat , 'vbetahat' = vbetahat , 'cxdhat' = cxdhat , 
-                    'sigma2Vec' = sigma2Vec , 'XData' = XData))
+                    'sigma2Vec' = sigma2Vec , 'XData' = XData , 'XziAXz_APPROX' = XziAXz_APPROX , 'XziAXz_SUM' = XziAXz_SUM , 'n_SUM' = n_SUM))
       }
     }else{
     	return(nll)
@@ -388,7 +470,7 @@ predMatsIAK3D_CL <- function(z_muhat , XData , xMap , dIMap , iData = seq(length
 
 predMatsIAK3D_CL_ByBlock <- function(z_muhat , XData , xMap , dIMap , iData = seq(length(z_muhat)) , lmmFit){ # , listCkl_kl , listiCkl_kl
 
-  print('Running predMatsIAK3D_CL_ByBlock function')
+  # print('Running predMatsIAK3D_CL_ByBlock function')
   
 ### get the blocks for the prediction locations...
   nBlocks <- length(lmmFit$compLikMats$listBlocks)
@@ -526,15 +608,10 @@ predMatsIAK3D_CL_ByBlock <- function(z_muhat , XData , xMap , dIMap , iData = se
 
 predMatsIAK3D_CLEV_ByBlock <- function(z_muhat , XData , xMap , dIMap , iData = seq(length(z_muhat)) , lmmFit){
 
-  print('Running predMatsIAK3D_CLEV_ByBlock function')
+  # print('Running predMatsIAK3D_CLEV_ByBlock function')
   
 ### get the blocks for the prediction locations...
-  nBlocks <- length(lmmFit$compLikMats$listBlocks)
-  allCentroids <- matrix(NA , nBlocks , 2)
-  for(i in 1:nBlocks){ allCentroids[i,] <- lmmFit$compLikMats$listBlocks[[i]]$centroid }
-  DTmp <- xyDist(xMap , allCentroids)
-  blockMap <- apply(DTmp , 1 , which.min)
-  rm(DTmp)
+  blockMap <- getBlocksFromLocations(xMap = xMap , compLikMats = lmmFit$compLikMats)
 
 ### also pass in what block each prediction location is in...
   nBlocksMap <- max(blockMap)
@@ -556,13 +633,7 @@ predMatsIAK3D_CLEV_ByBlock <- function(z_muhat , XData , xMap , dIMap , iData = 
     if(nxMapThis > 0){
 
 ### what are the neighbouring blocks?
-      iBlocksAdj <- c()
-      iTmp <- which(lmmFit$compLikMats$subsetPairsAdj[,1] == iBlock)
-      if(length(iTmp) > 0){ iBlocksAdj <- c(iBlocksAdj , lmmFit$compLikMats$subsetPairsAdj[iTmp,2]) }else{}
-      iTmp <- which(lmmFit$compLikMats$subsetPairsAdj[,2] == iBlock)
-      if(length(iTmp) > 0){ iBlocksAdj <- c(iBlocksAdj , lmmFit$compLikMats$subsetPairsAdj[iTmp,1]) }else{}
-      
-      if(length(iBlocksAdj) == 0){ stop('Error - every block must have a neighbour - check this!') }else{}
+      iBlocksAdj <- getAdjacentBlocks(iBlock = iBlock , compLikMats = lmmFit$compLikMats)
 
 ### what are the data for the prediciton block?
       iDatak <- lmmFit$compLikMats$listBlocks[[iBlock]]$i
@@ -598,6 +669,10 @@ predMatsIAK3D_CLEV_ByBlock <- function(z_muhat , XData , xMap , dIMap , iData = 
       C0klAll <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx , 
                 sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , 
                 cmeOpt = lmmFit$cmeOpt , setupMats = setupMatsMap)$C
+      
+      # print('In predMatsIAK3D_CLEV_ByBlock, after making C0klAll:')
+      # print(sort( sapply(ls(envir=globalenv()),function(x){object.size(get(x))}) , decreasing = TRUE)[1:20])  
+
       rm(setupMatsMap)
 
       C0k_0k <- C0klAll[c(i0,i1) , c(i0,i1) , drop = FALSE]
@@ -710,14 +785,45 @@ predMatsIAK3D_CLEV_ByBlock <- function(z_muhat , XData , xMap , dIMap , iData = 
 
       zk[iMapThis,1] <- matrix(invA0 %*% b0_SUM , ncol = 1)
 
-      vkTmp <- invA0 %*% J0_SUM %*% invA0
+      # vkTmp <- invA0 %*% J0_SUM %*% invA0
+      # vk[iMapThis,1] <- matrix(diag(vkTmp) , nrow = length(iMapThis))
+### because only diagonal rqd (only returning pred vars, not pred covar mtx), can do via...
+      vk[iMapThis,1] <- t(colSums(invA0 * (J0_SUM %*% invA0)))
       
-      vk[iMapThis,1] <- matrix(diag(vkTmp) , nrow = length(iMapThis))
     }else{}
   }
 
 ### remember, Xk betahat will have to be added to zk after returning.
   return(list('zk' = zk , 'vk' = vk))
+}
+
+###########################################################
+### given locations xMap and compLikMats, get the index of the block for each location...
+###########################################################
+getBlocksFromLocations <- function(xMap , compLikMats){
+  ### get the blocks for the prediction locations...
+  nBlocks <- length(compLikMats$listBlocks)
+  allCentroids <- matrix(NA , nBlocks , 2)
+  for(i in 1:nBlocks){ allCentroids[i,] <- compLikMats$listBlocks[[i]]$centroid }
+  DTmp <- xyDist(xMap , allCentroids)
+  blockMap <- apply(DTmp , 1 , which.min)
+
+  return(blockMap)
+}
+
+##############################################################
+### what are all the adjacent blocks to iBlock?
+##############################################################
+getAdjacentBlocks <- function(iBlock , compLikMats){
+  iBlocksAdj <- c()
+  iTmp <- which(compLikMats$subsetPairsAdj[,1] == iBlock)
+  if(length(iTmp) > 0){ iBlocksAdj <- c(iBlocksAdj , compLikMats$subsetPairsAdj[iTmp,2]) }else{}
+  iTmp <- which(compLikMats$subsetPairsAdj[,2] == iBlock)
+  if(length(iTmp) > 0){ iBlocksAdj <- c(iBlocksAdj , compLikMats$subsetPairsAdj[iTmp,1]) }else{}
+  
+  if(length(iBlocksAdj) == 0){ stop('Error - every block must have a neighbour - check this!') }else{}
+  
+  return(iBlocksAdj)
 }
 
 setVoronoiBlocks <- function(x , nPerBlock = 50 , plotVor = F , vcentres = NULL){
@@ -986,7 +1092,7 @@ balanceNeighbours2 <- function(x , nPerBlock = 50 , plotVor = F , listBlocks){
 ### move all...   
 #        iMove <- seq(ncentres)
 ### move smallest 3 and largest 3...
-        iMove <- unique(c(order(nPerClusterCurrent)[1:3] , order(-nPerClusterCurrent)[1:3])) # unique in case of 6 or fewer subsets or repeatet numbers.
+        iMove <- unique(c(order(nPerClusterCurrent)[1:min(3 , ncentres)] , order(-nPerClusterCurrent)[1:min(3 , ncentres)])) # unique in case of 6 or fewer subsets or repeatet numbers.
    
         vcentresProp <- vcentres
         vcentresProp[iMove,] <- vcentresProp[iMove,] + stddevProp * rnorm(2*length(iMove))  
@@ -1024,4 +1130,94 @@ balanceNeighbours2 <- function(x , nPerBlock = 50 , plotVor = F , listBlocks){
   
   return(list('listBlocks' = listBlocks , 'subsetPairsAdj' = subsetPairsAdj , 'subsetPairsNonadj' = subsetPairsNonadj))
 
+}
+
+
+
+#####################################################################
+### not yet working, but fn to calc Eq 8 of Eidsvik....
+#####################################################################
+calcvbetahatEV <- function(xData , dIData , XData , parsBTfmd , modelx , 
+                           sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1 , cmeOpt , sdfdKnots , compLikMats , listiCkl_kl , XziAXz_SUM){
+          Jbeta_SUM <- 0
+          for(iPair in 1:nrow(compLikMats$subsetPairsAdj)){
+          print(iPair)
+            for(jPair in 1:nrow(compLikMats$subsetPairsAdj)){
+### only sum if one of the blocks in i is equal to or next to one of the blocks in j...
+              ijTest <- rbind(c(compLikMats$subsetPairsAdj[iPair,1] , compLikMats$subsetPairsAdj[jPair,1]) ,
+                              c(compLikMats$subsetPairsAdj[iPair,1] , compLikMats$subsetPairsAdj[jPair,2]) ,
+                              c(compLikMats$subsetPairsAdj[iPair,2] , compLikMats$subsetPairsAdj[jPair,1]) ,
+                              c(compLikMats$subsetPairsAdj[iPair,2] , compLikMats$subsetPairsAdj[jPair,2]))
+              
+              if((length(intersect(compLikMats$subsetPairsAdj[iPair,] , compLikMats$subsetPairsAdj[jPair,])) > 0) |
+                 (length(which(compLikMats$subsetPairsAdj[,1] == min(ijTest[1,]) & compLikMats$subsetPairsAdj[,2] == max(ijTest[1,]))) > 0) |
+                 (length(which(compLikMats$subsetPairsAdj[,1] == min(ijTest[2,]) & compLikMats$subsetPairsAdj[,2] == max(ijTest[2,]))) > 0) |
+                 (length(which(compLikMats$subsetPairsAdj[,1] == min(ijTest[3,]) & compLikMats$subsetPairsAdj[,2] == max(ijTest[3,]))) > 0) |
+                 (length(which(compLikMats$subsetPairsAdj[,1] == min(ijTest[4,]) & compLikMats$subsetPairsAdj[,2] == max(ijTest[4,]))) > 0)){
+                 
+                iBlocksThis <- compLikMats$subsetPairsAdj[iPair,]
+                jBlocksThis <- compLikMats$subsetPairsAdj[jPair,]
+
+                iData1This <- compLikMats$listBlocks[[iBlocksThis[1]]]$i
+                iData2This <- compLikMats$listBlocks[[iBlocksThis[2]]]$i
+                jData1This <- compLikMats$listBlocks[[jBlocksThis[1]]]$i
+                jData2This <- compLikMats$listBlocks[[jBlocksThis[2]]]$i
+                
+                listSubMatsTMP <- list()
+                for(kk in 1:4){
+                  if(kk == 1){ 
+                    iBlockTMP <- iBlocksThis[1] 
+                    jBlockTMP <- jBlocksThis[1]
+                    iLocalTMP <- 1:length(iData1This)
+                    jLocalTMP <- 1:length(jData1This)
+                  }else if(kk == 2){ 
+                    iBlockTMP <- iBlocksThis[1] 
+                    jBlockTMP <- jBlocksThis[2]
+                    iLocalTMP <- 1:length(iData1This)
+                    jLocalTMP <- (length(jData1This)+1):(length(jData1This)+length(jData2This))
+                  }else if(kk == 3){ 
+                    iBlockTMP <- iBlocksThis[2] 
+                    jBlockTMP <- jBlocksThis[1]
+                    iLocalTMP <- (length(iData1This)+1):(length(iData1This)+length(iData2This))
+                    jLocalTMP <- 1:length(jData1This)
+                  }else if(kk == 4){ 
+                    iBlockTMP <- iBlocksThis[2] 
+                    jBlockTMP <- jBlocksThis[2]
+                    iLocalTMP <- (length(iData1This)+1):(length(iData1This)+length(iData2This))
+                    jLocalTMP <- (length(jData1This)+1):(length(jData1This)+length(jData2This))
+                  }else{}
+                  iDataThis <- compLikMats$listBlocks[[iBlockTMP]]$i
+                  jDataThis <- compLikMats$listBlocks[[jBlockTMP]]$i
+                 
+                  if(iBlockTMP == jBlockTMP){
+                    setupMatsTMP <- setupIAK3D(xData = xData[iDataThis,,drop=FALSE] , dIData = dIData[iDataThis,,drop=FALSE] , nDscPts = 0 , 
+                                     sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , sdfdKnots = sdfdKnots)
+                    
+                    listSubMatsTMP[[kk]] <- setCIAK3D(parsBTfmd = parsBTfmd , modelx = modelx , 
+                           sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , 
+                           cmeOpt = cmeOpt , setupMats = setupMatsTMP)$C
+                           
+                  }else{
+                    setupMatsTMP <- setupIAK3D2(xData = xData[iDataThis,,drop=FALSE] , dIData = as.matrix(dIData[iDataThis,,drop=FALSE]) ,
+                                    xData2 = xData[jDataThis,,drop=FALSE] , dIData2 = as.matrix(dIData[jDataThis,,drop=FALSE]) , 
+                                    sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , sdfdKnots = sdfdKnots)
+                    
+                    listSubMatsTMP[[kk]] <- setCIAK3D2(parsBTfmd = parsBTfmd , modelx = modelx ,
+                              sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 ,
+                              cmeOpt = cmeOpt , setupMats = setupMatsTMP)
+
+                  }
+                }
+                
+                covThis <- rbind(cbind(listSubMatsTMP[[1]] , listSubMatsTMP[[2]]) , cbind(listSubMatsTMP[[3]] , listSubMatsTMP[[4]]))
+
+### summing terms for Eq 8 of Eidsvik...
+                Jbeta_SUM <- Jbeta_SUM + t(listiCkl_kl[[iPair]] %*% XData[c(iData1This,iData2This),,drop=FALSE]) %*% covThis %*% listiCkl_kl[[jPair]] %*% XData[c(jData1This,jData2This),,drop=FALSE]
+              }else{}
+            } # end of loop over jPair
+          } # end of loop over iPair
+
+          vbetahat <- XziAXz_SUM[1:p,1:p] %*% solve(Jbeta_SUM , XziAXz_SUM[1:p,1:p])
+          
+          return(vbetahat)
 }

@@ -190,7 +190,6 @@ iaCovMatern2 <- function(dIData , dIData2 , ad , nud , sdfdPars , sdfdType){
   return(avCovMtx)
 } 
 
-
 ############################################
 ### now some useful functions...
 ############################################
@@ -224,7 +223,6 @@ intRy <- function(aa , bb , cc , dd , nsMaternParams){
   
   return(intRy)
 }
-
 
 intRy12 <- function(ee, aa , bb , nsMaternParams){
   ### note definitions with 'aa' etc to avoid confusion with the function 'c'    
@@ -324,98 +322,86 @@ intTy <- function(aa , bb , nsMaternParams){
 }
 
 ##################################################################
-### the matern covariance function...
+### the spatial covariance function (default matern)...
 ##################################################################
-maternCov <- function(D , pars){
+spatialCovIAK3D <- function(D , pars , covModel = 'matern'){
   c1 <- pars[1]
   a <- pars[2]
-  nu <- pars[3]
+  if(covModel == 'matern' | covModel == 'wendland'){
+    nu <- pars[3]
+  }else{}
   
-  ########################################################
-  ########################################################
-  ### TEMP ADDITION TO RETURN SPHERICAL COV FOR TESTING...
-  ########################################################
-  ########################################################
-  useSpher <- FALSE
-  
-  if(useSpher){
-    if((c1 > 0) & (a > 0) & (nu >= 0.05)  & (nu <= 20)){
-      DOVERa <- D / a
-      C <- 1 - (1.5 * DOVERa - 0.5 * (DOVERa ^ 3) )
-      C[which(DOVERa > 1)] <- 0
-      C <- c1 * C
+  if(covModel == 'spherical'){
+    if((c1 > 0) & (a > 0)){
+      if(is(D , "dspMatrix")){
+        DOVERa <- D@x / a
+        xC <- 1 - (1.5 * DOVERa - 0.5 * (DOVERa ^ 3) )
+        xC[DOVERa > 1] <- 0
+        C <- D
+        C@x <- c1 * xC
+      }else{
+        DOVERa <- D / a
+        C <- 1 - (1.5 * DOVERa - 0.5 * (DOVERa ^ 3) )
+        # C[which(DOVERa > 1)] <- 0
+        C[DOVERa > 1] <- 0
+        C <- c1 * C
+      }        
     }else{
       C <- NA
     }
     
-    return(C)
-  }else{}
-  
-  ########################################################
-  ########################################################
-  ########################################################
-  
-  if((c1 > 0) & (a > 0) & (nu >= 0.05)  & (nu <= 20)){
-    ####################################################    
-    ### below block updated below, 27/2/20, to save memory...
-    ####################################################    
-    # iD0 <- which(D == 0)
-    # iDGT0 <- which(D > 0)
-    # 
-    # ### range is approx rho * 3...this is from wiki, 
-    # ### and is i think what stein's parameterization was supposed to be.
-    # sqrt2nuOVERa <- sqrt(2 * nu) / a 
-    # Dsqrt2nuOVERa <- D * sqrt2nuOVERa  
-    # 
-    # bes <- 0 * D
-    # print(class(bes))
-    # bes[iDGT0] <- besselK(Dsqrt2nuOVERa[iDGT0] , nu) 
-    # print(class(bes))
-    # 
-    # lnconstmatern <- NA * Dsqrt2nuOVERa
-    # lnconstmatern[iDGT0] <- nu * log(Dsqrt2nuOVERa[iDGT0]) - (nu - 1) * log(2) - lgamma(nu)
-    # print(class(lnconstmatern))
-    # 
-    # realmin <- 3.448490e-304 
-    # ibesGT0 <- which(bes > realmin)
-    # 
-    # C <- 0 * D # initiate.
-    # C[ibesGT0] <- c1 * exp(lnconstmatern[ibesGT0]+log(bes[ibesGT0]))
-    # C[iD0] <- c1
-    # C[which(is.infinite(bes))] <- c1
-    
-    ####################################################    
-    ### range is approx rho * 3...this is from wiki, 
-    ### and is i think what stein's parameterization was supposed to be.
-    sqrt2nuOVERa <- sqrt(2 * nu) / a 
-    
-    # C <- 0 * D # initiate.
-    # C[D==0] <- c1
-    # C[D > 0] <- c1 * exp(nu * log(sqrt2nuOVERa * D[D > 0]) - (nu - 1) * log(2) - lgamma(nu) + log(besselK(sqrt2nuOVERa * D[D > 0] , nu)))
-    # C[is.infinite(C)] <- c1
-    # 
-    # C <- as(C , class(D)) # takes a bit longer, but should save memory. not sure why class changes when C[D==0] <- c1 is done.
-    
-    # if(class(D) == "dspMatrix"){
-    if(is(D , "dspMatrix")){
-      xC <- 0 * D@x # initiate.
-      xC[D@x==0] <- c1
-      xC[D@x > 0] <- c1 * exp(nu * log(sqrt2nuOVERa * D@x[D@x > 0]) - (nu - 1) * log(2) - lgamma(nu) + log(besselK(sqrt2nuOVERa * D@x[D@x > 0] , nu)))
-      xC[is.infinite(xC)] <- c1
-      C <- D
-      C@x <- xC
+  }else if(covModel == 'matern'){
+    if((c1 > 0) & (a > 0) & (nu >= 0.05)  & (nu <= 20)){
+      ####################################################    
+      ### range is approx rho * 3...this is from wiki, 
+      ### and is i think what stein's parameterization was supposed to be.
+      sqrt2nuOVERa <- sqrt(2 * nu) / a 
+      
+      if(is(D , "dspMatrix")){
+        xC <- 0 * D@x # initiate.
+        xC[D@x==0] <- c1
+        xC[D@x > 0] <- c1 * exp(nu * log(sqrt2nuOVERa * D@x[D@x > 0]) - (nu - 1) * log(2) - lgamma(nu) + log(besselK(sqrt2nuOVERa * D@x[D@x > 0] , nu)))
+        xC[is.infinite(xC)] <- c1
+        C <- D
+        C@x <- xC
+        
+      }else{
+        C <- 0 * D # initiate.
+        C[D==0] <- c1
+        C[D > 0] <- c1 * exp(nu * log(sqrt2nuOVERa * D[D > 0]) - (nu - 1) * log(2) - lgamma(nu) + log(besselK(sqrt2nuOVERa * D[D > 0] , nu)))
+        C[is.infinite(C)] <- c1
+      }
       
     }else{
-      C <- 0 * D # initiate.
-      C[D==0] <- c1
-      C[D > 0] <- c1 * exp(nu * log(sqrt2nuOVERa * D[D > 0]) - (nu - 1) * log(2) - lgamma(nu) + log(besselK(sqrt2nuOVERa * D[D > 0] , nu)))
-      C[is.infinite(C)] <- c1
-      
-      # C <- as(C , class(D)) # takes a bit longer, but should save memory. not sure why class changes when C[D==0] <- c1 is done.
+      C <- NA
     }
-    
+  }else if(covModel == 'wendland'){
+    if((c1 > 0) & (a > 0) & (nu >= 1)  & (nu <= 20)){
+      if(is(D , "dspMatrix")){
+        if(is.integer(nu)){
+          xC <- Wendland(D@x, theta = a , k = nu, dimension = 2)
+        }else{
+### weighted average of the two integer values...          
+          xC <- (ceiling(nu) - nu) * Wendland(D@x, theta = a , k = floor(nu), dimension = 2)
+          xC <- xC + (nu - floor(nu)) * Wendland(D@x, theta = a , k = ceiling(nu), dimension = 2)
+        }
+        C <- D
+        C@x <- c1 * xC
+      }else{
+        if(is.integer(nu)){
+          C <- Wendland(D, theta = a , k = nu, dimension = 2)
+        }else{
+          C <- (ceiling(nu) - nu) * Wendland(D, theta = a , k = floor(nu), dimension = 2)
+          C <- C + (nu - floor(nu)) * Wendland(D, theta = a , k = ceiling(nu), dimension = 2)
+        }
+        C <- c1 * C
+      }        
+    }else{
+      C <- NA
+    }
+
   }else{
-    C <- NA
+    stop('Error - unknown covariance model!')
   }
   
   return(C)
@@ -424,19 +410,10 @@ maternCov <- function(D , pars){
 ##################################################################
 ### to set up random-effects design matrices and disc pts (if needed)
 ##################################################################
-setupIAK3D <- function(xData , dIData , nDscPts = 0 , partSetup = FALSE , sdfdType_cd1 = 0 , sdfdType_cxd0 = 0 , sdfdType_cxd1 = 0 , sdfdKnots = NULL){
+setupIAK3D <- function(xData , dIData , nDscPts = 0 , partSetup = FALSE , sdfdType_cd1 = 0 , sdfdType_cxd0 = 0 , sdfdType_cxd1 = 0 , sdfdKnots = NULL , siteIDData = NULL , XData = NULL , colnames4ssre = NULL){
   ### note, I only use 'U' for unique in xU and dIU.
   ### Dx and other mats are defined with the unique locations, 
   ### but for simpler notation I don't use the 'U' notation there. 
-  
-  # if(is.null(ncol(dIData))){
-  #   dIData <- matrix(dIData , ncol = 2)
-  # }else{}
-  # n <- nrow(dIData)
-  # 
-  # if(is.null(ncol(xData))){
-  #   xData <- matrix(xData , nrow = n)
-  # }else{}
   
   xU <- xData[!duplicated(xData),,drop=FALSE]
   dIU <- dIData[!duplicated(dIData),,drop=FALSE]
@@ -457,12 +434,37 @@ setupIAK3D <- function(xData , dIData , nDscPts = 0 , partSetup = FALSE , sdfdTy
   #############################################################
   maxd <- max(max(dIU) , 2) 
   
+  #############################################################
+  ### if including site-specific rand effs... 
+  #############################################################
+  if(!is.null(siteIDData)){
+    if(!all(XData[,1] == 1)){ stop('Error - the lmer-type mixed-effects option (if siteIDData given) only works if first column of X is 1s!') }else{}
+    
+    listStructs4ssre <- list()
+    for(cn in colnames4ssre){
+      listStructs4ssre[[cn]] <- sparseMatrix(i=1 , j=1 , x = 0 , dims = c(length(siteIDData) , length(siteIDData)) , symmetric = TRUE)
+      # listStructs4ssre[[cn]] <- new("dspMatrix" , Dim = as.integer(c(length(siteIDData) , length(siteIDData))))
+    }
+
+    siteIDDataU <- unique(siteIDData)
+    for(iSite in 1:length(siteIDDataU)){
+      # iThis <- which(siteIDData == levels(siteIDData)[iSite])
+      iThis <- which(siteIDData == siteIDDataU[iSite])
+      for(cn in colnames4ssre){
+        listStructs4ssre[[cn]][iThis,iThis] <- listStructs4ssre[[cn]][iThis,iThis] + XData[iThis,cn,drop=FALSE] %*% t(XData[iThis,cn,drop=FALSE])
+      }
+    }
+    
+  }else{
+    listStructs4ssre <- NULL
+  }
+
   #################################################    
   ### can return here if partSetup is TRUE...
   #################################################    
   if(partSetup){
     ### added 3/12/2020 - add sdfdKnots to setupMats...
-    return(list('xU' = xU , 'Kx' = Kx , 'dIU' = dIU , 'Kd' = Kd , 'maxd' = maxd , 'sdfdKnots' = sdfdKnots))  
+    return(list('xU' = xU , 'Kx' = Kx , 'dIU' = dIU , 'Kd' = Kd , 'maxd' = maxd , 'sdfdKnots' = sdfdKnots , 'listStructs4ssre' = listStructs4ssre))  
   }else{}
   
   Dx <- xyDist(xU , xU) # save as symmetric matrix, upper triangle saved.
@@ -541,7 +543,8 @@ setupIAK3D <- function(xData , dIData , nDscPts = 0 , partSetup = FALSE , sdfdTy
               'dDsc' = dDsc , 'KdDsc' = KdDsc , 'DdDsc' = DdDsc , 'nDscPts' = nDscPts , 
               'dIUabcd' = abcd , 'dIUiUElements' = iUElements , 'maxd' = maxd ,
               'utriKxIdxxKx' = utriKxIdxxKx , 'utriKdIdxdKd' = utriKdIdxdKd , 'summKxKx' = summKxKx , 
-              'XsdfdSplineU_cd1' = XsdfdSplineU_cd1 , 'XsdfdSplineU_cxd0' = XsdfdSplineU_cxd0 , 'XsdfdSplineU_cxd1' = XsdfdSplineU_cxd1 , 'sdfdKnots' = sdfdKnots))  
+              'XsdfdSplineU_cd1' = XsdfdSplineU_cd1 , 'XsdfdSplineU_cxd0' = XsdfdSplineU_cxd0 , 'XsdfdSplineU_cxd1' = XsdfdSplineU_cxd1 , 
+              'sdfdKnots' = sdfdKnots , 'listStructs4ssre' = listStructs4ssre))  
 }
 
 ### compLik version...
@@ -551,16 +554,23 @@ setupIAK3D_CL <- function(xData , dIData , nDscPts = 0 , partSetup = FALSE , com
   setupMats <- list()
   ### order is all adj subset pairs, then all individual subsets (which can be used to get non-adj subset pairs)
   for (i in 1:nrow(compLikMats$subsetPairsAdj)){
-    iThis <- c(compLikMats$listBlocks[[compLikMats$subsetPairsAdj[i,1]]]$i , compLikMats$listBlocks[[compLikMats$subsetPairsAdj[i,2]]]$i)
-    setupMats[[i]] <- setupIAK3D(xData[iThis,,drop = FALSE] , dIData[iThis,,drop = FALSE] , nDscPts = nDscPts ,  partSetup = partSetup , 
-                                 sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , sdfdKnots = sdfdKnots)
+    if(compLikMats$compLikOptn != 4){
+      iThis <- c(compLikMats$listBlocks[[compLikMats$subsetPairsAdj[i,1]]]$i , compLikMats$listBlocks[[compLikMats$subsetPairsAdj[i,2]]]$i)
+      setupMats[[i]] <- setupIAK3D(xData[iThis,,drop = FALSE] , dIData[iThis,,drop = FALSE] , nDscPts = nDscPts ,  partSetup = partSetup , 
+                                   sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , sdfdKnots = sdfdKnots)
+    }else{
+      setupMats[i] <- list(NULL) # save mem as not rqd in mthd 4.
+    }
   }
-  ### now all individual subsets...      
-  for (i in 1:length(compLikMats$listBlocks)){
-    iThis <- compLikMats$listBlocks[[i]]$i
-    setupMats[[nrow(compLikMats$subsetPairsAdj)+i]] <- setupIAK3D(xData[iThis,,drop = FALSE] , dIData[iThis,,drop = FALSE] , nDscPts = nDscPts ,  partSetup = partSetup , 
-                                                                  sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , sdfdKnots = sdfdKnots)
-  }
+  ### now all individual subsets, if rqd...      
+  if(compLikMats$compLikOptn != 2){
+    for (i in 1:length(compLikMats$listBlocks)){
+      iThis <- compLikMats$listBlocks[[i]]$i
+      setupMats[[nrow(compLikMats$subsetPairsAdj)+i]] <- setupIAK3D(xData[iThis,,drop = FALSE] , dIData[iThis,,drop = FALSE] , nDscPts = nDscPts ,  partSetup = partSetup , 
+                                                                    sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , sdfdKnots = sdfdKnots)
+    }
+  }else{}
+  
   return(setupMats)
 }
 
@@ -568,7 +578,8 @@ setupIAK3D_CL <- function(xData , dIData , nDscPts = 0 , partSetup = FALSE , com
 ### as above, but for non-symmetric case...
 ### no option of disc pts here, and abcd not calculated (done in calcC fn)
 ##################################################################
-setupIAK3D2 <- function(xData , dIData , xData2 , dIData2 , sdfdType_cd1 = 0 , sdfdType_cxd0 = 0 , sdfdType_cxd1 = 0 , sdfdKnots = NULL){
+setupIAK3D2 <- function(xData , dIData , xData2 , dIData2 , sdfdType_cd1 = 0 , sdfdType_cxd0 = 0 , sdfdType_cxd1 = 0 , sdfdKnots = NULL , 
+                        siteIDData = NULL , XData = NULL , siteIDData2 = NULL , XData2 = NULL , colnames4ssre = NULL){
   ### note, I only use 'U' for unique in xU and dIU.
   ### Dx and other mats are defined with the unique locations, 
   ### but for simpler notation I don't use the 'U' notation there. 
@@ -584,22 +595,6 @@ setupIAK3D2 <- function(xData , dIData , xData2 , dIData2 , sdfdType_cd1 = 0 , s
   ndIU2 <- nrow(dIU2)
   nxU2 <- nrow(xU2)
   
-  # iK <- jK <- c()
-  # for (i in 1:nxU){
-  #   iKThis <- which((xData[,1] == xU[i,1]) & (xData[,2] == xU[i,2]))
-  #   iK <- c(iK , iKThis)
-  #   jK <- c(jK , matrix(i , length(iKThis) , 1))
-  # }
-  # Kx <- sparseMatrix(i = iK , j = jK , x = 1)
-  # 
-  # iK <- jK <- c()
-  # for (i in 1:ndIU){
-  #   iKThis <- which((dIData[,1] == dIU[i,1]) & (dIData[,2] == dIU[i,2]))
-  #   iK <- c(iK , iKThis)
-  #   jK <- c(jK , matrix(i , length(iKThis) , 1))
-  # }
-  # Kd <- sparseMatrix(i = iK , j = jK , x = 1)
-  
   ijTmp = lapply(seq(nxU) , function(i){ which((xData[,1] == xU[i,1]) & (xData[,2] == xU[i,2])) })
   Kx <- sparseMatrix(i = unlist(ijTmp) , j = rep(seq(length(ijTmp)) , times = unlist(lapply(ijTmp , length))) , x = 1)
   rm(ijTmp)
@@ -607,23 +602,6 @@ setupIAK3D2 <- function(xData , dIData , xData2 , dIData2 , sdfdType_cd1 = 0 , s
   ijTmp = lapply(seq(ndIU) , function(i){ which((dIData[,1] == dIU[i,1]) & (dIData[,2] == dIU[i,2])) })
   Kd <- sparseMatrix(i = unlist(ijTmp) , j = rep(seq(length(ijTmp)) , times = unlist(lapply(ijTmp , length))) , x = 1)
   rm(ijTmp)
-  
-  
-  # iK <- jK <- c()
-  # for (i in 1:nxU2){
-  #   iKThis <- which((xData2[,1] == xU2[i,1]) & (xData2[,2] == xU2[i,2]))
-  #   iK <- c(iK , iKThis)
-  #   jK <- c(jK , matrix(i , length(iKThis) , 1))
-  # }
-  # Kx2 <- sparseMatrix(i = iK , j = jK , x = 1)
-  # 
-  # iK <- jK <- c()
-  # for (i in 1:ndIU2){
-  #   iKThis <- which((dIData2[,1] == dIU2[i,1]) & (dIData2[,2] == dIU2[i,2]))
-  #   iK <- c(iK , iKThis)
-  #   jK <- c(jK , matrix(i , length(iKThis) , 1))
-  # }
-  # Kd2 <- sparseMatrix(i = iK , j = jK , x = 1)
   
   ijTmp = lapply(seq(nxU2) , function(i){ which((xData2[,1] == xU2[i,1]) & (xData2[,2] == xU2[i,2])) })
   Kx2 <- sparseMatrix(i = unlist(ijTmp) , j = rep(seq(length(ijTmp)) , times = unlist(lapply(ijTmp , length))) , x = 1)
@@ -664,10 +642,39 @@ setupIAK3D2 <- function(xData , dIData , xData2 , dIData2 , sdfdType_cd1 = 0 , s
     XsdfdSplineU_cxd1 <- XsdfdSplineU_cxd12 <- NULL
   }
   
+  if(!((is.null(siteIDData) & is.null(siteIDData2)))){
+    if((!is.null(siteIDData)) & (!is.null(siteIDData2))){
+      if((!all(XData[,1] == 1)) | (!all(XData2[,1] == 1))){ stop('Error - the lmer-type mixed-effects option (if siteIDData given) only works if first column of X is 1s!') }else{}
+      if(!identical(levels(siteIDData) , levels(siteIDData2))){ stop('Error - levels of siteIDData and siteIDData2 must be identical!') }else{}
+      if(is.null(colnames4ssre)){ stop('Error - to calculate site-specific random effects, must enter colnames4ssre to function setupIAK3D2. (These are the element names of listStructs4ssre)')}else{}
+
+      listStructs4ssre <- list()
+      for(cn in colnames4ssre){
+        listStructs4ssre[[cn]] <- sparseMatrix(i=1 , j=1 , x = 0 , dims = c(length(siteIDData) , length(siteIDData2)))
+      }
+
+      siteIDData12U <- unique(c(siteIDData , siteIDData2))
+      for(iSite in 1:length(siteIDData12U)){
+        iThis <- which(siteIDData == siteIDData12U[iSite])
+        jThis <- which(siteIDData2 == siteIDData12U[iSite])
+        for(cn in colnames4ssre){
+          listStructs4ssre[[cn]][iThis,jThis] <- listStructs4ssre[[cn]][iThis,jThis] + XData[iThis,cn,drop=FALSE] %*% t(XData2[jThis,cn,drop=FALSE])
+        }
+      }
+            
+    }else{
+      stop('Error - for setupIAK3D2 define both or neither of siteIDData and siteIDData2!')
+    }
+    
+  }else{
+    listStructs4ssre <- NULL
+  }
+  
   ### added 3/12/2020 - add sdfdKnots to setupMats...
   return(list('xU' = xU , 'Kx' = Kx , 'Dx' = Dx , 'dIU' = dIU , 'Kd' = Kd , 'xU2' = xU2 , 'Kx2' = Kx2 , 'dIU2' = dIU2 , 'Kd2' = Kd2 , 
               'XsdfdSplineU_cd1' = XsdfdSplineU_cd1 , 'XsdfdSplineU_cxd0' = XsdfdSplineU_cxd0 , 'XsdfdSplineU_cxd1' = XsdfdSplineU_cxd1 , 
-              'XsdfdSplineU_cd12' = XsdfdSplineU_cd12 , 'XsdfdSplineU_cxd02' = XsdfdSplineU_cxd02 , 'XsdfdSplineU_cxd12' = XsdfdSplineU_cxd12 , 'sdfdKnots' = sdfdKnots))  
+              'XsdfdSplineU_cd12' = XsdfdSplineU_cd12 , 'XsdfdSplineU_cxd02' = XsdfdSplineU_cxd02 , 'XsdfdSplineU_cxd12' = XsdfdSplineU_cxd12 , 
+              'sdfdKnots' = sdfdKnots , 'listStructs4ssre' = listStructs4ssre))  
 }
 
 ################################################################################
@@ -711,7 +718,7 @@ iaCovDsc <- function(dIData , ad , nud , sdfdPars , sdfdType , dDsc , DdDsc , Kd
     KdDsc <- kronecker(sparseMatrix(i=seq(ndI) , j = seq(ndI) , x = 1), matrix(1 , nDscPts , 1))
   }else{}
   
-  phidDsc <- maternCov(DdDsc , c(1 , ad , nud))
+  phidDsc <- spatialCovIAK3D(DdDsc , c(1 , ad , nud) , covModel = 'matern')
   
   ### set up so that sdfd (d == 0) = 1...
   sdfdDsc <- sdfd(dDsc , sdfdPars , sdfdType)
@@ -1013,7 +1020,7 @@ plotCovx <- function(lmm.fit , hx , dIPlot , addExpmntlV = TRUE , hzntlUnits = '
 #####################################################
 plotCord <- function(lmm.fit , hdPlot , vrtclUnits = 'm'){
   
-  CTmp <- maternCov(D = hdPlot , pars = c(1 , lmm.fit$parsBTfmd$ad , lmm.fit$parsBTfmd$nud))
+  CTmp <- spatialCovIAK3D(D = hdPlot , pars = c(1 , lmm.fit$parsBTfmd$ad , lmm.fit$parsBTfmd$nud) , covModel = 'matern')
   
   plot(c() , c() , xlim = c(0 , max(hdPlot)) , ylim = c(0 , 1.01 * max(CTmp)) , 
        xlab = paste0('Vertical separation distance, ' , vrtclUnits) , ylab = 'Correlation')
@@ -1258,7 +1265,6 @@ plotVarComps <- function(lmm.fit , dPlot , xlim = NULL){
   legend('bottomright' , legend = legTxt , col = colVec , lty = 1 , title = 'Component of variance')
 }
 
-
 getVarComp <- function(lmm.fit , dPlot , compPlot = 'cxd1'){
   
   if(compPlot == 'cd1'){
@@ -1285,3 +1291,124 @@ getVarComp <- function(lmm.fit , dPlot , compPlot = 'cxd1'){
   
   return(vdTmp)
 }
+
+#######################################################
+### from the fields package, if not available...
+#######################################################
+if(!exists('Wendland')){
+  Wendland <- function (d, theta = 1, dimension, k, derivative = 0, phi = NA){
+    if (!is.na(phi)) {
+      stop("phi argument has been depreciated")
+    }
+    if (any(d < 0)) {
+      stop("d must be nonnegative")
+    }
+    scale.constant <- wendland.eval(0, n = dimension, k, derivative = 0)
+    if (derivative > 0) {
+      scale.constant <- scale.constant * (theta^(derivative))
+    }
+    if (theta != 1) {
+      d <- d/theta
+    }
+    if ((k == 2) & (dimension == 2) & (derivative == 0)) {
+      ((1 - d)^6 * (35 * d^2 + 18 * d + 3))/3 * (d < 1)
+    }
+    else {
+      ifelse(d < 1, wendland.eval(d, n = dimension, k, derivative)/scale.constant, 
+             0)
+    }
+  }  
+  
+  wendland.eval <- function (r, n, k, derivative = 0){
+    beta = Wendland.beta(n, k)
+    l = floor(n/2) + k + 1
+    if (derivative == 0) {
+      phi = beta[1, k + 1] * (1 - r)^(l + 2 * k)
+      for (m in 1:k) {
+        phi = phi + beta[m + 1, k + 1] * r^m * (1 - r)^(l + 
+                                                          2 * k - m)
+      }
+    }
+    else {
+      f.my = expression((1 - r)^(l + 2 * k))
+      f.deriv = fields.D(f.my, "r", order = derivative)
+      f.eval = eval(f.deriv)
+      phi = beta[1, k + 1] * f.eval
+      for (m in 1:k) {
+        f.my = expression(r^m * (1 - r)^(l + 2 * k - m))
+        f.deriv = fields.D(f.my, "r", order = derivative)
+        f.eval = eval(f.deriv)
+        phi = phi + beta[m + 1, k + 1] * f.eval
+      }
+    }
+    phi
+  }  
+  
+  Wendland.beta <- function (n, k){
+    l = floor(n/2) + k + 1
+    M = matrix(0, nrow = k + 1, ncol = k + 1)
+    M[1, 1] = 1
+    if (k == 0) {
+      stop
+    }
+    else {
+      for (col in 0:(k - 1)) {
+        row = 0
+        beta = 0
+        for (m in 0:col) {
+          beta = beta + M[m + 1, col + 1] * fields.pochdown(m + 
+                                                              1, m - row + 1)/fields.pochup(l + 2 * col - 
+                                                                                              m + 1, m - row + 2)
+        }
+        M[row + 1, col + 2] = beta
+        for (row in 1:(col + 1)) {
+          beta = 0
+          for (m in (row - 1):col) {
+            beta = beta + M[m + 1, col + 1] * fields.pochdown(m + 
+                                                                1, m - row + 1)/fields.pochup(l + 2 * col - 
+                                                                                                m + 1, m - row + 2)
+          }
+          M[row + 1, col + 2] = beta
+        }
+      }
+    }
+    M
+  }
+  
+  fields.pochdown <- function (q, k){
+    n = q
+    if (k == 0) {
+      n = 1
+    }
+    else {
+      for (j in 1:(k - 1)) {
+        if ((k - 1) < 1) {
+          stop
+        }
+        else {
+          n = n * (q - j)
+        }
+      }
+    }
+    n
+  }
+
+  fields.pochup <- function (q, k){
+    n = q
+    if (k == 0) {
+      n = 1
+    }
+    else {
+      for (j in 1:(k - 1)) {
+        if ((k - 1) < 1) {
+          stop
+        }
+        else {
+          n = n * (q + j)
+        }
+      }
+    }
+    n
+  }
+  
+}else{}

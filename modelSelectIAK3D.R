@@ -470,7 +470,7 @@ stepBackWald <- function(namesX , pX , allKnotsd , zData , dIData , covsData , l
 ### and the which elements of betahat we want to test are equal to 0....
 ### must specifiy exactly one of ip0 or L
 ##########################################################################
-waldTest <- function(betahat , vbetahat , ip0 = NULL , L = NULL){
+waldTest <- function(betahat , vbetahat , ip0 = NULL , L = NULL , returnWaldStat = FALSE){
   if(is.null(ip0) & is.null(L)){ stop('Error, specify exactly one of ip0 or L for Wald test!') }else{} 
   if((!is.null(ip0)) & (!is.null(L))){ stop('Error, specify exactly one of ip0 or L for Wald test!') }else{} 
 
@@ -488,9 +488,12 @@ waldTest <- function(betahat , vbetahat , ip0 = NULL , L = NULL){
   Lbetahat <- L %*% betahat
   WaldStat <- as.numeric(t(Lbetahat) %*% solve(v , Lbetahat))
   
-  pValWT <- 1 - pchisq(WaldStat , diffp)
-  
-  return(pValWT)
+  if(returnWaldStat){
+    return(WaldStat)
+  }else{
+    pValWT <- 1 - pchisq(WaldStat , diffp)
+    return(pValWT)
+  }
 }
 
 #############################################################

@@ -1,26 +1,27 @@
-predictIAK3D <- function(xMap , dIMap , covsMap , lmmFit , rqrBTfmdPreds = TRUE , constrainX4Pred = FALSE){
-
 ########################################################
-### if xMap or dIMap were dataframes, convert to matrices here.
-### and make sure all are numeric...
+### this version was for when dIMap is a small set of mapping depth intervals, and xMap is a (larger) set of spatial locations
+# siteIDMap = NULL , to be added?
 ########################################################
-    if(!is.matrix(xMap)){
-        xMap <- as.matrix(xMap)
-    }else{}
-    if(!is.matrix(dIMap)){
-        dIMap <- as.matrix(dIMap)
+predictIAK3D <- function(xMap , dIMap , covsMap , siteIDMap = NULL , lmmFit , rqrBTfmdPreds = TRUE , constrainX4Pred = FALSE , verbose = TRUE , nxPerBatch = 2000 ,
+                         xDataLocal = NULL , dIDataLocal = NULL , zDataLocal = NULL , covsDataLocal = NULL , siteIDDataLocal = NULL , 
+                         optionsLocalUpdate = list('removeLocalData' = FALSE , 'attachBigMats' = TRUE , 'updateLmmPars' = TRUE , 'mindFromLegData' = 0.001)){
+
+    if(!is.null(lmmFit$siteIDData)){
+      if(is.null(lmmFit$setupMats$listStructs4ssre)){ stop('Error - lmmFit was fitted with site-specific random effects (ie siteIDData given), but lmmFit$setupMats$listStructs4ssre was null in the predict function!') }else{}
+      if(is.null(siteIDMap)){ stop('Error - lmmFit was fitted with site-specific random effects (ie siteIDData given), but siteIDMap was null in the predict function!') }else{}
+      if((!is.null(xDataLocal)) & is.null(siteIDDataLocal)){ stop('Error - lmmFit was fitted with site-specific random effects (ie siteIDData given), but siteIDDataLocal was null in the predict function (even though you want local updates!)!') }else{}
+
+      ### make sure siteID variables are characters      
+      if(!is.null(siteIDDataLocal)){ 
+        siteIDDataLocal <- as.character(siteIDDataLocal) 
+      }else{}
+      siteIDMap <- as.character(siteIDMap)
     }else{}
 
-    xMapCopy <- matrix(NA , nrow(xMap) , ncol(xMap))
-    for (i in 1:ncol(xMap)){ xMapCopy[,i] <- as.numeric(xMap[,i]) }
-    xMap <- xMapCopy
-    remove(xMapCopy)
-    
-    dIMapCopy <- matrix(NA , nrow(dIMap) , ncol(dIMap))
-    for (i in 1:ncol(dIMap)){ dIMapCopy[,i] <- as.numeric(dIMap[,i]) }
-    dIMap <- dIMapCopy
-    remove(dIMapCopy)
-    
+    tmp <- checkInputFormats4PredictIAK3D(xMap , dIMap)
+    xMap <- tmp$xMap
+    dIMap <- tmp$dIMap
+
     ##############################################
     ### make maps for depth intervals dIMap...
     ### predict for all depths for all data locations 
@@ -28,6 +29,31 @@ predictIAK3D <- function(xMap , dIMap , covsMap , lmmFit , rqrBTfmdPreds = TRUE 
     dIMap <- round(dIMap , digits = 2)
     dIMap <- matrix(dIMap , ncol = 2)
     ndIMap <- nrow(dIMap)
+
+    ############################################################
+    ### for gam2 model, add scaled covariates to covsVal...
+    ############################################################
+    if(identical(lmmFit$modelX$type , 'gam2')){
+      tmp <- addScaledCovs2df(dfFit = covsMap , scalePars_m = lmmFit$modelX$scalePars_m , scalePars_sd = lmmFit$modelX$scalePars_sd)
+      covsMap <- tmp$dfFit
+    }else{}
+
+    ############################################################
+    ### if local data given (i.e. data that were not in those used to fit lmmFit, update lmmFit)
+    ############################################################
+    if(!is.null(xDataLocal)){
+      tmp <- checkInputFormats4PredictIAK3D(xDataLocal , dIDataLocal)
+      xDataLocal <- tmp$xMap
+      dIDataLocal <- tmp$dIMap
+      nDataLocal <- nrow(xDataLocal)
+      if((nrow(dIDataLocal) != nDataLocal) | (length(zDataLocal) != nDataLocal) | (nrow(covsDataLocal) != nDataLocal)){
+        stop('Error - local data given to predict4ValIAK3D do not all have the same number of rows!')
+      }else{}
+      
+      lmmFit <- lmmUpdateLocal(lmmFit , xLocal = xDataLocal , dILocal = dIDataLocal , zLocal = zDataLocal , covsLocal = covsDataLocal , siteIDLocal = siteIDDataLocal , 
+                               removeLocalData = optionsLocalUpdate$removeLocalData , attachBigMats = optionsLocalUpdate$attachBigMats , 
+                               updateLmmPars = optionsLocalUpdate$updateLmmPars , mindFromLegData = optionsLocalUpdate$mindFromLegData)
+    }else{}
     
     ############################################################
     ### remove missing covariates after defining XMap, 
@@ -62,7 +88,7 @@ predictIAK3D <- function(xMap , dIMap , covsMap , lmmFit , rqrBTfmdPreds = TRUE 
 ### make or load C and delete from lmmFit...    
       if(is.element('C' , names(lmmFit))){
         C <- lmmFit$C
-        lmmFit$C <- NULL
+        # lmmFit$C <- NULL
       }else{
         print('Before making C for data in predictIAK3D:')
         gc() ; # try to make sure garbege collected before making C (as runs out of mem making C in shiny app)
@@ -70,11 +96,11 @@ predictIAK3D <- function(xMap , dIMap , covsMap , lmmFit , rqrBTfmdPreds = TRUE 
         if(is.element('setupMats' , names(lmmFit))){
           C <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx , 
                          sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , 
-                         cmeOpt = lmmFit$cmeOpt , setupMats = lmmFit$setupMats)$C
+                         cmeOpt = lmmFit$cmeOpt , setupMats = lmmFit$setupMats , siteIDData = lmmFit$siteIDData , XData = lmmFit$XData)$C
         }else{
           C <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx , 
                          sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , 
-                         cmeOpt = lmmFit$cmeOpt , setupMats = list('xData' = lmmFit$xData , 'dIData' = lmmFit$dIData))$C
+                         cmeOpt = lmmFit$cmeOpt , setupMats = list('xData' = lmmFit$xData , 'dIData' = lmmFit$dIData) , siteIDData = lmmFit$siteIDData , XData = lmmFit$XData)$C
         }
         print('Made C for data in predictIAK3D. Now:')
         print(mem_used())
@@ -106,7 +132,7 @@ predictIAK3D <- function(xMap , dIMap , covsMap , lmmFit , rqrBTfmdPreds = TRUE 
       }
     }else{}
     
-    print(paste0('Predicting for ' , ndIMap , ' depths and ' , nBatches , ' batches...'))
+    if(verbose){ print(paste0('Predicting for ' , ndIMap , ' depths and ' , nBatches , ' batches...')) }else{}
     ptm <- proc.time()
     
     zMap <- vMap <- matrix(NA , ndIMap , nxMap)
@@ -116,7 +142,7 @@ predictIAK3D <- function(xMap , dIMap , covsMap , lmmFit , rqrBTfmdPreds = TRUE 
         nxMapThis <- length(iThis)
         
         dIMapThis <- kronecker(matrix(dIMap[i,,drop=FALSE] , 1 , 2) , matrix(1 , nxMapThis , 1))
-        
+          
         if(identical(lmmFit$modelX$type , 'gam2')){
           tmp <- makeXvX_gam2(covData = covsMap[iThis,,drop = FALSE] , dIData = dIMapThis , listfefdKnots = lmmFit$modelX$listfefdKnots , incInts = lmmFit$modelX$incInts , intMthd = lmmFit$modelX$intMthd , colnamesXcns = lmmFit$modelX$colnamesX , nDiscPts = 1000 , lnTfmdData = lmmFit$lnTfmdData)
         }else{
@@ -131,7 +157,12 @@ predictIAK3D <- function(xMap , dIMap , covsMap , lmmFit , rqrBTfmdPreds = TRUE 
         zMapThis <- vMapThis <- NA * numeric(length(iThis))
         if(nxMapThis > 0){
           XMapThis <- XMapThis[iOKInThis,  , drop = FALSE]
-          
+          if(!is.null(siteIDMap)){ 
+            siteIDMapThis <- siteIDMap[iThis[iOKInThis]] 
+          }else{
+            siteIDMapThis <- NULL
+          } 
+            
           if(lmmFit$lnTfmdData){
             iTmp <- kronecker(((iOKInThis - 1) * pU) , matrix(1 , pU , 1)) + kronecker(matrix(1 , nxMapThis , 1) , seq(pU))
             vXUMapThis <- vXUMapThis[iTmp, , drop = FALSE]
@@ -139,10 +170,9 @@ predictIAK3D <- function(xMap , dIMap , covsMap , lmmFit , rqrBTfmdPreds = TRUE 
           
           if(lmmFit$compLikMats$compLikOptn == 0){
             
-            # setupMatsMap <- setupIAK3D(xData = xMap[iThis[iOKInThis],,drop=FALSE] , dIData = dIMapThis[iOKInThis,,drop=FALSE] , nDscPts = 0)
-            
             setupMatsMap <- setupIAK3D(xData = xMap[iThis[iOKInThis],,drop=FALSE] , dIData = dIMapThis[iOKInThis,,drop=FALSE] , nDscPts = 0 , 
-                                       sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , sdfdKnots = lmmFit$sdfdKnots)
+                                       sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , sdfdKnots = lmmFit$sdfdKnots , 
+                                       siteIDData = siteIDMapThis , XData = XMapThis , colnames4ssre = lmmFit$colnames4ssre)
 
             tmp <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx , 
                              sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , 
@@ -153,11 +183,10 @@ predictIAK3D <- function(xMap , dIMap , covsMap , lmmFit , rqrBTfmdPreds = TRUE 
             Ckk <- diag(tmp$C)
             rm(tmp)
             
-            # setupMatsMap <- setupIAK3D2(xData = xMap[iThis[iOKInThis],,drop=FALSE] , dIData = dIMapThis[iOKInThis,,drop=FALSE] , 
-            #                             xData2 = lmmFit$xData , dIData2 = as.matrix(lmmFit$dIData))
             setupMatsMap <- setupIAK3D2(xData = xMap[iThis[iOKInThis],,drop=FALSE] , dIData = dIMapThis[iOKInThis,,drop=FALSE] , 
                                         xData2 = lmmFit$xData , dIData2 = as.matrix(lmmFit$dIData) , 
-                                        sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , sdfdKnots = lmmFit$sdfdKnots)
+                                        sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , sdfdKnots = lmmFit$sdfdKnots , 
+                                        siteIDData = siteIDMapThis , XData = XMapThis , siteIDData2 = lmmFit$siteIDData , XData2 = lmmFit$XData , colnames4ssre = lmmFit$colnames4ssre)
 
             Ckh <- setCIAK3D2(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx , 
                               sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , 
@@ -205,12 +234,14 @@ predictIAK3D <- function(xMap , dIMap , covsMap , lmmFit , rqrBTfmdPreds = TRUE 
             zMapThis[iOKInThis] <- as.numeric(muhatMapThis) + as.numeric(CkhiCz_muhat)     
             if(!lmmFit$lnTfmdData){
               tmp <- XMapThis - CkhiCX
-              if(lmmFit$useReml){
-                vMapThis[iOKInThis] <- Ckk - CkhiCChk + rowSums(tmp * t(vbetahat %*% t(tmp)))
-              }else{
-                vMapThis[iOKInThis] <- Ckk - CkhiCChk #TEMP WITHOUT beta unc...
-              }
-
+              # if(lmmFit$useReml){
+              #   vMapThis[iOKInThis] <- Ckk - CkhiCChk + rowSums(tmp * t(vbetahat %*% t(tmp)))
+              # }else{
+              #   vMapThis[iOKInThis] <- Ckk - CkhiCChk #TEMP WITHOUT beta unc...
+              # }
+### or, irrespective of fitting method, include beta unc in pred vars...
+              vMapThis[iOKInThis] <- Ckk - CkhiCChk + rowSums(tmp * t(vbetahat %*% t(tmp)))
+              
             }else{
               ### don't include uncerainty due to fixed effects as not correct formula in lognomral case. Could do as TS-FIM approx in future. 
               vMapThis[iOKInThis] <- Ckk - CkhiCChk
@@ -225,7 +256,7 @@ predictIAK3D <- function(xMap , dIMap , covsMap , lmmFit , rqrBTfmdPreds = TRUE 
         if((i == 1) & (iBatch == 1)){
           tTmp <- proc.time() - ptm
             tTmp <- ceiling(tTmp[3] * nBatches * ndIMap / 60)
-            print(paste0('...should take about ' , tTmp , ' minutes...'))
+            if(verbose){ print(paste0('...should take about ' , tTmp , ' minutes...')) }else{}
         }else{}
 
       } # end of iBatch loop
@@ -246,36 +277,69 @@ predictIAK3D <- function(xMap , dIMap , covsMap , lmmFit , rqrBTfmdPreds = TRUE 
       vMap <- (exp(vMap) - 1) * (zMap ^ 2)
     }else{}
 
-    return(list('zMap' = zMap , 'vMap' = vMap , 'pi90LMap' = pi90LMap , 'pi90UMap' = pi90UMap))
+    return(list('zMap' = zMap , 'vMap' = vMap , 'pi90LMap' = pi90LMap , 'pi90UMap' = pi90UMap , 'lmmFit' = lmmFit))
 }
 
+########################################################
+### this version was for when dIMap is a full profile and xMap is a single spatial location
+########################################################
+profilePredictIAK3D <- function(xMap , dIMap , covsMap , siteIDMap = NULL , iData = seq(length(lmmFit$zData)) , lmmFit , rqrBTfmdPreds = TRUE , constrainX4Pred = FALSE ,
+                                xDataLocal = NULL , dIDataLocal = NULL , zDataLocal = NULL , covsDataLocal = NULL , siteIDDataLocal = NULL , 
+                                optionsLocalUpdate = list('removeLocalData' = FALSE , 'attachBigMats' = TRUE , 'updateLmmPars' = TRUE , 'mindFromLegData' = 0.001)){
 
-profilePredictIAK3D <- function(xMap , dIMap , covsMap , iData = seq(length(lmmFit$zData)) , lmmFit , rqrBTfmdPreds = TRUE , constrainX4Pred = FALSE){
+  if(!is.null(lmmFit$siteIDData)){
+    if(is.null(lmmFit$setupMats$listStructs4ssre)){ stop('Error - lmmFit was fitted with site-specific random effects (ie siteIDData given), but lmmFit$setupMats$listStructs4ssre was null in the predict function!') }else{}
+    if(is.null(siteIDMap)){ stop('Error - lmmFit was fitted with site-specific random effects (ie siteIDData given), but siteIDMap was null in the predict function!') }else{}
+    if((!is.null(xDataLocal)) & is.null(siteIDDataLocal)){ stop('Error - lmmFit was fitted with site-specific random effects (ie siteIDData given), but siteIDDataLocal was null in the predict function (even though you want local updates!)!') }else{}
+    
+    ### make sure siteID variables are characters      
+    if(!is.null(siteIDDataLocal)){ 
+      siteIDDataLocal <- as.character(siteIDDataLocal) 
+    }else{}
+    siteIDMap <- as.character(siteIDMap)
+  }else{}
+  
 ########################################################
 ### if xMap or dIMap were dataframes, convert to matrices here.
+### xMap should be a single location
 ### and make sure all are numeric...
 ########################################################
-    if(!is.matrix(xMap)){
-        xMap <- as.matrix(xMap)
-    }else{}
-    if(!is.matrix(dIMap)){
-        dIMap <- as.matrix(dIMap)
-    }else{}
-
-    xMapCopy <- matrix(NA , nrow(xMap) , ncol(xMap))
-    for (i in 1:ncol(xMap)){ xMapCopy[,i] <- as.numeric(xMap[,i]) }
-    xMap <- xMapCopy
-    remove(xMapCopy)
+    tmp <- checkInputFormats4PredictIAK3D(xMap , dIMap)
+    xMap <- tmp$xMap
+    dIMap <- tmp$dIMap
+  
+    if(nrow(xMap) > 1){ stop('Error - profilePredictIAK3D is for a single location at a time (ie xMap should have one row)!') }else{}
+    if(nrow(covsMap) > 1){ stop('Error - profilePredictIAK3D is for a single location at a time (ie covsMap should have one row)!') }else{}
     
-    dIMapCopy <- matrix(NA , nrow(dIMap) , ncol(dIMap))
-    for (i in 1:ncol(dIMap)){ dIMapCopy[,i] <- as.numeric(dIMap[,i]) }
-    dIMap <- dIMapCopy
-    remove(dIMapCopy)
-
-##############################################
-### a version to predict through the profile for one location
-### iData allows a subset of the full dataset to be used for prediction
-##############################################
+    ############################################################
+    ### for gam2 model, add scaled covariates to covsVal...
+    ############################################################
+    if(identical(lmmFit$modelX$type , 'gam2')){
+      tmp <- addScaledCovs2df(dfFit = covsMap , scalePars_m = lmmFit$modelX$scalePars_m , scalePars_sd = lmmFit$modelX$scalePars_sd)
+      covsMap <- tmp$dfFit
+    }else{}
+    
+    ############################################################
+    ### if local data given (i.e. data that were not in those used to fit lmmFit, update lmmFit)
+    ############################################################
+    if(!is.null(xDataLocal)){
+      tmp <- checkInputFormats4PredictIAK3D(xDataLocal , dIDataLocal)
+      xDataLocal <- tmp$xMap
+      dIDataLocal <- tmp$dIMap
+      nDataLocal <- nrow(xDataLocal)
+      if((nrow(dIDataLocal) != nDataLocal) | (length(zDataLocal) != nDataLocal) | (nrow(covsDataLocal) != nDataLocal)){
+        stop('Error - local data given to predict4ValIAK3D do not all have the same number of rows!')
+      }else{}
+      
+      lmmFit <- lmmUpdateLocal(lmmFit , xLocal = xDataLocal , dILocal = dIDataLocal , zLocal = zDataLocal , covsLocal = covsDataLocal , siteIDLocal = siteIDDataLocal , 
+                               removeLocalData = optionsLocalUpdate$removeLocalData , attachBigMats = optionsLocalUpdate$attachBigMats , 
+                               updateLmmPars = optionsLocalUpdate$updateLmmPars , mindFromLegData = optionsLocalUpdate$mindFromLegData)
+    }else{}
+    
+    ##############################################
+    ### a version to predict through the profile for one location
+    ### iData allows a subset of the full dataset to be used for prediction
+    ##############################################
     dIMap <- round(dIMap , digits = 2)
     ndIMap <- dim(dIMap)[[1]]
 
@@ -324,6 +388,7 @@ profilePredictIAK3D <- function(xMap , dIMap , covsMap , iData = seq(length(lmmF
     xMap <- matrix(xMap , nrow = 1)
     xMap <- xMap[integer(ndIMap) + 1,,drop=FALSE]
     covsMap <- covsMap[integer(ndIMap) + 1,,drop = FALSE]
+    if(!is.null(siteIDMap)){ siteIDMap <- rep(siteIDMap , ndIMap) }else{}
 
     if(identical(lmmFit$modelX$type , 'gam2')){
       tmp <- makeXvX_gam2(covData = covsMap , dIData = dIMap , listfefdKnots = lmmFit$modelX$listfefdKnots , incInts = lmmFit$modelX$incInts , intMthd = lmmFit$modelX$intMthd , colnamesXcns = lmmFit$modelX$colnamesX , nDiscPts = 10 , lnTfmdData = lmmFit$lnTfmdData)
@@ -336,9 +401,9 @@ profilePredictIAK3D <- function(xMap , dIMap , covsMap , iData = seq(length(lmmF
     }else{}
 
     if(lmmFit$compLikMats$compLikOptn == 0){
-      # setupMatsMap <- setupIAK3D(xData = xMap , dIData = dIMap , nDscPts = 0)
       setupMatsMap <- setupIAK3D(xData = xMap , dIData = dIMap , nDscPts = 0 , 
-                                 sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , sdfdKnots = lmmFit$sdfdKnots)
+                                 sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , sdfdKnots = lmmFit$sdfdKnots , 
+                                 siteIDData = siteIDMap , XData = XMap , colnames4ssre = lmmFit$colnames4ssre)
       
       tmp <- setCIAK3D(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx , 
                        sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , 
@@ -348,11 +413,10 @@ profilePredictIAK3D <- function(xMap , dIMap , covsMap , iData = seq(length(lmmF
       sigma2Veck <- tmp$sigma2Vec
       Ckk <- diag(tmp$C)
       
-      # setupMatsMap <- setupIAK3D2(xData = xMap , dIData = dIMap , 
-      #                             xData2 = lmmFit$xData[iData,,drop=FALSE] , dIData2 = as.matrix(lmmFit$dIData[iData,,drop=FALSE]))
       setupMatsMap <- setupIAK3D2(xData = xMap , dIData = dIMap , 
                                   xData2 = lmmFit$xData[iData,,drop=FALSE] , dIData2 = as.matrix(lmmFit$dIData[iData,,drop=FALSE]) , 
-                                  sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , sdfdKnots = lmmFit$sdfdKnots)
+                                  sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , sdfdKnots = lmmFit$sdfdKnots , 
+                                  siteIDData = siteIDMap , XData = XMap , siteIDData2 = lmmFit$siteIDData , XData2 = lmmFit$XData , colnames4ssre = lmmFit$colnames4ssre)
 
       Ckh <- setCIAK3D2(parsBTfmd = lmmFit$parsBTfmd , modelx = lmmFit$modelx , 
                         sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , 
@@ -399,11 +463,13 @@ profilePredictIAK3D <- function(xMap , dIMap , covsMap , iData = seq(length(lmmF
       zMap <- muhatMap + CkhiCz_muhat     
       if(!lmmFit$lnTfmdData){
         tmp <- XMap - CkhiCX
-        if(lmmFit$useReml){
-          vMap <- Ckk - CkhiCChk + rowSums(tmp * t(vbetahat %*% t(tmp)))
-        }else{
-          vMap <- Ckk - CkhiCChk # TEMP WO BETA UNC.
-        }
+        # if(lmmFit$useReml){
+        #   vMap <- Ckk - CkhiCChk + rowSums(tmp * t(vbetahat %*% t(tmp)))
+        # }else{
+        #   vMap <- Ckk - CkhiCChk # TEMP WO BETA UNC.
+        # }
+### UK var irrespective of fitting method...        
+        vMap <- Ckk - CkhiCChk + rowSums(tmp * t(vbetahat %*% t(tmp)))
       }else{
 ### don't include uncerainty due to fixed effects as not correct formula in lognomral case. Could do as TS-FIM approx in future. 
 ### though maybe with vbetahat based on FIM it works ok, see one of Gerards paper's /Ben's uncertainty paper
@@ -424,9 +490,93 @@ profilePredictIAK3D <- function(xMap , dIMap , covsMap , iData = seq(length(lmmF
       vMap <- (exp(vMap) - 1) * (zMap ^ 2)
     }else{}
 
-    return(list('zMap' = zMap , 'vMap' = vMap , 'pi90LMap' = pi90LMap , 'pi90UMap' = pi90UMap , 'XMap' = XMap , 'muhatMap' = muhatMap))
+    return(list('zMap' = zMap , 'vMap' = vMap , 'pi90LMap' = pi90LMap , 'pi90UMap' = pi90UMap , 'XMap' = XMap , 'muhatMap' = muhatMap , 'lmmFit' = lmmFit))
 }
 
+########################################################
+### this version designed for validation data
+### where xMap , dIMap , covsMap all have the same number of rows
+########################################################
+predict4ValIAK3D <- function(xMap , dIMap , covsMap , siteIDMap = NULL , lmmFit , rqrBTfmdPreds = TRUE , constrainX4Pred = FALSE ,
+                             xDataLocal = NULL , dIDataLocal = NULL , zDataLocal = NULL , covsDataLocal = NULL , siteIDDataLocal = NULL ,  
+                             optionsLocalUpdate = list('removeLocalData' = FALSE , 'attachBigMats' = TRUE , 'updateLmmPars' = TRUE , 'mindFromLegData' = 0.001)){
+  # mindFromLegData used if removeLocalData is TRUE. If coords in m, would need increasing (maybe to 1).
+
+  if(!is.null(lmmFit$siteIDData)){
+    if(is.null(lmmFit$setupMats$listStructs4ssre)){ stop('Error - lmmFit was fitted with site-specific random effects (ie siteIDData given), but lmmFit$setupMats$listStructs4ssre was null in the predict function!') }else{}
+    if(is.null(siteIDMap)){ stop('Error - lmmFit was fitted with site-specific random effects (ie siteIDData given), but siteIDMap was null in the predict function!') }else{}
+    if((!is.null(xDataLocal)) & is.null(siteIDDataLocal)){ stop('Error - lmmFit was fitted with site-specific random effects (ie siteIDData given), but siteIDDataLocal was null in the predict function (even though you want local updates!)!') }else{}
+    
+    ### make sure siteID variables are characters      
+    if(!is.null(siteIDDataLocal)){ 
+      siteIDDataLocal <- as.character(siteIDDataLocal) 
+    }else{}
+    siteIDMap <- as.character(siteIDMap)
+  }else{}
+  
+  
+  tmp <- checkInputFormats4PredictIAK3D(xMap , dIMap)
+  xMap <- tmp$xMap
+  dIMap <- tmp$dIMap
+
+  nMap <- nrow(xMap)
+  if((nrow(dIMap) != nMap) | (nrow(dIMap) != nMap)){ stop('Error for predict4ValIAK3D, xMap , dIMap and covsMap must all have the same number of rows!') }else{}
+
+  ### if local data given (i.e. data that were not in those used to fit lmmFit, update lmmFit)
+  if(!is.null(xDataLocal)){
+    tmp <- checkInputFormats4PredictIAK3D(xDataLocal , dIDataLocal)
+    xDataLocal <- tmp$xMap
+    dIDataLocal <- tmp$dIMap
+    nDataLocal <- nrow(xDataLocal)
+    if((nrow(dIDataLocal) != nDataLocal) | (length(zDataLocal) != nDataLocal) | (nrow(covsDataLocal) != nDataLocal)){
+      stop('Error - local data given to predict4ValIAK3D do not all have the same number of rows!')
+    }else{}
+
+    lmmFit <- lmmUpdateLocal(lmmFit , xLocal = xDataLocal , dILocal = dIDataLocal , zLocal = zDataLocal , covsLocal = covsDataLocal , siteIDLocal = siteIDDataLocal , 
+                             removeLocalData = optionsLocalUpdate$removeLocalData , attachBigMats = optionsLocalUpdate$attachBigMats , 
+                             updateLmmPars = optionsLocalUpdate$updateLmmPars , mindFromLegData = optionsLocalUpdate$mindFromLegData)
+  }else{}
+    
+  ### split into profiles...
+  ndim <- ncol(xMap)
+  xMapU <- xMap[!duplicated(xMap),,drop=FALSE]
+  zMap <- vMap <- pi90LMap <- pi90UMap <- muhatMap <- NA * numeric(nMap)
+  for(i in 1:nrow(xMapU)){
+    if(ndim == 1){
+      iThis <- which(xMap[,1] == xMapU[i,1])
+    }else if(ndim == 2){
+      iThis <- which((xMap[,1] == xMapU[i,1]) & (xMap[,2] == xMapU[i,2]))
+    }else if(ndim == 3){
+      iThis <- which((xMap[,1] == xMapU[i,1]) & (xMap[,2] == xMapU[i,2]) & (xMap[,3] == xMapU[i,3]))
+    }else{
+      stop('A lot of spatial dimensions here!')
+    } 
+    if(!is.null(siteIDMap)){
+      siteIDMapThis <- siteIDMap[iThis[1]]
+    }else{
+      siteIDMapThis <- NULL
+    }
+    tmp <- profilePredictIAK3D(xMap = xMap[iThis[1],,drop=FALSE] , covsMap = covsMap[iThis[1],,drop=FALSE] , 
+                               dIMap = dIMap[iThis,,drop=FALSE] , siteIDMap = siteIDMapThis , lmmFit = lmmFit , rqrBTfmdPreds = rqrBTfmdPreds , constrainX4Pred = constrainX4Pred)
+   
+    zMap[iThis] <- tmp$zMap 
+    vMap[iThis] <- tmp$vMap 
+    pi90LMap[iThis] <- tmp$pi90LMap 
+    pi90UMap[iThis] <- tmp$pi90UMap 
+    muhatMap[iThis] <- tmp$muhatMap 
+    if(i == 1){
+      XMap <- matrix(NA , nMap , ncol(tmp$XMap))
+    }else{}
+    XMap[iThis,] <- tmp$XMap
+  }
+  
+  return(list('zMap' = zMap , 'vMap' = vMap , 'pi90LMap' = pi90LMap , 'pi90UMap' = pi90UMap , 'XMap' = XMap , 'muhatMap' = muhatMap , 'lmmFit' = lmmFit))
+}
+
+#############################################################
+### leave-one-profile out cross validation...
+### plots full profile predictions against data.
+#############################################################
 xValIAK3D <- function(lmmFit , removeAllWithin = 0 , namePlot = 'xvPlots.pdf' , rqrBTfmdPreds = TRUE){
 ####################################################
 ### make full profile predictions for plotting 
@@ -439,6 +589,7 @@ xValIAK3D <- function(lmmFit , removeAllWithin = 0 , namePlot = 'xvPlots.pdf' , 
     iTmp <- which(!duplicated(lmmFit$xData))
     covsPred <- lmmFit$covsData[iTmp,,drop = FALSE]
     xPred <- lmmFit$xData[iTmp,,drop = FALSE]
+    siteIDPred <- lmmFit$siteIDData[iTmp]
 
     nxPred <- dim(xPred)[[1]]
     nData <- length(lmmFit$zData)
@@ -447,7 +598,7 @@ xValIAK3D <- function(lmmFit , removeAllWithin = 0 , namePlot = 'xvPlots.pdf' , 
     dIPredPlot <- cbind(seq(0 , 1.98 , 0.02) , seq(0.02 , 2 , 0.02))
     ndIPredPlot <- dim(dIPredPlot)[[1]]
 
-    print(paste0('Cross-validating for ' , nxPred , 'locations...'))
+    print(paste0('Cross-validating for ' , nxPred , ' locations...'))
     ptm <- proc.time()
 
     zhatPlot <- vhatPlot <- pi90LPlot <- pi90UPlot <- matrix(NA , ndIPredPlot , nxPred)
@@ -455,6 +606,7 @@ xValIAK3D <- function(lmmFit , removeAllWithin = 0 , namePlot = 'xvPlots.pdf' , 
     for (i in 1:nxPred){
         xPredThis <- matrix(xPred[i,] , nrow = 1)
         covsPredThis <- covsPred[i,,drop = FALSE]
+        siteIDPredThis <- siteIDPred[i]
 
 ### get all the dIData to be predicted for this location...
         iPredThis <- which((lmmFit$xData[,1] == xPredThis[1]) & (lmmFit$xData[,2] == xPredThis[2]))
@@ -468,7 +620,7 @@ xValIAK3D <- function(lmmFit , removeAllWithin = 0 , namePlot = 'xvPlots.pdf' , 
 ### use the profilePredict function (call without back-transform, to get stdzd sqd errs on transformed scale)...
 ### note that for xval, columns of XData are not constrained. 
         tmp <- profilePredictIAK3D(xMap = xPredThis , dIMap = rbind(matrix(dIPredPlot , ncol = 2) , matrix(dIPredThis , ncol = 2)) ,
-                    covsMap = covsPredThis , iData = iDataThis , lmmFit = lmmFit , rqrBTfmdPreds = FALSE)
+                    covsMap = covsPredThis , siteIDMap = siteIDPredThis , iData = iDataThis , lmmFit = lmmFit , rqrBTfmdPreds = FALSE)
 
 ### extract the results...
 ### i won't back-transform xv values for calculating sspe stats.
@@ -530,24 +682,26 @@ xValIAK3D <- function(lmmFit , removeAllWithin = 0 , namePlot = 'xvPlots.pdf' , 
 ###     approx bounds for median stdzd sqd errs (l90 and u90) if fair
 ############################
     dLims <- cbind(c(-Inf , 0.2 , 0.5) , c(0.2 , 0.5 , Inf))
-    xvStats <- matrix(NA , 4 , 9)
+    xvStats <- matrix(NA , 4 , 10)
     rownames(xvStats) <- c('Overall' , 'dMidpnt < 0.2' , '0.2 <= dMidpnt < 0.5' , 'dMidpnt >= 0.5')
-    colnames(xvStats) <- c('Bias' , 'RMSE' , 'Mean SSE' , 'Median SSE' , 'n' , 
+    colnames(xvStats) <- c('Bias' , 'RMSE' , 'CCC' , 'Mean SSE' , 'Median SSE' , 'n' , 
             'Approx theretical L90 MSSE' , 'Approx theretical U90 MSSE' ,
             'Approx theretical L90 MedSSE' , 'Approx theretical U90 MedSSE')
 ### overall stats
     xvStats[1,1] <- mean(errs)
     xvStats[1,2] <- sqrt(mean(sqdErrs))
-    xvStats[1,3] <- mean(stdzdSqdErrs)
-    xvStats[1,4] <- median(stdzdSqdErrs)
-    xvStats[1,5] <- length(errs)
+    xvStats[1,3] <- linsCCCIAK3D(zhatxv , zData)
+    
+    xvStats[1,4] <- mean(stdzdSqdErrs)
+    xvStats[1,5] <- median(stdzdSqdErrs)
+    xvStats[1,6] <- length(errs)
 
-    xvStats[1,6] <- 1 - 1.645 * sqrt(2/length(errs))
-    xvStats[1,7] <- 1 + 1.645 * sqrt(2/length(errs))
+    xvStats[1,7] <- 1 - 1.645 * sqrt(2/length(errs))
+    xvStats[1,8] <- 1 + 1.645 * sqrt(2/length(errs))
 
     sdmed <- sqrt(1/(8*((length(errs)-1)/2)*0.2219)) # 0.2219 is chisqpdf(0.455, 1df) ^ 2
-    xvStats[1,8] <- 0.455 - 1.645 * sdmed
-    xvStats[1,9] <- 0.455 + 1.645 * sdmed
+    xvStats[1,9] <- 0.455 - 1.645 * sdmed
+    xvStats[1,10] <- 0.455 + 1.645 * sdmed
 
 ### by depth, using midpoints to classify...
     for (id in 1:3){    
@@ -555,16 +709,18 @@ xValIAK3D <- function(lmmFit , removeAllWithin = 0 , namePlot = 'xvPlots.pdf' , 
 
         xvStats[id+1,1] <- mean(errs[iThis])
         xvStats[id+1,2] <- sqrt(mean(sqdErrs[iThis]))
-        xvStats[id+1,3] <- mean(stdzdSqdErrs[iThis])
-        xvStats[id+1,4] <- median(stdzdSqdErrs[iThis])
-        xvStats[id+1,5] <- length(iThis)
+        xvStats[id+1,3] <- linsCCCIAK3D(zhatxv[iThis] , zData[iThis])
+        
+        xvStats[id+1,4] <- mean(stdzdSqdErrs[iThis])
+        xvStats[id+1,5] <- median(stdzdSqdErrs[iThis])
+        xvStats[id+1,6] <- length(iThis)
 
-        xvStats[id+1,6] <- 1 - 1.645 * sqrt(2/length(iThis))
-        xvStats[id+1,7] <- 1 + 1.645 * sqrt(2/length(iThis))
+        xvStats[id+1,7] <- 1 - 1.645 * sqrt(2/length(iThis))
+        xvStats[id+1,8] <- 1 + 1.645 * sqrt(2/length(iThis))
 
         sdmed <- sqrt(1/(8*((length(iThis)-1)/2)*0.2219)) # 0.2219 is chisqpdf(0.455, 1df) ^ 2
-        xvStats[id+1,8] <- 0.455 - 1.645 * sdmed
-        xvStats[id+1,9] <- 0.455 + 1.645 * sdmed
+        xvStats[id+1,9] <- 0.455 - 1.645 * sdmed
+        xvStats[id+1,10] <- 0.455 + 1.645 * sdmed
     }
 
 ########################################
@@ -581,6 +737,38 @@ xValIAK3D <- function(lmmFit , removeAllWithin = 0 , namePlot = 'xvPlots.pdf' , 
                 'zhatPlot' = zhatPlot , 'vhatPlot' = vhatPlot , 'pi90LPlot' = pi90LPlot  , 'pi90UPlot' = pi90UPlot)) 
 }
 
+########################################################
+### if xMap or dIMap were dataframes, convert to matrices here.
+### and make sure all are numeric...
+########################################################
+checkInputFormats4PredictIAK3D <- function(xMap , dIMap){
+  if(!is.matrix(xMap)){
+    xMap <- as.matrix(xMap)
+  }else{}
+  if(!is.matrix(dIMap)){
+    dIMap <- as.matrix(dIMap)
+  }else{}
+
+  xMapCopy <- matrix(NA , nrow(xMap) , ncol(xMap))
+  for (i in 1:ncol(xMap)){ xMapCopy[,i] <- as.numeric(xMap[,i]) }
+  xMap <- xMapCopy
+  remove(xMapCopy)
+  
+  dIMapCopy <- matrix(NA , nrow(dIMap) , ncol(dIMap))
+  for (i in 1:ncol(dIMap)){ dIMapCopy[,i] <- as.numeric(dIMap[,i]) }
+  dIMap <- dIMapCopy
+  remove(dIMapCopy)
+
+  return(list('xMap' = xMap , 'dIMap' = dIMap))  
+}
+
+#############################################################
+### make profile plots...
+### can include data + (predictions + uncertainties) for full profiles 
+### + (predictions + uncertainties) for data depths from cross validation/internal prediction
+### + (predictions + uncertainties) for 'std' depths 
+### + separate plot for prediction for a distant profile (using medoid(?) of covariates)
+#############################################################
 plotProfilesIAK3D <- function(namePlot = 'profilePlots.pdf' , xData , dIData , zData , xPred = NULL , dIPred = NULL , zPred = NULL  , pi90LPred = NULL , pi90UPred = NULL , 
                               dIStd = NULL , zStd = NULL , pi90LStd = NULL , pi90UStd = NULL , 
                               zPredDistant = NULL , zhatxv = NULL , pi90Lxv = NULL , pi90Uxv = NULL , profNames = NULL , xlim = NULL , xlab = NULL){
@@ -780,7 +968,7 @@ plotProfilesIAK3D <- function(namePlot = 'profilePlots.pdf' , xData , dIData , z
 #############################################################
 ### calculate lins CCC...
 #############################################################
-linsCCC <- function(o , p , na.rm = FALSE){
+linsCCCIAK3D <- function(o , p , na.rm = FALSE){
   
   if(na.rm){
     iNA <- which(is.na(o) | is.na(p))
@@ -825,14 +1013,14 @@ calcValStats <- function(zVal , dIVal , zkVal , vkVal , layerMidPts = c(0.025 , 
     valStatsAllLayers$bias[i] <- mean(zkThis - zThis)
     valStatsAllLayers$rmse[i] <- sqrt(mean((zkThis - zThis) ^ 2))
     valStatsAllLayers$R2[i] <- 1 - sum((zkThis - zThis) ^ 2) / sum((mean(zThis) - zThis) ^ 2)
-    valStatsAllLayers$ccc[i] <- linsCCC(zkThis , zThis)
+    valStatsAllLayers$ccc[i] <- linsCCCIAK3D(zThis , zkThis)
     valStatsAllLayers$pInPI90[i] <- mean(inPI[iThis]) 
   }
 
   valStatsTot$bias <- mean(zkVal - zVal)
   valStatsTot$rmse <- sqrt(mean((zkVal - zVal) ^ 2))
   valStatsTot$R2 <- 1 - sum((zkVal - zVal) ^ 2) / sum((mean(zVal) - zVal) ^ 2)
-  valStatsTot$ccc <- linsCCC(zkVal , zVal)
+  valStatsTot$ccc <- linsCCCIAK3D(zVal , zkVal)
   valStatsTot$pInPI90 <- mean(inPI) 
 
 ##############################

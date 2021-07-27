@@ -213,6 +213,7 @@ cubist2XSetup <- function(cubistModel , dataFit , zFit = NULL , profIDFit = NULL
     nRowTmp <- length(dataRow1[[1]])
     dataRow1 <- strsplit(dataRow1[[1]][1] , split = ',')[[1]]
     dataRow1 <- dataRow1[-1] 
+    dataRow1 <- gsub('\\\\' , '' , dataRow1) # 13/01/2020 - for cat vars, \\ was getting put in levels in R vs4?
     
     if(length(dataRow1) != ncol(dataFit)){ 
       stop(paste0('Error - to run cubist2XSetup, dataFit must be the same as the data used to fit the cubist model! But they have different numbers of columns!' , 
@@ -227,7 +228,8 @@ cubist2XSetup <- function(cubistModel , dataFit , zFit = NULL , profIDFit = NULL
 #        checkThis <- dataFit[1,j] == as.numeric(dataRow1[j])
 ### only bother checking to 4 dp (rounding issues in above)...
 ### may not be sensible for some scales, but should be good enough to flag any big errors.
-        checkThis <- abs(dataFit[1,j] - as.numeric(dataRow1[j])) < 1E-4
+        # checkThis <- abs(dataFit[1,j] - as.numeric(dataRow1[j])) < 1E-4
+        checkThis <- (abs(dataFit[1,j] - as.numeric(dataRow1[j]))/sd(dataFit[,j])) < 1E-4
       }else{
         checkThis <- dataFit[1,j] == dataRow1[j]
       }      
@@ -1277,4 +1279,45 @@ selectCubistOptsXV <- function(cFit , zFit , covsFit , allKnotsd = c() , nRulesV
 }
 
 
+#################################################################################################
+### fn to wrap up all of the cubist stuff needed before the fitIAK3D fn is called. 
+#################################################################################################
+cubistIAK3DInit <- function(cFit , zFit , covsFit , profIDFit , allKnotsd , refineCubistModel = FALSE , nRules = NA , rtnRuleSelectInfo = FALSE){
+  #################################################################################################
+  ### an algorithm to select number of rules for cubist model, with dSpline included (if selected), 
+  ### and rdm effect in lmm for profileID (ie so that lots of data from one profile don't contribute too much spatial info)
+  #################################################################################################
+  if(is.na(nRules) | is.na(refineCubistModel)){
+    if(is.na(nRules)){ nRulesVec <- seq(20) }else{ nRulesVec <- nRules }
+    if(is.na(refineCubistModel)){ refineCubistModelVec <- c(FALSE , TRUE) }else{ refineCubistModelVec <- refineCubistModel }
+    tmp <- selectCubistOptsXV(cFit = cFit , zFit = zFit , covsFit = covsFit , allKnotsd = allKnotsd , nRulesVec = nRulesVec , refineCubistModelVec = refineCubistModelVec)
+    nRules <- tmp$nRules
+    refineCubistModel <- tmp$refineCubistModel
+    rmseMatList <- tmp$rmseMatList
+    warningFlagFitList <- tmp$warningFlagFitList
+  }else{
+    rmseMatList <- NULL
+    warningFlagFitList <- NULL
+  }
+  
+  #################################################################
+  ### fit the Cubist model...
+  #################################################################
+  cmFit <- cubist(x = covsFit , y = zFit , committees = 1 , cubistControl(rules = nRules))
+  print(summary(cmFit))
+    
+  ### convert to des mtx
+  tmp <- cubist2X(cubistModel = cmFit, dataFit = covsFit , zFit = zFit , profIDFit = profIDFit , allKnotsd = allKnotsd , refineCubistModel = refineCubistModel)
+  cmFit <- tmp$cubistModel
+  XFit <- tmp$X
+  matRulesFit <- tmp$matRuleData
+
+  listRtn <- list('cmFit' = cmFit , 'XFit' = XFit , 'matRulesFit' = matRulesFit)
+  if(rtnRuleSelectInfo){
+    listRtn$rmseMatList <- rmseMatList
+    listRtn$warningFlagFitList <- warningFlagFitList
+  }else{}
+  
+  return(listRtn)    
+}
 

@@ -36,8 +36,6 @@ library(GSIF)
 library(ithir)
 library(parallel)
 
-# GSIF              NA                                                         "GPL"                                    NA              NA                    NA        NA     "no"             "3.6.1"
-# ithir             NA                                                         "GPL-2"                          NA              NA                    NA        NA     "no"             "3.6.1"
 
 if(Sys.info()[1] == 'Windows'){
   wDir <- 'U://scripts/'
@@ -73,59 +71,68 @@ source(paste0(iakDir , '/makeXvX_gam2.R'))
 
 printnllTime <<- FALSE
 
-crsAusAlbers <- CRS("+proj=aea +lat_1=-18 +lat_2=-36 +lat_0=0 +lon_0=132 +x_0=0 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs")
-crsAusAlbersNEW <- CRS("+proj=aea +lat_1=-18 +lat_2=-36 +lat_0=0 +lon_0=132 +x_0=0 +y_0=0 +ellps=WGS84 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs")
+crsAusAlbers <- CRS("+proj=aea +lat_1=-18 +lat_2=-36 +lat_0=0 +lon_0=132 +x_0=0 +y_0=0 +ellps=GRS80 +datum=WGS84 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs")
 crsLongLat <- CRS('+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
 
 ##########################################################
 ### set some options for iak...
 ##########################################################
-useCubistForTrend <- FALSE # otherwise, will use a spline model
-
-nRules <- 5 # number of rules for Cubist model. If NA, then a x val routine to select nRules will be used. 
-
-refineCubistModel <- TRUE # use a stepwise algorithm (refineXIAK3D in cubist2XIAK3D.R) to remove predictors from the fitted Cubist model? # If NA, a x val routine will be used to select T/F
-
+modelX <- 'gam2' # 'gam2' or 'cubist'. For linear model and how to code, see top of makeXvX.R - e.g. 1 for a model with first order d/spat cov interactions
 constrainX4Pred <- FALSE # use the limits of each column of X (non-zeros only) from the fitting data to constrain the columns of X for prediction?
-
 prodSum <- TRUE # product sum model? If FALSE, product model is used.  
+modelx <- 'wendland' # matern (range = a / 3) or wendland or spherical or nugget. wendland or spherical (range = a) have C = 0 beyond range so can be computable with bigger datasets. 
+minRange <- NA # NA will give default minRange (1.5 * min sep dist)
+maxRange <- NA # NA will give default maxRange (0.5 * max sep dist)
 
 # nud <- NULL # use this if running the modelSelectIAK3D function.
 nud <- 0.5
-
-# if data have been log-transformed, can put TRUE here 
-# to consider that each untransformed data value was an arithmetic average 
-# of untransformed pt-support variable over the depth interval
-# putting FALSE assumes averaging occurs on the log-transformed scale. 
 lnTfmdData <- FALSE 
 rqrBTfmdPreds <- FALSE # only relevant if data were log-transformed - back transforms via exp(z + 0.5 * v), ie to minimize expected sqd err
-
 useReml <- TRUE
-#useReml <- FALSE
 
-if(useCubistForTrend){
-  allKnotsd <- c() # use this to have no d spline, d sum component will be included in cov model then
-  # allKnotsd <- c(0 , 0.3 , 1 , 7.13) # final is the max lower depth. d component will not be included in cov model in this case
-  if(length(allKnotsd) > 0){ incdSpline <- TRUE }else{ incdSpline <- FALSE }
+allKnotsd <- c() # can use this to give spline of depth in combination with using cubist for trend. if gam2 for trend keep empty
+if(length(allKnotsd) > 0){ incdSpline <- TRUE }else{ incdSpline <- FALSE }
+
+# sdfdTypeANDcmeInit <- c(0 , -1 , -1 , 1) # stationary d component in prodSum model (0), non-stat cxd0 with exp fn (-1) and cxd1 with exp fn (-1), meas err included (1)
+sdfdTypeANDcmeInit <- c(0 , 2 , 2 , 1) # stationary d component in prodSum model (0), non-stat cxd0 with spline fn (2 = 2 extra pars fitted per non-stat fn of depth = same complexity as -1) and cxd1 with spline fn (2), meas err included (1)
+# sdfdTypeANDcmeInit <- c(0 , 0 , 0 , 1) # stationary d component in prodSum model (0), stat cxd0 (0) and cxd1 (0), meas err included (1)
+if((modelX == 'gam2') | (length(allKnotsd) > 0)){
+  sdfdTypeANDcmeInit[1] <- -9 # no d component in prodSum model because spline used instead (-9)
+}else{}
+
+if(identical(modelX , 'cubist')){
+  ### nRules : number of rules for Cubist model. If NA, then a x val routine to select nRules will be used. 
+  ### refineCubistModel : use a stepwise algorithm (refineXIAK3D in cubist2XIAK3D.R) to remove predictors from the fitted Cubist model? # If NA, a x val routine will be used to select T/F
+  optionsModelX <- list('refineCubistModel' = TRUE , 'nRules' = 5 , 
+                        'reduceXAfterInitFit' = FALSE)
+}else if(identical(modelX , 'gam2')){
+  optionsModelX <- list('nIntKnotsd' = 1 , 'nIntKnotss' = 2 , 'incInts' = FALSE , 'intMthd' = 0 ,
+                        'reduceXAfterInitFit' = FALSE , 'optStat4Drop' = 1 , 'alpha' = NA ,
+                        'maxnSpatVars' = 3 , 'maxnKnotsd' = 2 , 'maxnKnotss' = 2 ,
+                        'q4BdryKnotsd' = c(0.05 , 0.95) , 'q4BdryKnotss' = c(-0.2 , 1.2))
+  
+  # ### Inf for bdry knots + 2 internal knots = linear function. See makeXnsClampedLUG0
+  # optionsModelX <- list('nIntKnotsd' = 2 , 'nIntKnotss' = 2 , 'incInts' = FALSE , 'intMthd' = 0 ,
+  #                       'reduceXAfterInitFit' = FALSE , 'optStat4Drop' = 1 , 'alpha' = NA ,
+  #                       'maxnSpatVars' = 3 , 'maxnKnotsd' = 2 , 'maxnKnotss' = 2 ,
+  #                       'q4BdryKnotsd' = c(0.05 , 0.95) , 'q4BdryKnotss' = c(-Inf , Inf)) # -Inf , Inf with maxnKnotss = 2 gives linear fns of spatial covariates
+  
+  ### or with interactions between spatial covs and depth...
+  # optionsModelX <- list('nIntKnotsd' = 2 , 'nIntKnotss' = 2 , 'incInts' = list('dIMidPts' , setdiff(covNames4IAK3D , 'dIMidPts')) , 'intMthd' = 0 ,
+  #                       'reduceXAfterInitFit' = FALSE , 'optStat4Drop' = 1 , 'alpha' = NA ,
+  #                       'maxnSpatVars' = 3 , 'maxnKnotsd' = 2 , 'maxnKnotss' = 2 , 
+  #                       'q4BdryKnotsd' = c(0.05 , 0.95) , 'q4BdryKnotss' = c(-0.2 , 1.2))
+  
+}else if(is.numeric(modelX) | (length(modelX) > 1 & is.character(modelX))){ # assume this will be linear model. see top of makeXvX for how to specify
+  # this needs checking as hasn't been used for a while
+  covsFit$dIMidPts <- NULL
+  covsVal$dIMidPts <- NULL
+  optionsModelX <- list()
 }else{
-  allKnotsd <- c() # spline info will be included in modelX, added below in script
-  incdSpline <- FALSE
+  stop('Check code is still working for this type of modelX!')
 }
 
-if((!useCubistForTrend) | (length(allKnotsd) > 0)){
-  sdfdTypeANDcmeInit <- c(-9 , -1 , -1 , 1) # no d component in prodSum model because spline used instead (-9), non-stat cxd0 (-1) and cxd1 (-1), meas err included (1)
-  #sdfdTypeANDcmeInit <- c(-9 , 0 , 0 , 1) # no d component in prodSum model because spline used instead (-9), stat cxd0 (0) and cxd1 (0), meas err included (1)
-}else{
-  sdfdTypeANDcmeInit <- c(0 , -1 , -1 , 1) # stationary d component in prodSum model (0), non-stat cxd0 (-1) and cxd1 (-1), meas err included (1)
-  # sdfdTypeANDcmeInit <- c(0 , 2 , 2 , 1) # stationary d component in prodSum model (0), non-stat cxd0 (-1) and cxd1 (-1), meas err included (1)
-  # sdfdTypeANDcmeInit <- c(0 , 2 , 0 , 1) # stationary d component in prodSum model (0), non-stat cxd0 (-1) and cxd1 (-1), meas err included (1)
-  # sdfdTypeANDcmeInit <- c(0 , 0 , 3 , 1) # stationary d component in prodSum model (0), non-stat cxd0 (-1) and cxd1 (-1), meas err included (1)
-  # sdfdTypeANDcmeInit <- c(0 , 3 , 0 , 1) # stationary d component in prodSum model (0), non-stat cxd0 (-1) and cxd1 (-1), meas err included (1)
-  # sdfdTypeANDcmeInit <- c(-9 , 0 , 0 , 1) # stationary d component in prodSum model (0), non-stat cxd0 (-1) and cxd1 (-1), meas err included (1)
-  # sdfdTypeANDcmeInit <- c(-9 , 2 , 2 , 1) # stationary d component in prodSum model (0), non-stat cxd0 (-1) and cxd1 (-1), meas err included (1)
-}
-
-testCL <- FALSE # use the composite likelihood approximation (to speed up for big datasets)?
+useCL <- FALSE # use the composite likelihood approx?
 
 ##############################################
 ### load the edgeroi dataset (from GSIF package) and put into format for iak3d...
@@ -145,130 +152,48 @@ profIDVal <- tmp$profIDVal
 
 rList <- tmp$rList
 
-# load(file = paste0(dataDir , '/zTest.RData'))
-# load(file = paste0(dataDir , '/xTest.RData'))
-# load(file = paste0(dataDir , '/dITest.RData'))
+### to do a temp test with a cat var...
+# covsFit$radK_TMP <- NA
+# covsFit$radK_TMP[covsFit$radK < 0.5] <- 'K_1'
+# covsFit$radK_TMP[covsFit$radK >= 0.5 & covsFit$radK < 1] <- 'K_2'
+# covsFit$radK_TMP[covsFit$radK >= 1 & covsFit$radK < 1.5] <- 'K_3'
+# covsFit$radK_TMP[covsFit$radK >= 1.5] <- 'K_4'
+# covsFit$radK <- factor(covsFit$radK_TMP , levels = paste0('K_' , seq(4)))
+# covsFit$radK_TMP <- NULL
 # 
-# cFit <- xTest
-# zFit <- zTest
-# dIFit <- dITest
-# covsFit <- data.frame('dIMidPts' = rowMeans(dITest))
-# profIDFit <- makeProfID(cFit)
-# 
-# 
-# cVal <- cFit[1:10,] + 10
-# dIVal <- dIFit[1:10,]
-# covsVal <- covsFit[1:10,,drop=FALSE]
-# zVal <- zFit[1:10]
-# profIDVal <- makeProfID(cVal)
-# 
-# rm(xTest , zTest , dITest)
+# covsVal$radK_TMP <- NA
+# covsVal$radK_TMP[covsVal$radK < 0.5] <- 'K_1'
+# covsVal$radK_TMP[covsVal$radK >= 0.5 & covsVal$radK < 1] <- 'K_2'
+# covsVal$radK_TMP[covsVal$radK >= 1 & covsVal$radK < 1.5] <- 'K_3'
+# covsVal$radK_TMP[covsVal$radK >= 1.5] <- 'K_4'
+# covsVal$radK <- factor(covsVal$radK_TMP , levels = paste0('K_' , seq(4)))
+# covsVal$radK_TMP <- NULL
+
+##################################################
+### define (or load) the matrices for composite likelihood
+### for looking at different models with same dataset, make sure these matrices are always the same (ie done once then reloaded)
+##################################################
+if(useCL){
+  ### if fitting different models, save out the compLikMats so that it is the same each time.
+  #  compLikMats <- setVoronoiBlocksWrap(x = cFit , nPerBlock = 50 , plotVor = T , optnBalance = 2)
+  ### also attach compLikOptn
+  #  compLikMats$compLikOptn <- 2
+  ## save(compLikMats , file = paste0(dataDir , '/compLikMats.RData'))
+  # saveRDS(compLikMats , file = paste0(dataDir , '/compLikMats.RData'))
+  
+  ## load(file = paste0(dataDir , '/compLikMats.RData'))
+  
+  compLikMats <- readRDS(file = paste0(dataDir , '/compLikMats.RData'))
+  
+}else{
+  compLikMats <- list('compLikOptn' = 0) # use exact likelihood
+}
 
 #################################################################################################
 ### set knots for sdfd spline fn (if used)
 #################################################################################################
 sdfdKnots <- setKnots4sdfd(dIFit , sdfdType_cd1 = sdfdTypeANDcmeInit[1] , sdfdType_cxd0 = sdfdTypeANDcmeInit[2] , sdfdType_cxd1 = sdfdTypeANDcmeInit[3])
 
-if(useCubistForTrend){
-#################################################################################################
-### an algorithm to select number of rules for cubist model, with dSpline included (if selected), 
-### and rdm effect in lmm for profileID (ie so that lots of data from one profile don't contribute too much spatial info)
-#################################################################################################
-  if(is.na(nRules) | is.na(refineCubistModel)){
-    if(is.na(nRules)){ nRulesVec <- seq(20) }else{ nRulesVec <- nRules }
-    if(is.na(refineCubistModel)){ refineCubistModelVec <- c(FALSE , TRUE) }else{ refineCubistModelVec <- refineCubistModel }
-    tmp <- selectCubistOptsXV(cFit = cFit , zFit = zFit , covsFit = covsFit , allKnotsd = allKnotsd , nRulesVec = nRulesVec , refineCubistModelVec = refineCubistModelVec)
-    nRules <- tmp$nRules
-    refineCubistModel <- tmp$refineCubistModel
-    rmseMatList <- tmp$rmseMatList
-    warningFlagFitList <- tmp$warningFlagFitList
-  }else{}
-  
-#################################################################
-### fit or load the Cubist model...
-#################################################################
-  if(fitCubistModelNow){
-    ### fit cubist model...
-    cmFit <- cubist(x = covsFit , y = zFit , committees = 1 , cubistControl(rules = nRules))
-    
-    print(summary(cmFit))
-    
-    ### convert to des mtx
-    tmp <- cubist2X(cubistModel = cmFit, dataFit = covsFit , zFit = zFit , profIDFit = profIDFit , allKnotsd = allKnotsd , refineCubistModel = refineCubistModel)
-    cmFit <- tmp$cubistModel
-    XFit <- tmp$X
-    matRulesFit <- tmp$matRuleData
-    
-    save(cmFit , file = paste0(dataDir , '/cmFit.RData'))
-    
-  }else{
-    
-    load(file = paste0(dataDir , '/cmFit.RData'))
-    
-  }
-  
-  modelX <- cmFit
-  
-}else{
-  ###################################################################################
-  ### alternatively, set up for fitting a spline model.
-  ### include interactions between depth and spatial covariates (but here not between different spatial covariates)
-  ###################################################################################
-  modelX <- list('type' = 'gam2')
-
-  scaleCovs <- TRUE
-  nIntKnotsd <- 4 # number of internal knots for the spline function (nat spline, clamped to have grad=0 at upper bdry) of depth; if this is complex enough, probably no need for the depth component in prod-sum covariance model
-  nIntKnotss <- 4 # number of internal knots for the spline functions (nat spline, clamped to have grad=0 at upper and lower bdries) of covariates
-
-  ### don't include depth here.   
-  spatialCovs <- c('elevation' , 'twi' , 'radK' , 'landsat_b3' , 'landsat_b4')
-  if(scaleCovs){
-    ### to work with scaled covariates
-    spatialCovs <- paste0(spatialCovs , '_SCALED')
-  }else{
-    ### to work with unscaled (raw) covariates
-    spatialCovs <- spatialCovs # no change here
-  } 
-
-  ### add any scaled variables (_SCALED) to covs dfs...
-  tmp <- addScaledCovs2df(dfFit = covsFit , dfPred = covsVal , covNames = spatialCovs)
-  covsFit <- tmp$dfFit
-  covsVal <- tmp$dfPred
-
-# for bdry knot positions for depth fn, use 5th ptile (not clamped) to stop it being too wiggly at the surface.   
-# and 95th ptile for other boundary - this is clamped, which will force a plateau
-# for other (spatial) covariates, boundary knots at 1st and 99th ptiles, which together with clamping at both ends will stop extrapolation.
-  q4BdryKnots <- c(0.05 , rep(0.01 , length(spatialCovs))) 
-  q4BdryKnots <- cbind(q4BdryKnots , 1 - q4BdryKnots)
-  nIntKnots <- c(nIntKnotsd , rep(nIntKnotss , length(spatialCovs)))
-  sType <- c('nscug' , rep('nsclug' , length(spatialCovs)))
-  modelX$listfefdKnots <- makelistfefdKnots(dfFit = covsFit , covNames = c('dIMidPts' , spatialCovs) , nIntKnots = nIntKnots , q4BdryKnots = q4BdryKnots , sType = sType)
-  ### to include interactions between depth and the other spatial covariates...  
-  modelX$incInts <- list('dIMidPts' , spatialCovs)
-  modelX$intMthd <- 0
-  
-### just to get names of columns...  
-  XcnsTmp <- makeXcns(dfCovs = covsFit , dIData = dIFit , listfefdKnots = modelX$listfefdKnots , incInts = modelX$incInts , colnamesX = NULL , intMthd = modelX$intMthd) # intMthd = 1 for now. 0 = simpler
-
-  modelX$colnamesX <- colnames(XcnsTmp)
-  
-  rm(tmp , XcnsTmp , q4BdryKnots , nIntKnots , sType , covNames)
-}
-
-
-if(testCL){
-### if fitting different models, save out the compLikMats so that it is the same each time.
-#  compLikMats <- setVoronoiBlocksWrap(x = cFit , nPerBlock = 50 , plotVor = T , optnBalance = 2)
-### also attach compLikOptn
-#  compLikMats$compLikOptn <- 2
-#  save(compLikMats , file = paste0(dataDir , '/compLikMats.RData'))
-
-  load(file = paste0(dataDir , '/compLikMats.RData'))
-
-}else{
-  compLikMats <- list()
-  compLikMats$compLikOptn <- 0
-}
 
 lmmFitFile <- paste0(dataDir , '/lmm.fit.selected.RData') # for the fitted model
 nmplt <- paste0(dataDir , '/plot.selected.gam2.pdf') # for a plot with the internal 'predictions' = predictions through profiles of sampled profiles (not validation, can be a check of what's going on)
@@ -299,10 +224,11 @@ if(fitModelNow){
 ### refit cubist model as lmm...if selectCovIAK3D was run don't need to do this bit
   start_time <- Sys.time()
   
-  tmp <- fitIAK3D(xData = cFit , dIData = dIFit , zData = zFit , covsData = covsFit , modelX = modelX , modelx = 'matern' , nud = nud , allKnotsd = allKnotsd , 
-                    sdfdType_cd1 = sdfdTypeANDcmeInit[1] , sdfdType_cxd0 = sdfdTypeANDcmeInit[2] , sdfdType_cxd1 = sdfdTypeANDcmeInit[3] , 
-                    cmeOpt = sdfdTypeANDcmeInit[4] , sdfdKnots = sdfdKnots , prodSum = prodSum , lnTfmdData = lnTfmdData , useReml = useReml , compLikMats = compLikMats ,
-                    namePlot = nmplt , rqrBTfmdPreds = rqrBTfmdPreds) 
+  tmp <- fitIAK3D(xData = cFit , dIData = dIFit , zData = zFit , covsData = covsFit , modelX = modelX , modelx = modelx , nud = nud , allKnotsd = allKnotsd , 
+                  sdfdType_cd1 = sdfdTypeANDcmeInit[1] , sdfdType_cxd0 = sdfdTypeANDcmeInit[2] , sdfdType_cxd1 = sdfdTypeANDcmeInit[3] , 
+                  cmeOpt = sdfdTypeANDcmeInit[4] , sdfdKnots = sdfdKnots , minRange = minRange , maxRange = maxRange , 
+                  prodSum = prodSum , lnTfmdData = lnTfmdData , useReml = useReml , 
+                  optionsModelX = optionsModelX , compLikMats = compLikMats , namePlot = nmplt , rqrBTfmdPreds = rqrBTfmdPreds) 
 
   end_time <- Sys.time()
   print('Time to fit was:')
@@ -315,6 +241,8 @@ if(fitModelNow){
 }else{
   load(file = lmmFitFile)
 }
+
+stop('done')
 
 ###########################################################################
 ### some plots of the fitted covariance model...

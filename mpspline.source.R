@@ -249,25 +249,42 @@ mpspline.source <- function (dfHzns, ...)
 ###        but mpspline function uses cm.
 ###        Also, default for this fn is vlow = -1000, while default for mpspline.source fn is vlow = 0
 ##################################################
-harmonizeMPS <- function(profIDData , dIData , zData , dIStd , vlow = -1000 , vhigh = 1000 , singlesByRegression = TRUE){
+harmonizeMPS <- function(profIDData , dIData , zData , dfSpatialData4Copy = NULL , dIStd = NULL , vlow = -1000 , vhigh = 1000 , nmSoilProp = 'zHrmzd' , singlesByRegression = TRUE , namePlot = NULL){
 
+  # nmSoilProp just for naming column in returned df dfHrmnzdData_FULL
+  # dfSpatialData4Copy also just for putting other info into returned df dfHrmnzdData_FULL 
+  #      (will take only data from first row and apply for all depths)
+  #      (so will only be apt for SPATIAL info data from first row and apply for all depths)
+  
+    if(is.null(dIStd)){
+      print('dIStd not given to harmonizeMPS function, so going to assume you want the six GlobalSoilMap depths.')
+      dIStd <- data.frame('dU' = c(0 , 5 , 15 , 30 , 60 , 100) / 100 , 'dL' = c(5 , 15 , 30 , 60 , 100 , 200) / 100)
+    }else{}
+  
     profIDData <- as.character(profIDData)
 
+    ### set up objects to be returned with results for all given profiles (even if all na)
+    profIDDataH_FULL <- unique(profIDData)
+    nProfs_FULL <- length(profIDDataH_FULL)
+    hrmnzdData_FULL <- matrix(NA , nProfs_FULL , nrow(dIStd))
+    hrmnzdDataEAS_FULL <- matrix(NA , nProfs_FULL , nrow(dIStd))
+    
 ### only include where we have some data...
     iok <- which(!is.na(zData))
     if(length(iok) > 0){
       profIDData <- profIDData[iok]
       dIData <- dIData[iok,,drop=FALSE]
       zData <- zData[iok]
+      if(!is.null(dfSpatialData4Copy)){
+        dfSpatialData4Copy <- dfSpatialData4Copy[iok,,drop=FALSE]
+      }else{}
     }else{
       stop('No data given to harmonizeMPS!')
     }
-  
-    profEAS <- data.frame('ID' = profIDData , 'dU' = 100 * dIData[,1] , 'dL' = 100 * dIData[,2] , 'z' = zData) 
 
+    profEAS <- data.frame('ID' = profIDData , 'dU' = 100 * dIData[,1] , 'dL' = 100 * dIData[,2] , 'z' = zData) 
     profEAS <- averageOverlapAll(profEAS , idVar = "ID")
-    
-    
+
     if(singlesByRegression){
       IDMT1 <- unique(profEAS$ID[which(duplicated(profEAS$ID))])
       iEAS <- which(is.element(profEAS$ID , IDMT1))
@@ -276,11 +293,16 @@ harmonizeMPS <- function(profIDData , dIData , zData , dIStd , vlow = -1000 , vh
     }
 
     maxdcm <- round(max(max(round(100*dIStd[,2])) , max(profEAS$dL)))
+    var.1cm_FULL <- matrix(NA , maxdcm , nProfs_FULL)
     
     z.sEAS <- mpspline.source(dfHzns = profEAS[iEAS,,drop=FALSE] , lam = 0 , vlow = vlow , vhigh = vhigh , d = t(c(0,maxdcm)))
 
     profIDDataH <- unique(profEAS$ID)
     nProfs <- length(profIDDataH)
+    iProfOK <- NA * integer(nProfs)
+    for(i in 1:nProfs){
+      iProfOK[i] <- which(profIDDataH_FULL == profIDDataH[i])
+    }
 
     ### re order var.1cm according to profIDDataH...    
     var.1cm <- matrix(NA , maxdcm , nProfs)
@@ -358,7 +380,159 @@ harmonizeMPS <- function(profIDData , dIData , zData , dIStd , vlow = -1000 , vh
     hrmnzdData[hrmnzdData < vlow] <- vlow
     hrmnzdData[hrmnzdData > vhigh] <- vhigh
     
-    return(list('profIDDataH' = profIDDataH , 'hrmnzdData' = hrmnzdData , 'hrmnzdDataEAS' = hrmnzdDataEAS , 'var.1cm' = var.1cm))    
+    if(!identical(profIDDataH_FULL[iProfOK] , profIDDataH)){ stop('Error - something has gone wrong with the ordering in harmonizeMPS!') }else{}
+    hrmnzdData_FULL[iProfOK,] <- hrmnzdData
+    hrmnzdDataEAS_FULL[iProfOK,] <- hrmnzdDataEAS
+    var.1cm_FULL[,iProfOK] <- var.1cm
+    
+    ### put into df for another way of returning...
+    dfHrmnzdData_FULL <- data.frame('profID' = rep(profIDDataH_FULL , each = nrow(dIStd)) , stringsAsFactors = FALSE)
+    # if(!is.null(dfENData)){
+    #   dfHrmnzdData_FULL[[names(dfENData)[1]]] <- NA
+    #   dfHrmnzdData_FULL[[names(dfENData)[2]]] <- NA
+    # 
+    #   for(i in 1:length(profIDDataH_FULL)){
+    #     iThis <- which(profIDData == profIDDataH_FULL[i])
+    #     if(length(iThis) == 0){ stop(paste0('Error - could not find data for profID = ' , profIDDataH_FULL[i] , '!')) }else{}
+    #     dfHrmnzdData_FULL[[names(dfENData)[1]]][(i - 1) * nrow(dIStd) + seq(nrow(dIStd))] <- dfENData[iThis[1],1]
+    #     dfHrmnzdData_FULL[[names(dfENData)[2]]][(i - 1) * nrow(dIStd) + seq(nrow(dIStd))] <- dfENData[iThis[1],2]
+    #   }
+    # }else{}
+    if(!is.null(dfSpatialData4Copy)){
+      dfHrmnzdData_FULL[,names(dfSpatialData4Copy)] <- NA
+      for(i in 1:length(profIDDataH_FULL)){
+        iThis <- which(profIDData == profIDDataH_FULL[i])
+        if(length(iThis) == 0){ stop(paste0('Error - could not find data for profID = ' , profIDDataH_FULL[i] , '!')) }else{}
+        dfHrmnzdData_FULL[(i - 1) * nrow(dIStd) + seq(nrow(dIStd)),names(dfSpatialData4Copy)] <- dfSpatialData4Copy[rep(iThis[1] , nrow(dIStd)),,drop=FALSE]
+      }
+    }else{}
+    
+    dfHrmnzdData_FULL$dU <- rep(dIStd[,1] , length(profIDDataH_FULL))
+    dfHrmnzdData_FULL$dL <- rep(dIStd[,2] , length(profIDDataH_FULL)) 
+    dfHrmnzdData_FULL[[nmSoilProp]] <- as.numeric(t(hrmnzdData_FULL))
+    
+    if(!is.null(namePlot)){
+      maxdPlot <- nrow(var.1cm_FULL)
+      plotProfilesIAK3D(namePlot = namePlot , 
+                        xData = as.character(profIDData) , dIData = dIData , zData = zData , xlim = 'flex' , 
+                        xPred = as.character(profIDDataH_FULL) , dIPred = cbind(seq(0,maxdPlot-1) , seq(1,maxdPlot)) / 100 , zPred = var.1cm_FULL[1:maxdPlot,,drop=FALSE] , 
+                        dIStd = dIStd , zStd = hrmnzdData_FULL , profNames = as.character(profIDDataH_FULL))
+    }else{}
+    
+    # return(list('profIDDataH' = profIDDataH , 'hrmnzdData' = hrmnzdData , 'hrmnzdDataEAS' = hrmnzdDataEAS , 'var.1cm' = var.1cm))    
+    return(list('profIDDataH' = profIDDataH_FULL , 'hrmnzdData' = hrmnzdData_FULL , 'hrmnzdDataEAS' = hrmnzdDataEAS_FULL , 'var.1cm' = var.1cm_FULL , 'dfHrmnzdData' = dfHrmnzdData_FULL))    
+}
+
+
+### version before edit to deal with NAs better.
+harmonizeMPS_02062021 <- function(profIDData , dIData , zData , dIStd , vlow = -1000 , vhigh = 1000 , singlesByRegression = TRUE){
+  
+  profIDData <- as.character(profIDData)
+
+  ### only include where we have some data...
+  iok <- which(!is.na(zData))
+  if(length(iok) > 0){
+    profIDData <- profIDData[iok]
+    dIData <- dIData[iok,,drop=FALSE]
+    zData <- zData[iok]
+  }else{
+    stop('No data given to harmonizeMPS!')
+  }
+  
+  profEAS <- data.frame('ID' = profIDData , 'dU' = 100 * dIData[,1] , 'dL' = 100 * dIData[,2] , 'z' = zData) 
+  profEAS <- averageOverlapAll(profEAS , idVar = "ID")
+
+  if(singlesByRegression){
+    IDMT1 <- unique(profEAS$ID[which(duplicated(profEAS$ID))])
+    iEAS <- which(is.element(profEAS$ID , IDMT1))
+  }else{
+    iEAS <- seq(nrow(profEAS))
+  }
+  
+  maxdcm <- round(max(max(round(100*dIStd[,2])) , max(profEAS$dL)))
+  
+  z.sEAS <- mpspline.source(dfHzns = profEAS[iEAS,,drop=FALSE] , lam = 0 , vlow = vlow , vhigh = vhigh , d = t(c(0,maxdcm)))
+  
+  profIDDataH <- unique(profEAS$ID)
+  nProfs <- length(profIDDataH)
+  
+  ### re order var.1cm according to profIDDataH...    
+  var.1cm <- matrix(NA , maxdcm , nProfs)
+  for(i in 1:length(z.sEAS$idcol)){
+    var.1cm[,which(profIDDataH == z.sEAS$idcol[i])] <- z.sEAS$var.1cm[,i]
+  }
+  remove(z.sEAS)
+  
+  ### all profiles that had spline fitted used more than 1 depth interval; 
+  ### for harmonizing, we will extend the prediction at deepest dL to cover the target depths
+  ### in future, could be worth looking at doind these by regression, using the splined average 
+  ### over the covered depths as single predictor.
+  
+  hrmnzdData <- matrix(NA , nProfs , nrow(dIStd))
+  for (i in 1:nrow(dIStd)){
+    ncmThis <- round((dIStd[i,2]-dIStd[i,1])*100)
+    zTmp <- var.1cm[seq(round(dIStd[i,1]*100) + 1 , round(dIStd[i,2]*100)),,drop=FALSE]
+    ### fill zTmp down if at least some values in a col of zTmp      
+    getLastElement <- function(xVec){ if(all(is.na(xVec))){ return(NA) }else{ xVec <- xVec[!is.na(xVec)] ; return(xVec[length(xVec)]) } }
+    zTmpFillVals = apply(zTmp , 2 , getLastElement)
+    
+    fillNAs <- function(xVec , fillVal){ iTmp <- which(is.na(xVec)) ; if(length(iTmp) == 0){ return(xVec) }else{ xVec[iTmp] <- fillVal ; return(xVec) }  }
+    zTmp <- mapply(fillNAs , xVec = lapply(seq_len(ncol(zTmp)), function(i) zTmp[,i]) , fillVal = zTmpFillVals , SIMPLIFY = FALSE)
+    zTmp <- matrix(unlist(zTmp) , ncmThis , nProfs)
+    
+    hrmnzdData[,i] <- colSums(zTmp) / ncmThis
+  }
+  hrmnzdDataEAS <- !is.na(hrmnzdData) # TRUE where EAS fitted, FALSE will be a regression or missing
+  
+  if(singlesByRegression){
+    for(i in 1:nrow(hrmnzdData)){
+      iThis <- which(profEAS$ID == profIDDataH[i])
+      for(j in 1:ncol(hrmnzdData)){
+        if(is.na(hrmnzdData[i,j])){
+          ### what is missing?
+          dITarget <- dIStd[j,,drop=FALSE] * 100 # this is now in cm
+          ### what data do we have in this profile? 
+          dIDataThis <- as.matrix(profEAS[iThis,c('dU','dL'),drop=FALSE]) # this is already in cm
+          ### use fitted splines where the target and data depths are fully covered to fit regression...
+          XDataThis <- matrix(1 , nProfs , length(iThis) + 1)
+          XPredThis <- matrix(c(1 , profEAS$z[iThis]) , 1 , length(iThis) + 1)
+          for(k in 1:length(iThis)){
+            XDataThis[,k+1] <- colSums(var.1cm[seq(round(dIDataThis[k,1]) + 1 , round(dIDataThis[k,2])),,drop=FALSE]) / (dIDataThis[k,2]-dIDataThis[k,1])
+          }
+          zDataThis <- colSums(var.1cm[seq(round(dITarget[1,1]) + 1 , round(dITarget[1,2])),,drop=FALSE]) / (dITarget[1,2]-dITarget[1,1])
+          
+          ### look for best regression here (fewer predictors could be more available data)
+          nVec <- vPredVec <- zPredVec <- NA * numeric(length(iThis))
+          for(k in 1:length(iThis)){
+            iOK <- which((!is.na(rowSums(XDataThis[,1:(k+1)]))) & !is.na(zDataThis))
+            if(length(iOK) >= (k+1)){
+              tmp <- nllLm(zData = zDataThis[iOK] , XData = XDataThis[iOK,1:(k+1),drop=FALSE] , REML = TRUE)
+              nll <- tmp$nll 
+              betahat <- tmp$betahat 
+              vbetahat <- tmp$vbetahat
+              sigma2hat <- tmp$sigma2hat
+              
+              nVec[k] <- length(iOK)
+              zPredVec[k] <- XPredThis[,1:(k+1),drop=FALSE] %*% betahat
+              vPredVec[k] <- sigma2hat + XPredThis[,1:(k+1),drop=FALSE] %*% vbetahat %*% t(XPredThis[,1:(k+1),drop=FALSE])
+            }else{}
+          }
+          if(all(is.na(zPredVec))){
+            hrmnzdData[i,j] <- NA
+          }else{
+            iBest <- which.min(vPredVec)
+            hrmnzdData[i,j] <- zPredVec[iBest]
+          }
+          
+        }else{}
+      }
+    }
+  }else{}
+  
+  hrmnzdData[hrmnzdData < vlow] <- vlow
+  hrmnzdData[hrmnzdData > vhigh] <- vhigh
+  
+  return(list('profIDDataH' = profIDDataH , 'hrmnzdData' = hrmnzdData , 'hrmnzdDataEAS' = hrmnzdDataEAS , 'var.1cm' = var.1cm))    
 }
 
 isOverlap <- function(profIn){

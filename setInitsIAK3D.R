@@ -1,4 +1,4 @@
-setParBndsIAK3D <- function(xData , dIData , setupMats , compLikMats = list('compLikOptn' = 0)){
+setParBndsIAK3D <- function(xData , dIData , setupMats , compLikMats = list('compLikOptn' = 0) , modelx = 'matern' , minRange = NA , maxRange = NA){
   
   if (compLikMats$compLikOptn == 0){
     DxTmp <- setupMats$Dx[lower.tri(setupMats$Dx)]
@@ -30,8 +30,41 @@ setParBndsIAK3D <- function(xData , dIData , setupMats , compLikMats = list('com
   #################################################
   ### make range between 1.5 * minD and 0.5 * maxD
   parBnds <- list()
-  parBnds$axBnds <- c(1.5 * minDx / 3 , 0.5 * maxDx / 3)
-  parBnds$nuxBnds <- c(0.05 , 20)
+  if(is.na(minRange)){
+    if(modelx == 'wendland' | modelx == 'spherical'){
+      parBnds$axBnds <- c(1.5 * minDx , NA)
+    }else{
+      parBnds$axBnds <- c(1.5 * minDx / 3 , NA)
+    }
+  }else{
+    if(modelx == 'wendland' | modelx == 'spherical'){
+      parBnds$axBnds <- c(minRange , NA)
+    }else{
+      parBnds$axBnds <- c(minRange / 3 , NA)
+    }
+  }
+
+  if(is.na(maxRange)){
+    if(modelx == 'wendland' | modelx == 'spherical'){
+      parBnds$axBnds[2] <- 0.5 * maxDx
+    }else{
+      parBnds$axBnds[2] <- 0.5 * maxDx / 3
+    }
+  }else{
+    if(modelx == 'wendland' | modelx == 'spherical'){
+      parBnds$axBnds[2] <- maxRange
+    }else{
+      parBnds$axBnds[2] <- maxRange / 3
+    }
+  }
+
+  if(modelx == 'wendland'){
+    parBnds$nuxBnds <- c(1 , 20)
+  }else if(modelx == 'spherical'){
+    parBnds$nuxBnds <- c(NA , NA)
+  }else{
+    parBnds$nuxBnds <- c(0.05 , 20)
+  }
   
   #    parBnds$adBnds <- c(0.05 , 1) # so that range is between 15 cm and 3 m
   parBnds$adBnds <- c(max(0.05 , min(allDdIU)/3) , 0.5 * max(allDdIU) / 3) # so that range is between at least 15 cm and 1/2 max depth diff m
@@ -185,8 +218,20 @@ setInitsIAK3D <- function(xData , dIData , zData , XData , vXU , iU , modelx , n
                    covModel = 'matern0.5' , nSpatStructs = 1 , returnAll = T , optionML = F , verbose = F , forCompLik = FALSE , mina = minaTmp , maxa = maxaTmp)
       covInitxdA <- list('c0' = tmp$sigma2hat * (1 - tmp$pars[1]) , 'c1' = tmp$sigma2hat * tmp$pars[1] , 'a' = tmp$pars[2] , 'nu' = 0.5)
       
-      ax <- covInitxdA$a
-      nux <- covInitxdA$nu
+      if(modelx == 'matern'){
+        ax <- covInitxdA$a
+        nux <- covInitxdA$nu
+      }else if(modelx == 'spherical'){
+        ### this isn't good for setting inits - need to sort out for spherical, but hopefully at least will work
+        ax <- 0.5 * (parBnds$ax[1] + parBnds$ax[2])
+        nux <- NA
+      }else if(modelx == 'wendland'){
+### this isn't good for setting inits - need to sort out for wendland, but hopefully at least will work
+        ax <- 0.5 * (parBnds$ax[1] + parBnds$ax[2])
+        nux <- 2.5
+      }else{
+        stop('Error - unrecognised cov model in setInitsIAK3D!')
+      }
       vTmp <- (covInitxdA$c0 + covInitxdA$c1)
       if((covInitxdA$c1 / vTmp) < 0.05){ covInitxdA$c1 <- 0.05 * vTmp ; covInitxdA$c0 <- 0.95 * vTmp }else{}
       if((covInitxdA$c0 / vTmp) < 0.05){ covInitxdA$c0 <- 0.05 * vTmp ; covInitxdA$c1 <- 0.95 * vTmp }else{}
@@ -230,6 +275,10 @@ setInitsIAK3D <- function(xData , dIData , zData , XData , vXU , iU , modelx , n
                               prodSum = prodSum , cmeOpt = cmeOpt , lnTfmdData = lnTfmdData)
       if(modelx == 'nugget'){
         return(list('pars' = c(logitab(ad , parBnds$adBnds[1] , parBnds$adBnds[2]) , rep(0.2 , nPars0 - 1))))
+      }else if(modelx == 'spherical'){
+        return(list('pars' = c(logitab(ax , parBnds$axBnds[1] , parBnds$axBnds[2]) , 
+                               logitab(ad , parBnds$adBnds[1] , parBnds$adBnds[2]) , 
+                               rep(0.2 , nPars0 - 2))))
       }else{
         return(list('pars' = c(logitab(ax , parBnds$axBnds[1] , parBnds$axBnds[2]) , 
                                logitab(nux , parBnds$nuxBnds[1] , parBnds$nuxBnds[2]) , 
@@ -439,9 +488,15 @@ setInitsIAK3D <- function(xData , dIData , zData , XData , vXU , iU , modelx , n
         lncd1ParTmp <- log(cd1/(cxd0+cxd1))
       }
       
-      if(modelx == 'matern'){
+      if(modelx == 'matern' | modelx == 'wendland'){
         ### beta,cxd[d=0] auto    
         parsTmp <- c(logitab(ax , parBnds$axBnds[1] , parBnds$axBnds[2]) , logitab(nux , parBnds$nuxBnds[1] , parBnds$nuxBnds[2]) , 
+                     logitab(ad , parBnds$adBnds[1] , parBnds$adBnds[2]) , 
+                     log(cx0/(cxd0+cxd1)) , log(cx1/(cxd0+cxd1)) , lncd1ParTmp , logitab(cxd1/(cxd0+cxd1)) ,
+                     sdfdPars_cd1 , sdfdPars_cxd0 , sdfdPars_cxd1 , lncme - log(cxd0+cxd1))
+      }else if(modelx == 'spherical'){
+        ### beta,cxd[d=0] auto    
+        parsTmp <- c(logitab(ax , parBnds$axBnds[1] , parBnds$axBnds[2]) , 
                      logitab(ad , parBnds$adBnds[1] , parBnds$adBnds[2]) , 
                      log(cx0/(cxd0+cxd1)) , log(cx1/(cxd0+cxd1)) , lncd1ParTmp , logitab(cxd1/(cxd0+cxd1)) ,
                      sdfdPars_cd1 , sdfdPars_cxd0 , sdfdPars_cxd1 , lncme - log(cxd0+cxd1))
@@ -523,15 +578,22 @@ setInitsIAK3D <- function(xData , dIData , zData , XData , vXU , iU , modelx , n
     }
   }
   
-  if(modelx == 'matern'){
+  if(modelx == 'matern' | modelx == 'wendland' | modelx == 'spherical'){
     if(!lnTfmdData){
-      ### beta,cxd[d=0] auto    
-      parsStat1 <- c(logitab(ax , parBnds$axBnds[1] , parBnds$axBnds[2]) , logitab(nux , parBnds$nuxBnds[1] , parBnds$nuxBnds[2]) , 
-                     logitab(ad , parBnds$adBnds[1] , parBnds$adBnds[2]) , 
-                     lncx0ParTmp , lncx1ParTmp , lncd1ParTmp , logitab(cxd1/(cxd0+cxd1)))
+      ### beta,cxd[d=0] auto  
+      if(modelx == 'spherical'){
+        parsStat1 <- c(logitab(ax , parBnds$axBnds[1] , parBnds$axBnds[2]) , 
+                       logitab(ad , parBnds$adBnds[1] , parBnds$adBnds[2]) , 
+                       lncx0ParTmp , lncx1ParTmp , lncd1ParTmp , logitab(cxd1/(cxd0+cxd1)))
+        parNames <- c('ax.lt' , 'ad.lt')
+      }else{
+        parsStat1 <- c(logitab(ax , parBnds$axBnds[1] , parBnds$axBnds[2]) , logitab(nux , parBnds$nuxBnds[1] , parBnds$nuxBnds[2]) , 
+                       logitab(ad , parBnds$adBnds[1] , parBnds$adBnds[2]) , 
+                       lncx0ParTmp , lncx1ParTmp , lncd1ParTmp , logitab(cxd1/(cxd0+cxd1)))
+        parNames <- c('ax.lt' , 'nux.lt' , 'ad.lt')
+      }
       parsNonStat <- c(sdfdPars_cd1 , sdfdPars_cxd0 , sdfdPars_cxd1)
       parsStat2 <- c(lncme - log(cxd0+cxd1))
-      parNames <- c('ax.lt' , 'nux.lt' , 'ad.lt')
       if(length(lncx0ParTmp) > 0){ parNames <- c(parNames , 'cx0OVERcxd.l') }else{}
       if(length(lncx1ParTmp) > 0){ parNames <- c(parNames , 'cx1OVERcxd.l') }else{}
       if(length(lncd1ParTmp) > 0){ parNames <- c(parNames , 'cd1OVERcxd.l') }else{}
@@ -542,12 +604,19 @@ setInitsIAK3D <- function(xData , dIData , zData , XData , vXU , iU , modelx , n
       if(length(lncme) > 0){ parNames <- c(parNames , 'cmeOVERcxd.l') }else{}
     }else{
       ### beta by nr
-      parsStat1 <- c(logitab(ax , parBnds$axBnds[1] , parBnds$axBnds[2]) , logitab(nux , parBnds$nuxBnds[1] , parBnds$nuxBnds[2]) , 
-                     logitab(ad , parBnds$adBnds[1] , parBnds$adBnds[2]) , 
-                     lncx0ParTmp , lncx1ParTmp , lncd1ParTmp , log(cxd0) , log(cxd1))
+      if(modelx == 'spherical'){
+        parsStat1 <- c(logitab(ax , parBnds$axBnds[1] , parBnds$axBnds[2]) , 
+                       logitab(ad , parBnds$adBnds[1] , parBnds$adBnds[2]) , 
+                       lncx0ParTmp , lncx1ParTmp , lncd1ParTmp , log(cxd0) , log(cxd1))
+        parNames <- c('ax.lt' , 'ad.lt')
+      }else{
+        parsStat1 <- c(logitab(ax , parBnds$axBnds[1] , parBnds$axBnds[2]) , logitab(nux , parBnds$nuxBnds[1] , parBnds$nuxBnds[2]) , 
+                       logitab(ad , parBnds$adBnds[1] , parBnds$adBnds[2]) , 
+                       lncx0ParTmp , lncx1ParTmp , lncd1ParTmp , log(cxd0) , log(cxd1))
+        parNames <- c('ax.lt' , 'nux.lt' , 'ad.lt')
+      }
       parsNonStat <- c(sdfdPars_cd1 , sdfdPars_cxd0 , sdfdPars_cxd1)
       parsStat2 <- lncme
-      parNames <- c('ax.lt' , 'nux.lt' , 'ad.lt')
       if(length(lncx0ParTmp) > 0){ parNames <- c(parNames , 'cx0.l') }else{}
       if(length(lncx1ParTmp) > 0){ parNames <- c(parNames , 'cx1.l') }else{}
       if(length(lncd1ParTmp) > 0){ parNames <- c(parNames , 'cd1.l') }else{}
@@ -612,10 +681,14 @@ getParNamesIAK3D <- function(modelx , sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cx
   
 #  if(max(c(sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1)) > 0){ stop('Update getParNamesIAK3D function for sdfdType > 0!') }else{}
   
-  if(modelx == 'matern'){
+  if(modelx == 'matern' | modelx == 'wendland' | modelx == 'spherical'){
     if(!lnTfmdData){
       ### beta,cxd[d=0] auto    
-      parNames <- c('ax.lt' , 'nux.lt' , 'ad.lt')
+      if(modelx == 'spherical'){
+        parNames <- c('ax.lt' , 'ad.lt')
+      }else{
+        parNames <- c('ax.lt' , 'nux.lt' , 'ad.lt')
+      }
       if(prodSum){ parNames <- c(parNames , 'cx0OVERcxd.l') }else{}
       if(prodSum){ parNames <- c(parNames , 'cx1OVERcxd.l') }else{}
       if(prodSum & (sdfdType_cd1 != -9)){ parNames <- c(parNames , 'cd1OVERcxd.l') }else{}
@@ -629,7 +702,11 @@ getParNamesIAK3D <- function(modelx , sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cx
       if(cmeOpt == 1){ parNames <- c(parNames , 'cmeOVERcxd.l') }else{}
     }else{
       ### beta by nr
-      parNames <- c('ax.lt' , 'nux.lt' , 'ad.lt')
+      if(modelx == 'spherical'){
+        parNames <- c('ax.lt' , 'ad.lt')
+      }else{
+        parNames <- c('ax.lt' , 'nux.lt' , 'ad.lt')
+      }
       if(prodSum){ parNames <- c(parNames , 'cx0.l') }else{}
       if(prodSum){ parNames <- c(parNames , 'cx1.l') }else{}
       if(prodSum & (sdfdType_cd1 != -9)){ parNames <- c(parNames , 'cd1.l') }else{}
@@ -678,7 +755,7 @@ setFitRangeIAK3D <- function(pars , modelx , sdfdType_cd1 , sdfdType_cxd0 , sdfd
   ### logitab tfms are given the range -20 , 20
   ### log tfms are given the range -20 , Inf
   
-  if(modelx == 'matern'){
+  if(modelx == 'matern' | modelx == 'wendland' | modelx == 'spherical'){
     if(!lnTfmdData){
       
       ### beta,cxd[d=0] auto    
@@ -689,7 +766,7 @@ setFitRangeIAK3D <- function(pars , modelx , sdfdType_cd1 , sdfdType_cxd0 , sdfd
       fitRange <- matrix(NA , length(pars) , 2) ; fitRange[,1] <- -Inf ; fitRange[,2] <- Inf ; 
       inext <- 1
       fitRange[inext,] <- c(-20 , 20) ; inext <- inext + 1
-      fitRange[inext,] <- c(-20 , 20) ; inext <- inext + 1
+      if(modelx != 'spherical'){ fitRange[inext,] <- c(-20 , 20) ; inext <- inext + 1 }else{}
       fitRange[inext,] <- c(-20 , 20) ; inext <- inext + 1
       
       if(prodSum){
@@ -739,7 +816,7 @@ setFitRangeIAK3D <- function(pars , modelx , sdfdType_cd1 , sdfdType_cxd0 , sdfd
       fitRange <- matrix(NA , length(pars) , 2) ; fitRange[,1] <- -Inf ; fitRange[,2] <- Inf ; 
       inext <- 1
       fitRange[inext,] <- c(-20 , 20) ; inext <- inext + 1
-      fitRange[inext,] <- c(-20 , 20) ; inext <- inext + 1
+      if(modelx != 'spherical'){ fitRange[inext,] <- c(-20 , 20) ; inext <- inext + 1 }else{}
       fitRange[inext,] <- c(-20 , 20) ; inext <- inext + 1
       if(prodSum){
         fitRange[inext:(inext+1),1] <- -20 ; inext <- inext + 2 # for cx0 and cx1 variances.
@@ -868,7 +945,7 @@ setFitRangeIAK3D <- function(pars , modelx , sdfdType_cd1 , sdfdType_cxd0 , sdfd
 getnParsIAK3D <- function(modelx , sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1 , 
                           prodSum , cmeOpt , lnTfmdData){
   
-  # ax,nux,ad,
+  # ax,nux,ad, [maybe not nux for spherical]
   # cx0.,cx1.,cd1.,[cxd0.,]sxd1.,
   # taud.1,taud.2,
   # tauxd0.1,tauxd0.2,
