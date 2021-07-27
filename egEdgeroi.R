@@ -77,10 +77,10 @@ crsLongLat <- CRS('+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
 ##########################################################
 ### set some options for iak...
 ##########################################################
-modelX <- 'gam2' # 'gam2' or 'cubist'. For linear model and how to code, see top of makeXvX.R - e.g. 1 for a model with first order d/spat cov interactions
+modelX <- 'cubist' # 'gam2' or 'cubist'. For linear model and how to code, see top of makeXvX.R - e.g. 1 for a model with first order d/spat cov interactions
 constrainX4Pred <- FALSE # use the limits of each column of X (non-zeros only) from the fitting data to constrain the columns of X for prediction?
 prodSum <- TRUE # product sum model? If FALSE, product model is used.  
-modelx <- 'wendland' # matern (range = a / 3) or wendland or spherical or nugget. wendland or spherical (range = a) have C = 0 beyond range so can be computable with bigger datasets. 
+modelx <- 'matern' # matern (range = a / 3) or wendland or spherical or nugget. wendland or spherical (range = a) have C = 0 beyond range so can be computable with bigger datasets. 
 minRange <- NA # NA will give default minRange (1.5 * min sep dist)
 maxRange <- NA # NA will give default maxRange (0.5 * max sep dist)
 
