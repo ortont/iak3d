@@ -1,4 +1,4 @@
-makeXvX <- function(covData = NA , dIData , modelX , allKnotsd = c() , iU = NA , nDiscPts = 100 , lnTfmdData = FALSE , XLims = NULL){
+makeXvX <- function(covData = NA , dIData , modelX , allKnotsd = c() , opt_dSpline = 0 , iU = NA , nDiscPts = 100 , lnTfmdData = FALSE , XLims = NULL){
 ###########################################################################
 ### name convention...
 ###########################################################################
@@ -18,6 +18,10 @@ makeXvX <- function(covData = NA , dIData , modelX , allKnotsd = c() , iU = NA ,
 ### if modelX is a cubist model...
 ### 	then use the cubist splits and rules to set design matrices
 ###########################################################################
+
+  if(is.null(opt_dSpline)){ opt_dSpline <- 0 }else{}
+  if(!is.element(opt_dSpline , c(0,1))){ stop('Error - if entering knots, then enter at least 2 knots (2 boundary knots plus any internal knots)') }else{}
+  
     n <- dim(dIData)[[1]]
     if((length(covData) == 1) && is.na(covData)){
         nCovs <- 0
@@ -352,7 +356,7 @@ makeXvX <- function(covData = NA , dIData , modelX , allKnotsd = c() , iU = NA ,
 
         # for each row of des mtx, make mVec, vVec and wVec with mean var and weight for each piecewise linear bit of the depth interval...
         covData$dIMidPts <- dIData[,1]
-        XTmp <- cubist2X(cubistModel = modelX , dataFit = covData , allKnotsd = allKnotsd)$X
+        XTmp <- cubist2X(cubistModel = modelX , dataFit = covData , allKnotsd = allKnotsd , opt_dSpline = opt_dSpline)$X
         mwSum <- matrix(0 , nrow(XTmp) , ncol(XTmp)) # vwSqdSum <- not working - prob something along these lines though. 
         lbCurrent <- dIData[,1]
         if(length(alldBreaks) > 0){
@@ -363,7 +367,7 @@ makeXvX <- function(covData = NA , dIData , modelX , allKnotsd = c() , iU = NA ,
               ### just to the left of breaks...
               covDataThis <- covData[iThis,,drop=FALSE]
               covDataThis$dIMidPts <- alldBreaks[jb] - 0.0001
-              XTmpB <- cubist2X(cubistModel = modelX , dataFit = covDataThis , allKnotsd = allKnotsd)$X
+              XTmpB <- cubist2X(cubistModel = modelX , dataFit = covDataThis , allKnotsd = allKnotsd , opt_dSpline = opt_dSpline)$X
               mwSum[iThis,] <- mwSum[iThis,,drop=FALSE] + 0.5 * (XTmpB + XTmp[iThis,,drop=FALSE]) * wThis
               # vwSqdSum[iThis,] <- vwSqdSum[iThis,,drop=FALSE] + (((XTmpB - XTmp[iThis,,drop=FALSE]) ^ 2) / 12) * (wThis ^ 2)
               lbCurrent[iThis] <- alldBreaks[jb]
@@ -371,7 +375,7 @@ makeXvX <- function(covData = NA , dIData , modelX , allKnotsd = c() , iU = NA ,
               ### just to the right of breaks...
               covDataThis <- covData[iThis,,drop=FALSE]
               covDataThis$dIMidPts <- alldBreaks[jb] + 0.0001
-              XTmp[iThis,] <- cubist2X(cubistModel = modelX , dataFit = covDataThis , allKnotsd = allKnotsd)$X
+              XTmp[iThis,] <- cubist2X(cubistModel = modelX , dataFit = covDataThis , allKnotsd = allKnotsd , opt_dSpline = opt_dSpline)$X
             }else{}
           }
         }
@@ -379,7 +383,7 @@ makeXvX <- function(covData = NA , dIData , modelX , allKnotsd = c() , iU = NA ,
         wThis <- (dIData[,2] - lbCurrent) / (dIData[,2] - dIData[,1])
         
         covData$dIMidPts <- dIData[,2]
-        XTmpB <- cubist2X(cubistModel = modelX , dataFit = covData , allKnotsd = allKnotsd)$X
+        XTmpB <- cubist2X(cubistModel = modelX , dataFit = covData , allKnotsd = allKnotsd , opt_dSpline = opt_dSpline)$X
         
         mwSum <- mwSum + 0.5 * (XTmpB + XTmp) * wThis
         # vwSqdSum <- vwSqdSum + (((XTmpB - XTmp) ^ 2) / 12) * (wThis ^ 2)
@@ -406,7 +410,7 @@ makeXvX <- function(covData = NA , dIData , modelX , allKnotsd = c() , iU = NA ,
           colsSpline <- which(substr(colnames(X) , 1 , 8) == 'dSpline.')
           XTmp <- matrix(0 , n , length(colsSpline))
           for(idisc in 1:nDiscPts){
-            XTmp <- XTmp + allKnotsd2X(dIMidPts = dIData[,1] + ((idisc-1) / (nDiscPts - 1)) * (dIData[,2] - dIData[,1]) , allKnotsd = allKnotsd)
+            XTmp <- XTmp + allKnotsd2X(dIMidPts = dIData[,1] + ((idisc-1) / (nDiscPts - 1)) * (dIData[,2] - dIData[,1]) , allKnotsd = allKnotsd , opt_dSpline = opt_dSpline)
           }
           XTmp <- XTmp / nDiscPts
           X[,colsSpline] <- XTmp
@@ -482,7 +486,7 @@ makeXvX <- function(covData = NA , dIData , modelX , allKnotsd = c() , iU = NA ,
             covDataThis$dIMidPts <- dDiscPts
           
             if(modelType == 'cubist'){
-              XTmp <- cubist2X(cubistModel = modelX , dataFit = covDataThis , allKnotsd = allKnotsd)
+              XTmp <- cubist2X(cubistModel = modelX , dataFit = covDataThis , allKnotsd = allKnotsd , opt_dSpline = opt_dSpline)
             }else if(modelType == 'gam'){
 ### allKnotsd should be attached to gam model already.              
               XTmp <- gam2X(gamModel = modelX , dataFit = covDataThis)
@@ -508,7 +512,7 @@ makeXvX <- function(covData = NA , dIData , modelX , allKnotsd = c() , iU = NA ,
             covDataThis <- covData[i,,drop=FALSE]
             covDataThis$dIMidPts <- rowMeans(dIData[i,,drop=FALSE]) # because gam doesn't like NA
             if(modelType == 'cubist'){
-              XTmp <- cubist2X(cubistModel = modelX , dataFit = covDataThis , allKnotsd = allKnotsd)
+              XTmp <- cubist2X(cubistModel = modelX , dataFit = covDataThis , allKnotsd = allKnotsd , opt_dSpline = opt_dSpline)
             }else if(modelType == 'gam'){
 ### allKnotsd should be attached to gam model already.              
               XTmp <- gam2X(gamModel = modelX , dataFit = covDataThis)
