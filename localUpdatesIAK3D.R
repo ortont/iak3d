@@ -82,7 +82,7 @@ lmmUpdateLocal <- function(lmmFit , xLocal = NULL , dILocal = NULL , zLocal = NU
     XLims[1,] <- Inf
     XLims[2,] <- -Inf
 
-    # tmp <- makeXvX(covData = covsLocal , dIData = dILocal , modelX = lmmFit$modelX , allKnotsd = lmmFit$allKnotsd , iU = lmmFit$iU , nDiscPts = 1000 , lnTfmdData = lmmFit$lnTfmdData , XLims = XLims)
+    # tmp <- makeXvX(covData = covsLocal , dIData = dILocal , modelX = lmmFit$modelX , allKnotsd = lmmFit$optionsModelX$allKnotsd , iU = lmmFit$iU , nDiscPts = 1000 , lnTfmdData = lmmFit$lnTfmdData , XLims = XLims)
     # lmmFit$XData <- rbind(lmmFit$XData , tmp$X)
     # if (is.element('vXU' , names(lmmFit))){
     #   lmmFit$vXU <- rbind(lmmFit$vXU , tmp$vXU)
@@ -96,7 +96,7 @@ lmmUpdateLocal <- function(lmmFit , xLocal = NULL , dILocal = NULL , zLocal = NU
                           incInts = lmmFit$modelX$incInts , intMthd = lmmFit$modelX$intMthd , colnamesXcns = lmmFit$modelX$colnamesX , 
                           nDiscPts = 1000 , lnTfmdData = lmmFit$lnTfmdData)
     }else{
-      tmp <- makeXvX(covData = covsLocal , dIData = dILocal , modelX = lmmFit$modelX , allKnotsd = lmmFit$allKnotsd , iU = lmmFit$iU , 
+      tmp <- makeXvX(covData = covsLocal , dIData = dILocal , modelX = lmmFit$modelX , allKnotsd = lmmFit$optionsModelX$allKnotsd , opt_dSpline = lmmFit$optionsModelX$opt_dSpline , iU = lmmFit$iU , 
                      nDiscPts = 1000 , lnTfmdData = lmmFit$lnTfmdData , XLims = XLims)
     }
     lmmFit$XData <- rbind(lmmFit$XData , tmp$X)
@@ -262,7 +262,7 @@ lmmUpdateLocal.DEFUNCT <- function(lmmFit , xLocal = NULL , dILocal = NULL , zLo
       XLims[1,] <- Inf
       XLims[2,] <- -Inf
       
-      tmp <- makeXvX(covData = covsLocal , dIData = dILocal , modelX = lmmFit$modelX , allKnotsd = lmmFit$allKnotsd , iU = iUUpdate , nDiscPts = 1000 , lnTfmdData = lmmFit$lnTfmdData , XLims = XLims)
+      tmp <- makeXvX(covData = covsLocal , dIData = dILocal , modelX = lmmFit$modelX , allKnotsd = lmmFit$optionsModelX$allKnotsd , opt_dSpline = lmmFit$optionsModelX$opt_dSpline , iU = iUUpdate , nDiscPts = 1000 , lnTfmdData = lmmFit$lnTfmdData , XLims = XLims)
       XUpdate <- rbind(lmmFit$XData , tmp$X)
       if (is.element('vXU' , names(lmmFit))){
         vXUUpdate <- rbind(lmmFit$vXU , tmp$vXU)
@@ -372,7 +372,7 @@ updateCubistModel <- function(lmmFit){
       lmmFit$modelX$namesDataFit <- names(lmmFit$covsData)
     }else{}
     
-    cmTmp <- cubist2X(cubistModel = lmmFit$modelX , dataFit = lmmFit$covsData , zFit = lmmFit$zData , allKnotsd = lmmFit$allKnotsd)
+    cmTmp <- cubist2X(cubistModel = lmmFit$modelX , dataFit = lmmFit$covsData , zFit = lmmFit$zData , allKnotsd = lmmFit$optionsModelX$allKnotsd , opt_dSpline = lmmFit$optionsModelX$opt_dSpline)
     lmmFit$modelX <- cmTmp$cubistModel
 
     if(!is.element('namesX' , names(lmmFit$modelX))){
