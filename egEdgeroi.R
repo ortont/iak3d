@@ -10,7 +10,7 @@ assign("last.warning", NULL, envir = baseenv())
 ##############################################################
 fitCubistModelNow <- TRUE
 fitModelNow <- TRUE
-plotVargiogramFit <- TRUE
+plotVargiogramFit <- FALSE
 valNow <- TRUE
 val4PlotNow <- TRUE
 mapNow <- FALSE 
@@ -56,7 +56,8 @@ source(paste0(iakDir , '/iaCovMatern.R'))
 source(paste0(iakDir , '/nrUpdatesIAK3D.R'))
 source(paste0(iakDir , '/nrUpdatesIAK3DlnN.R'))
 source(paste0(iakDir , '/makeXvX.R'))
-source(paste0(iakDir , '/optifix.R'))
+# source(paste0(iakDir , '/optifix.R'))
+source(paste0(iakDir , '/optim_functions.R'))
 source(paste0(iakDir , '/cubist2XIAK3D.R')) 
 source(paste0(iakDir , '/gam2XIAK3D.R')) 
 source(paste0(iakDir , '/predictIAK3D.R')) 
@@ -80,7 +81,7 @@ crsLongLat <- CRS('+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
 modelX <- 'cubist' # 'gam2' or 'cubist'. For linear model and how to code, see top of makeXvX.R - e.g. 1 for a model with first order d/spat cov interactions
 constrainX4Pred <- FALSE # use the limits of each column of X (non-zeros only) from the fitting data to constrain the columns of X for prediction?
 prodSum <- TRUE # product sum model? If FALSE, product model is used.  
-modelx <- 'matern' # matern (range = a / 3) or wendland or spherical or nugget. wendland or spherical (range = a) have C = 0 beyond range so can be computable with bigger datasets. 
+modelx <- 'spherical' # matern (range = a / 3) or wendland or spherical or nugget. wendland or spherical (range = a) have C = 0 beyond range so can be computable with bigger datasets. 
 minRange <- NA # NA will give default minRange (1.5 * min sep dist)
 maxRange <- NA # NA will give default maxRange (0.5 * max sep dist)
 
@@ -90,21 +91,21 @@ lnTfmdData <- FALSE
 rqrBTfmdPreds <- FALSE # only relevant if data were log-transformed - back transforms via exp(z + 0.5 * v), ie to minimize expected sqd err
 useReml <- TRUE
 
-allKnotsd <- c() # can use this to give spline of depth in combination with using cubist for trend. if gam2 for trend keep empty
-if(length(allKnotsd) > 0){ incdSpline <- TRUE }else{ incdSpline <- FALSE }
-
 # sdfdTypeANDcmeInit <- c(0 , -1 , -1 , 1) # stationary d component in prodSum model (0), non-stat cxd0 with exp fn (-1) and cxd1 with exp fn (-1), meas err included (1)
-sdfdTypeANDcmeInit <- c(0 , 2 , 2 , 1) # stationary d component in prodSum model (0), non-stat cxd0 with spline fn (2 = 2 extra pars fitted per non-stat fn of depth = same complexity as -1) and cxd1 with spline fn (2), meas err included (1)
-# sdfdTypeANDcmeInit <- c(0 , 0 , 0 , 1) # stationary d component in prodSum model (0), stat cxd0 (0) and cxd1 (0), meas err included (1)
-if((modelX == 'gam2') | (length(allKnotsd) > 0)){
-  sdfdTypeANDcmeInit[1] <- -9 # no d component in prodSum model because spline used instead (-9)
-}else{}
+# sdfdTypeANDcmeInit <- c(0 , 2 , 2 , 1) # stationary d component in prodSum model (0), non-stat cxd0 with spline fn (2 = 2 extra pars fitted per non-stat fn of depth = same complexity as -1) and cxd1 with spline fn (2), meas err included (1)
+sdfdTypeANDcmeInit <- c(0 , 0 , 0 , 1) # stationary d component in prodSum model (0), stat cxd0 (0) and cxd1 (0), meas err included (1)
+sdfdTypeANDcmeInit[1] <- -9 # no d component in prodSum model because spline used instead (-9)
 
 if(identical(modelX , 'cubist')){
   ### nRules : number of rules for Cubist model. If NA, then a x val routine to select nRules will be used. 
-  ### refineCubistModel : use a stepwise algorithm (refineXIAK3D in cubist2XIAK3D.R) to remove predictors from the fitted Cubist model? # If NA, a x val routine will be used to select T/F
-  optionsModelX <- list('refineCubistModel' = TRUE , 'nRules' = 5 , 
-                        'reduceXAfterInitFit' = FALSE)
+  ### refineCubistModel : use a stepwise algorithm (refineXIAK3D in cubist2XIAK3D.R) to remove predictors from the initial Cubist model (with profile specific random effect included)? # If NA, a x val routine will be used to select T/F
+  ### allKnotsd :  can use this to give spline of depth in combination with using cubist for trend. c(0 , 0.3 , 1.12 , 7.13) gives boundary knots at 0 and 7.13 (extremes) and internal knots at 0.3 and 1.12 (quantiles)
+  ### opt_dSpline : 0 for b spline (cubic beyond boundaries), 1 for natural spline (linear beyond boundaries), with gradient clamped to 0 at upper boundary.
+  ### reduceXAfterInitFit : : use a stepwise algorithm (refineXIAK3D in cubist2XIAK3D.R) to remove predictors from the fitted Cubist model, with full 3D correlation model?
+  ### alpha : the significance level for dropping redundant predictors in the reduceXAfterInitFit routine
+  optionsModelX <- list('refineCubistModel' = FALSE , 'nRules' = 5 , 'allKnotsd' = c(0 , 0.3 , 1 , 2 , 7.13) , 'opt_dSpline' = 1 ,
+                        'reduceXAfterInitFit' = TRUE , 'alpha' = 0.15)
+  
 }else if(identical(modelX , 'gam2')){
   optionsModelX <- list('nIntKnotsd' = 1 , 'nIntKnotss' = 2 , 'incInts' = FALSE , 'intMthd' = 0 ,
                         'reduceXAfterInitFit' = FALSE , 'optStat4Drop' = 1 , 'alpha' = NA ,
@@ -196,7 +197,9 @@ sdfdKnots <- setKnots4sdfd(dIFit , sdfdType_cd1 = sdfdTypeANDcmeInit[1] , sdfdTy
 
 
 lmmFitFile <- paste0(dataDir , '/lmm.fit.selected.RData') # for the fitted model
-nmplt <- paste0(dataDir , '/plot.selected.gam2.pdf') # for a plot with the internal 'predictions' = predictions through profiles of sampled profiles (not validation, can be a check of what's going on)
+nmplt <- paste0(dataDir , '/plot.selected.pdf') # for a plot with the internal 'predictions' = predictions through profiles of sampled profiles (not validation, can be a check of what's going on)
+
+# stop('gggggggggggggggg')
 
 if(fitModelNow){
 
@@ -224,12 +227,13 @@ if(fitModelNow){
 ### refit cubist model as lmm...if selectCovIAK3D was run don't need to do this bit
   start_time <- Sys.time()
   
-  tmp <- fitIAK3D(xData = cFit , dIData = dIFit , zData = zFit , covsData = covsFit , modelX = modelX , modelx = modelx , nud = nud , allKnotsd = allKnotsd , 
+  tmp <- fitIAK3D(xData = cFit , dIData = dIFit , zData = zFit , covsData = covsFit , modelX = modelX , modelx = modelx , nud = nud , 
                   sdfdType_cd1 = sdfdTypeANDcmeInit[1] , sdfdType_cxd0 = sdfdTypeANDcmeInit[2] , sdfdType_cxd1 = sdfdTypeANDcmeInit[3] , 
                   cmeOpt = sdfdTypeANDcmeInit[4] , sdfdKnots = sdfdKnots , minRange = minRange , maxRange = maxRange , 
                   prodSum = prodSum , lnTfmdData = lnTfmdData , useReml = useReml , 
                   optionsModelX = optionsModelX , compLikMats = compLikMats , namePlot = nmplt , rqrBTfmdPreds = rqrBTfmdPreds) 
-
+  
+  
   end_time <- Sys.time()
   print('Time to fit was:')
   print(end_time - start_time)
@@ -242,15 +246,13 @@ if(fitModelNow){
   load(file = lmmFitFile)
 }
 
-stop('done')
-
 ###########################################################################
 ### some plots of the fitted covariance model...
 ###########################################################################
 if(plotVargiogramFit){
   dIPlot <- data.frame('dU' = c(0 , 20 , 50 , 90 , 150 , 190)/100 , 'dL' = c(10 , 30 , 60 , 100 , 160 , 200)/100)
   hx <- seq(0 , 20 , 1)
-  pdf(file = paste0(dataDir , '/varioFitgam22.pdf'))
+  pdf(file = paste0(dataDir , '/varioFit.pdf'))
   tmp <- plotCovx(lmm.fit = lmm.fit.selected , hx = hx , dIPlot = dIPlot , addExpmntlV = TRUE , hzntlUnits = 'km')
   dev.off()
   
@@ -289,7 +291,7 @@ if(valNow){
   zkVal <- vkVal <- NA * numeric(nVal)
   for(i in 1:nrow(cValU)){
       iTmp <- which(cVal[,1] == cValU[i,1] & cVal[,2] == cValU[i,2])
-      tmp <- profilePredictIAK3D(xMap = cValU[i,,drop=FALSE] , covsMap = covsVal[iTmp,,drop=FALSE] , dIMap = dIVal[iTmp,,drop=FALSE] , lmmFit = lmm.fit.selected , rqrBTfmdPreds = rqrBTfmdPreds , constrainX4Pred = constrainX4Pred)
+      tmp <- profilePredictIAK3D(xMap = cValU[i,,drop=FALSE] , covsMap = covsVal[iTmp[1],,drop=FALSE] , dIMap = dIVal[iTmp,,drop=FALSE] , lmmFit = lmm.fit.selected , rqrBTfmdPreds = rqrBTfmdPreds , constrainX4Pred = constrainX4Pred)
       zkVal[iTmp] <- tmp$zMap 
       vkVal[iTmp] <- tmp$vMap 
   }
@@ -306,7 +308,7 @@ if(valNow){
   tmp <- calcValStats(zVal = zVal , dIVal = dIVal , zkVal = zkVal , vkVal = vkVal , layerMidPts = c(0.025 , 0.1 , 0.225 , 0.45 , 0.8 , 1.5) , printValStats = TRUE)
   valStatsAllLayers <- tmp$valStatsAllLayers 
   valStatsTot <- tmp$valStatsTot
-  
+
   tmp <- plotProfilesIAK3D(namePlot = namePlot , xData = cVal , dIData = dIVal , zData = zVal , 
                   xPred = cValU , dIPred = dIPred , zPred = zkProfPred , pi90LPred = pi90LkProfPred , pi90UPred = pi90UkProfPred , 
                   zhatxv = zkVal , pi90Lxv = zkVal - 1.64 * sqrt(vkVal) , pi90Uxv = zkVal + 1.64 * sqrt(vkVal)) 
@@ -347,7 +349,7 @@ if(val4PlotNow){
   zkVal4Plot <- vkVal4Plot <- NA * numeric(length(zVal4Plot))
   for(i in 1:nrow(cVal4PlotU)){
       iTmp <- which(cVal4Plot[,1] == cVal4PlotU[i,1] & cVal4Plot[,2] == cVal4PlotU[i,2])
-      tmp <- profilePredictIAK3D(xMap = cVal4PlotU[i,,drop=FALSE] , covsMap = covsVal4Plot[iTmp,,drop=FALSE] , dIMap = dIVal4Plot[iTmp,,drop=FALSE] , lmmFit = lmm.fit.selected , rqrBTfmdPreds = rqrBTfmdPreds , constrainX4Pred = constrainX4Pred)
+      tmp <- profilePredictIAK3D(xMap = cVal4PlotU[i,,drop=FALSE] , covsMap = covsVal4Plot[iTmp[1],,drop=FALSE] , dIMap = dIVal4Plot[iTmp,,drop=FALSE] , lmmFit = lmm.fit.selected , rqrBTfmdPreds = rqrBTfmdPreds , constrainX4Pred = constrainX4Pred)
       zkVal4Plot[iTmp] <- tmp$zMap 
       vkVal4Plot[iTmp] <- tmp$vMap 
   }
