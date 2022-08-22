@@ -201,7 +201,7 @@ nllIAK3D_CL <- function(pars , zData , XData , modelx , nud ,
       lndetXiAX <- c()
     }
       
-    resiAres <- as.numeric(XziAXz[p+1,p+1] - 2 * t(betahat) %*% XziAXz[1:p,p+1,drop=FALSE] + t(betahat) %*% XziAXz[1:p,1:p,drop=FALSE] %*% betahat)
+    resiAres <- as.numeric(XziAXz[p+1,p+1] - 2 * matrix(betahat , nrow = 1) %*% XziAXz[1:p,p+1,drop=FALSE] + matrix(betahat , nrow = 1) %*% XziAXz[1:p,1:p,drop=FALSE] %*% matrix(betahat , ncol = 1))
 
     if(compLikMats$compLikOptn == 2 || compLikMats$compLikOptn == 3){
       if(useReml){ stop('Error - Eidsvik was only defined for ML, not REML estimation! Work on this!') }else{}
