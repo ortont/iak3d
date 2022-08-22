@@ -1,5 +1,7 @@
-selectCovIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx , nud = NULL , sdfdTypeANDcmeInit = c() , allKnotsd = c() , prodSum = TRUE , lnTfmdData , useReml , compLikMats = NULL , rqrBTfmdPreds = TRUE , dirPlot = getwd()){
+selectCovIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx , nud = NULL , sdfdTypeANDcmeInit = c() , prodSum = TRUE , lnTfmdData , useReml , optionsModelX , compLikMats = NULL , rqrBTfmdPreds = TRUE , dirPlot = getwd()){
 
+  # allKnotsd = c() , opt_dSpline = 0 , 
+  
 #########################################################
 ### error check for duplicated xData,dIData data, if no measurement error being included...
 #########################################################
@@ -57,9 +59,9 @@ selectCovIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx ,
                      ', sdfdType_cxd1 = ' , sdfdTypeANDcmeOpt[3] , ', cmeOpt = ' , sdfdTypeANDcmeOpt[4] , '...'))
         
         namePlot <- paste0(dirPlot , '/lmm.fit.Selectnud' , floor(nudVec[i]) , '.pdf')
-        lmm.fit.Selectnud[[i]] <- fitIAK3D(xData = xData , dIData = dIData , zData = zData , covsData = covsData , modelX = modelX , modelx = modelx , nud = nudVec[i] , allKnotsd = allKnotsd ,
+        lmm.fit.Selectnud[[i]] <- fitIAK3D(xData = xData , dIData = dIData , zData = zData , covsData = covsData , modelX = modelX , modelx = modelx , nud = nudVec[i] , 
                                            sdfdType_cd1 = sdfdTypeANDcmeOpt[1] , sdfdType_cxd0 = sdfdTypeANDcmeOpt[2] , sdfdType_cxd1 = sdfdTypeANDcmeOpt[3] , cmeOpt = sdfdTypeANDcmeOpt[4] , prodSum = prodSum , 
-                                           lnTfmdData = lnTfmdData , useReml = useReml , compLikMats = compLikMats , namePlot = namePlot , rqrBTfmdPreds = rqrBTfmdPreds)
+                                           lnTfmdData = lnTfmdData , useReml = useReml , optionsModelX = optionsModelX , compLikMats = compLikMats , namePlot = namePlot , rqrBTfmdPreds = rqrBTfmdPreds)
       }
       
       iBest <- which.min(c(lmm.fit.Selectnud[[1]]$lmmFit$nll , lmm.fit.Selectnud[[2]]$lmmFit$nll , lmm.fit.Selectnud[[3]]$lmmFit$nll))
@@ -72,9 +74,9 @@ selectCovIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx ,
       lmm.fit.Selectnud[[1]] <- NA
       lmm.fit.Selectnud[[2]] <- NA
       lmm.fit.Selectnud[[3]] <- NA
-      lmm.fit.Selectnud[[iBest]] <- fitIAK3D(xData = xData , dIData = dIData , zData = zData , covsData = covsData , modelX = modelX , modelx = modelx , nud = nud , allKnotsd = allKnotsd ,
+      lmm.fit.Selectnud[[iBest]] <- fitIAK3D(xData = xData , dIData = dIData , zData = zData , covsData = covsData , modelX = modelX , modelx = modelx , nud = nud , 
                                              sdfdType_cd1 = sdfdTypeANDcmeOpt[1] , sdfdType_cxd0 = sdfdTypeANDcmeOpt[2] , sdfdType_cxd1 = sdfdTypeANDcmeOpt[3] , cmeOpt = sdfdTypeANDcmeOpt[4] , prodSum = prodSum , 
-                                             lnTfmdData = lnTfmdData , useReml = useReml , compLikMats = compLikMats , namePlot = namePlot , rqrBTfmdPreds = rqrBTfmdPreds)
+                                             lnTfmdData = lnTfmdData , useReml = useReml , optionsModelX = optionsModelX , compLikMats = compLikMats , namePlot = namePlot , rqrBTfmdPreds = rqrBTfmdPreds)
       nudSelected <- nud
       print(paste0('nud = ' , nudSelected , ' selected.'))
     }
@@ -125,9 +127,9 @@ selectCovIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx ,
           
           
           namePlot <- paste0(dirPlot , '/lmm.fit.DropStep' , iStep , '_Drop' , i , '.pdf')
-          lmm.fit.Drop[[iStep]][[i]] <- fitIAK3D(xData = xData , dIData = dIData , zData = zData , covsData = covsData , modelX = modelX , modelx = modelx , nud = nudSelected , allKnotsd = allKnotsd ,
+          lmm.fit.Drop[[iStep]][[i]] <- fitIAK3D(xData = xData , dIData = dIData , zData = zData , covsData = covsData , modelX = modelX , modelx = modelx , nud = nudSelected ,  
                                                  sdfdType_cd1 = sdfdTypeANDcmeOptThis[1] , sdfdType_cxd0 = sdfdTypeANDcmeOptThis[2] , sdfdType_cxd1 = sdfdTypeANDcmeOptThis[3] , cmeOpt = sdfdTypeANDcmeOptThis[4] , prodSum = prodSum , 
-                                                 lnTfmdData = lnTfmdData , useReml = useReml  , compLikMats = compLikMats , namePlot = namePlot , rqrBTfmdPreds = rqrBTfmdPreds)
+                                                 lnTfmdData = lnTfmdData , useReml = useReml  , optionsModelX = optionsModelX , compLikMats = compLikMats , namePlot = namePlot , rqrBTfmdPreds = rqrBTfmdPreds)
           nllDrop[i,iStep] <- lmm.fit.Drop[[iStep]][[i]]$lmmFit$nll
           
           if(nllDrop[i,iStep] < (nllCurrent - 1E-4)){
@@ -184,7 +186,7 @@ selectCovIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx ,
 ### which weren't searched for in the above model selection algorithm.
 ### function useful for parallelizing model selection.
 ################################################################################
-listAllSubmodels <- function(modelx , nud = NULL , sdfdTypeANDcmeInit = c() , allKnotsd = c() , prodSum = TRUE){
+listAllSubmodels <- function(modelx , nud = NULL , sdfdTypeANDcmeInit = c() , prodSum = TRUE){
 
 #################################################
 ### the initial model, from input if sdfdTypeANDcmeInit is length 4, else default...
@@ -268,9 +270,9 @@ listAllSubmodels <- function(modelx , nud = NULL , sdfdTypeANDcmeInit = c() , al
 ### (a conditional AIC? Wald test with alpha = 0.15 prob quicker and v similar)
 ### assumes additive normal (ie arithmetic averaging) effects on given scale 
 #############################################################
-selectXAicIAK3D <- function(xData , dIData , zData , covsData , modelXInit , allKnotsd = c()){
+selectXAicIAK3D <- function(xData , dIData , zData , covsData , modelXInit , allKnotsd = c() , opt_dSpline = 0){
 
-    tmp <- makeXvX(covData = covsData , dIData = dIData , modelX = modelXInit, allKnotsd = allKnotsd , nDiscPts = 10 , lnTfmdData = FALSE)
+    tmp <- makeXvX(covData = covsData , dIData = dIData , modelX = modelXInit, allKnotsd = allKnotsd , opt_dSpline = opt_dSpline , nDiscPts = 10 , lnTfmdData = FALSE)
 
     namesXCurrent <- tmp$namesX
     XCurrent <- tmp$X
@@ -285,7 +287,7 @@ selectXAicIAK3D <- function(xData , dIData , zData , covsData , modelXInit , all
     nllStore <- c()
     namesXStore <- list() ; iNext <- 1
     while (continueRemoving){
-        tmp <- stepBackAic(namesX = namesXCurrent , pX = pXCurrent , allKnotsd = allKnotsd , zData = zData , dIData = dIData , covsData = covsData , nllCurrent = nllCurrent , pCurrent = pCurrent)
+        tmp <- stepBackAic(namesX = namesXCurrent , pX = pXCurrent , allKnotsd = allKnotsd , opt_dSpline = opt_dSpline , zData = zData , dIData = dIData , covsData = covsData , nllCurrent = nllCurrent , pCurrent = pCurrent)
         if(length(tmp$iRemove) > 0){
             namesXCurrent <- tmp$namesX 
             pXCurrent <- tmp$pX
@@ -306,7 +308,7 @@ selectXAicIAK3D <- function(xData , dIData , zData , covsData , modelXInit , all
 ### one step of the backwards elimination procedure for fixed-effect model based on AIC and independent residuals...
 ### assumes additive normal (ie arithmetic averaging) effects on given scale 
 #############################################################
-stepBackAic <- function(namesX , pX , allKnotsd , zData , dIData , covsData , nllCurrent , pCurrent){
+stepBackAic <- function(namesX , pX , allKnotsd , opt_dSpline = 0 , zData , dIData , covsData , nllCurrent , pCurrent){
 ### the nll and number of parameters in the current model 
 ### fit all immediate submodels; aic for backward elimination
     aicCurrent <- 2 * nllCurrent + 2 * pCurrent
@@ -320,7 +322,7 @@ stepBackAic <- function(namesX , pX , allKnotsd , zData , dIData , covsData , nl
             namesXThis <- namesX[-iRmvTmp]
             pXThis <- pX[-iRmvTmp]
 
-            tmp <- makeXvX(covData = covsData , dIData = dIData , modelX = namesX , allKnotsd = allKnotsd , nDiscPts = 10 , lnTfmdData = FALSE)
+            tmp <- makeXvX(covData = covsData , dIData = dIData , modelX = namesX , allKnotsd = allKnotsd , opt_dSpline = opt_dSpline , nDiscPts = 10 , lnTfmdData = FALSE)
             XList[[i]] <- tmp$X
             tmp <- nllLm(zData = zData , XData = XList[[i]] , REML = F)
             nllAll[i] <- tmp$nll
@@ -360,7 +362,7 @@ stepBackAic <- function(namesX , pX , allKnotsd , zData , dIData , covsData , nl
 ### can also be used with covariance parameters in lmmFit used to model residuals...
 ### using alpha = 0.15 should give something similar to AIC
 #############################################################
-selectXWaldIAK3D <- function(xData , dIData , zData , covsData , modelXInit = c() , allKnotsd = c() , lmmFit = list() , alpha = 0.05){
+selectXWaldIAK3D <- function(xData , dIData , zData , covsData , modelXInit = c() , allKnotsd = c() , opt_dSpline = 0 , lmmFit = list() , alpha = 0.05){
 
     if(!is.null(lmmFit$parsBTfmd)){
 ### a lmm has been fitted - get modelXInit from lmmFit, stop if modelXInit is given as well
@@ -372,12 +374,13 @@ selectXWaldIAK3D <- function(xData , dIData , zData , covsData , modelXInit = c(
         }else{}
         modelXInit <- lmmFit$modelX
         allKnotsd <- lmmFit$allKnotsd
+        opt_dSpline <- lmmFit$opt_dSpline
         lnTfmdData <- lmmFit$lnTfmdData    
     }else{
         lnTfmdData <- FALSE
     }
 
-    tmp <- makeXvX(covData = covsData , dIData = dIData , modelX = modelXInit, allKnotsd = allKnotsd , nDiscPts = 10 , lnTfmdData = lnTfmdData)
+    tmp <- makeXvX(covData = covsData , dIData = dIData , modelX = modelXInit, allKnotsd = allKnotsd , opt_dSpline = opt_dSpline , nDiscPts = 10 , lnTfmdData = lnTfmdData)
 
     namesXCurrent <- tmp$namesX
     pXCurrent <- tmp$pX
@@ -387,7 +390,7 @@ selectXWaldIAK3D <- function(xData , dIData , zData , covsData , modelXInit = c(
     namesXStore <- list() ; iNext <- 1
     pValStore <- list()
     while (continueRemoving){
-        tmp <- stepBackWald(namesX = namesXCurrent , pX = pXCurrent, allKnotsd = allKnotsd , zData = zData , dIData = dIData , covsData = covsData , lmmFit = lmmFit , alpha = alpha)
+        tmp <- stepBackWald(namesX = namesXCurrent , pX = pXCurrent, allKnotsd = allKnotsd , opt_dSpline = opt_dSpline , zData = zData , dIData = dIData , covsData = covsData , lmmFit = lmmFit , alpha = alpha)
 
         if(length(tmp$iRemove) > 0){
             namesXCurrent <- tmp$namesX 
@@ -405,11 +408,11 @@ selectXWaldIAK3D <- function(xData , dIData , zData , covsData , modelXInit = c(
 #############################################################
 ### one step of the backwards elimination procedure for fixed-effect model based on Wald tests and independent residuals...
 #############################################################
-stepBackWald <- function(namesX , pX , allKnotsd , zData , dIData , covsData , lmmFit , alpha){
+stepBackWald <- function(namesX , pX , allKnotsd , opt_dSpline = 0 , zData , dIData , covsData , lmmFit , alpha){
 ### fit the current model; wald tests for backward elimination
     if(is.null(lmmFit$parsBTfmd)){
 ### in this case, fit a lm to give betahat and vbetahat
-        tmp <- makeXvX(covData = covsData , dIData = dIData , modelX = namesX , allKnotsd = allKnotsd , nDiscPts = 10 , lnTfmdData = FALSE)
+        tmp <- makeXvX(covData = covsData , dIData = dIData , modelX = namesX , allKnotsd = allKnotsd , opt_dSpline = opt_dSpline , nDiscPts = 10 , lnTfmdData = FALSE)
         XThis <- tmp$X
 
         tmp <- nllLm(zData = zData , XData = XThis , REML = T)
@@ -423,9 +426,12 @@ stepBackWald <- function(namesX , pX , allKnotsd , zData , dIData , covsData , l
         lmmFit$vXU <- NULL
         lmmFit$iU <- NULL
 
-        tmp <- fitIAK3D(xData = lmmFit$xData , dIData = lmmFit$dIData , zData = lmmFit$zData , covsData = lmmFit$covsData , modelX = namesX , modelx = lmmFit$modelx , nud = lmmFit$nud , allKnotsd = lmmFit$allKnotsd , 
+        optionsModelX <- list('refineCubistModel' = FALSE , 'nRules' = -9 , 'allKnotsd' = lmmFit$allKnotsd , 'opt_dSpline' = lmmFit$opt_dSpline ,
+                              'reduceXAfterInitFit' = FALSE , 'alpha' = 0.15)
+        
+        tmp <- fitIAK3D(xData = lmmFit$xData , dIData = lmmFit$dIData , zData = lmmFit$zData , covsData = lmmFit$covsData , modelX = namesX , modelx = lmmFit$modelx , nud = lmmFit$nud , 
 			sdfdType_cd1 = lmmFit$sdfdType_cd1 , sdfdType_cxd0 = lmmFit$sdfdType_cxd0 , sdfdType_cxd1 = lmmFit$sdfdType_cxd1 , cmeOpt = lmmFit$cmeOpt , prodSum = lmmFit$prodSum , 
-                  lnTfmdData = lmmFit$lnTfmdData  , useReml = lmmFit$useReml , compLikMats = lmmFit$compLikMats , lmmFit = lmmFit)
+                  lnTfmdData = lmmFit$lnTfmdData  , useReml = lmmFit$useReml , optionsModelX = optionsModelX , compLikMats = lmmFit$compLikMats , lmmFit = lmmFit)
 
         lmmFit <- tmp$lmmFit
 
@@ -574,6 +580,7 @@ canRemove <- function(namesX){
 
 ####################################################
 ### function to select knots for general depth trend...
+### for bs, not clamped ns (ie for opt_dSpline = 0, not 1)
 ####################################################
 selectKnots <- function(dIData , zData , covsData , modelX , plotSplines = FALSE , degreeSpline = 3 , usedMdPts = FALSE){
 
