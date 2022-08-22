@@ -8,7 +8,7 @@
 ###       response ~ evi90 + (1 | siteID)  + (0 + evi90 | siteID) 
 ### not sure if will be useful, prob only for small datasets, and only with small number of covariates (think allows > 1)
 #####################################################################
-fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'matern' , nud = 0.5 , allKnotsd = c() , 
+fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'matern' , nud = 0.5 , 
                      sdfdType_cd1 = 0 , sdfdType_cxd0 = 0 , sdfdType_cxd1 = 0 , cmeOpt = 0 , sdfdKnots = NULL , minRange = NA , maxRange = NA , prodSum = TRUE , 
                      lnTfmdData = FALSE , useReml = TRUE , optionsModelX = list('reduceXAfterInitFit' = FALSE) , compLikMats = list('compLikOptn' = 0) , namePlot = NA , 
                      lmmFit = list() , rqrBTfmdPreds = TRUE , parsInit = NULL , attachBigMats = TRUE , testMCGrad = NULL , nCores = min(detectCores() , 8) , siteIDData = NULL){
@@ -27,29 +27,34 @@ fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'mate
   ### for gam2, SCALED covs get added to covsData
   #############################################
   tmp <- initialiseModelX(xData = xData , dIData = dIData , zData = zData , covsData = covsData , 
-                          modelX = modelX , optionsModelX = optionsModelX , allKnotsd = allKnotsd)
+                          modelX = modelX , optionsModelX = optionsModelX)
   modelX <- tmp$modelX 
   covsData <- tmp$covsData
-
+  rm(tmp)
+  
   #############################################
   ### check options for reducing gam model...
   #############################################
   if(optionsModelX$reduceXAfterInitFit){
-    if(!identical(modelX$type , 'gam2')){
+    if(identical(modelX$type , 'gam2')){
+      if(is.null(optionsModelX$alpha)){ stop('Error - enter alpha for reducing cubist model!') }else{}
+      if(is.null(optionsModelX$optStat4Drop)){
+        stop('Error - enter optionsModelX$optStat4Drop for reduceXAfterInitFit with gam2 models.')
+      }else{}
+      if(is.null(optionsModelX$maxnSpatVars)){
+        stop('Error - enter optionsModelX$maxnSpatVars for reduceXAfterInitFit with gam2 models.')
+      }else{}
+      if(is.null(optionsModelX$maxnKnotsd)){
+        stop('Error - enter optionsModelX$maxnKnotsd for reduceXAfterInitFit with gam2 models.')
+      }else{}
+      if(is.null(optionsModelX$maxnKnotss)){
+        stop('Error - enter optionsModelX$maxnKnotss for reduceXAfterInitFit with gam2 models.')
+      }else{}
+    }else if(identical(modelX$type , 'cubist')){
+      if(is.null(optionsModelX$alpha)){ stop('Error - enter alpha for reducing cubist model!') }else{}
+    }else{
       stop('Error - the option to reduceXAfterInitFit is only coded for gam2 models.')
-    }else{}
-    if(is.null(optionsModelX$optStat4Drop)){
-      stop('Error - enter optionsModelX$optStat4Drop for reduceXAfterInitFit with gam2 models.')
-    }else{}
-    if(is.null(optionsModelX$maxnSpatVars)){
-      stop('Error - enter optionsModelX$maxnSpatVars for reduceXAfterInitFit with gam2 models.')
-    }else{}
-    if(is.null(optionsModelX$maxnKnotsd)){
-      stop('Error - enter optionsModelX$maxnKnotsd for reduceXAfterInitFit with gam2 models.')
-    }else{}
-    if(is.null(optionsModelX$maxnKnotss)){
-      stop('Error - enter optionsModelX$maxnKnotss for reduceXAfterInitFit with gam2 models.')
-    }else{}
+    }
   }else{}
   
   #############################################
@@ -173,7 +178,7 @@ fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'mate
   ### other info will be in modelX$incInts and modelX$colnamesXcns
   ################################################
   if(identical(modelX$type , 'gam2')){
-    if(length(allKnotsd) > 0){ stop('Error - if using gam2 for trend, enter knot info in modelX$listfefdKnots (you can use function makelistfefdKnots to do this); do not use allKnotsd.\n
+    if(length(optionsModelX$allKnotsd) > 0){ stop('Error - if using gam2 for trend, enter knot info in modelX$listfefdKnots (you can use function makelistfefdKnots to do this); do not use allKnotsd.\n
                                       Note, modelX should also set modelX$incInts and modelX$comnamesXcns')}else{}
   }else{}
   
@@ -203,7 +208,7 @@ fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'mate
     namesX <- tmp$namesX
     XLims <- NA
   }else{
-    tmp <- makeXvX(covData = covsData , dIData = dIData , modelX = modelX , allKnotsd = allKnotsd , nDiscPts = 1000 , lnTfmdData = lnTfmdData)
+    tmp <- makeXvX(covData = covsData , dIData = dIData , modelX = modelX , allKnotsd = optionsModelX$allKnotsd , opt_dSpline = optionsModelX$opt_dSpline , nDiscPts = 1000 , lnTfmdData = lnTfmdData)
     XData <- tmp$X
     vXU <- tmp$vXU
     iU <- tmp$iU
@@ -296,6 +301,7 @@ fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'mate
     verboseOptim <<- F
   }else{
     parsInit <- lmmFit$pars
+    ###  should check here that we have right number of parameters...
   }
 
   if(is.null(lmmFit$fitRange)){  
@@ -312,6 +318,7 @@ fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'mate
   ##################################################
   if(!is.null(siteIDData)){
 
+    print('ATTENTION!!!!! SITE_SPECIFIC RANDOM EFFECT!')
     parsInit <- c(parsInit , rep(0 , length(setupMats$listStructs4ssre)))
     
     fitRange <- rbind(fitRange , cbind(rep(-20 , length(setupMats$listStructs4ssre))  , rep(Inf , length(setupMats$listStructs4ssre))))
@@ -432,35 +439,67 @@ fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'mate
   }
   verboseOptim <<- F
   
+  ### lost colnames somewhere?!
+  if(identical(modelX$type , 'cubist')){
+    colnames(XData) <- modelX$namesX  
+  }else{}
+  
   #######################################################################
   ### if optionsModelX$reduceXAfterInitFit with a gam2 model
   ### then remove columns of X (using stepBackXcns algorihtm) and refit IAK3D model.
   #######################################################################
-  if(optionsModelX$reduceXAfterInitFit && identical(modelX$type , 'gam2')){
+  if(optionsModelX$reduceXAfterInitFit && (identical(modelX$type , 'gam2') | identical(modelX$type , 'cubist'))){
     
-    print('Reducing the initial gam2 model by removing redundant columns...')      
-    if(compLikMats$compLikOptn == 0){ 
-      tmp <- stepBackXcns(Xcns = XData  , zData = zData ,
-                          iAX = lmmFit$iCX / lmmFit$cxdhat , iAz = lmmFit$iC %*% zData / lmmFit$cxdhat , 
-                          alpha = optionsModelX$alpha , optStat4Drop = optionsModelX$optStat4Drop ,
-                          maxnSpatVars = optionsModelX$maxnSpatVars , maxnKnotsd = optionsModelX$maxnKnotsd , maxnKnotss = optionsModelX$maxnKnotss)
-    }else{
-      print('ATTENTION - STEP BACK ALGORITHM WITH COMPOSITE LIKELIHOOD NEEDS CHECKING!')
-      tmp <- stepBackXcns(Xcns = XData  , zData = zData , XziAXz = lmmFit$XziAXz_APPROX , 
-                          alpha = optionsModelX$alpha , optStat4Drop = optionsModelX$optStat4Drop ,
-                          maxnSpatVars = optionsModelX$maxnSpatVars , maxnKnotsd = optionsModelX$maxnKnotsd , maxnKnotss = optionsModelX$maxnKnotss)
-    } 
+    if(identical(modelX$type , 'gam2')){
+      print('Reducing the initial gam2 model by removing redundant columns...')      
+      if(compLikMats$compLikOptn == 0){ 
+        tmp <- stepBackXcns(Xcns = XData  , zData = zData ,
+                            iAX = lmmFit$iCX / lmmFit$cxdhat , iAz = lmmFit$iC %*% zData / lmmFit$cxdhat , 
+                            alpha = optionsModelX$alpha , optStat4Drop = optionsModelX$optStat4Drop ,
+                            maxnSpatVars = optionsModelX$maxnSpatVars , maxnKnotsd = optionsModelX$maxnKnotsd , maxnKnotss = optionsModelX$maxnKnotss)
+      }else{
+        print('ATTENTION - STEP BACK ALGORITHM WITH COMPOSITE LIKELIHOOD NEEDS CHECKING!')
+        tmp <- stepBackXcns(Xcns = XData  , zData = zData , XziAXz = lmmFit$XziAXz_APPROX , 
+                            alpha = optionsModelX$alpha , optStat4Drop = optionsModelX$optStat4Drop ,
+                            maxnSpatVars = optionsModelX$maxnSpatVars , maxnKnotsd = optionsModelX$maxnKnotsd , maxnKnotss = optionsModelX$maxnKnotss)
+      } 
+      
+      modelX$colnamesX <- colnames(tmp$Xcns)
+      modelX$type <- 'gam2' # just making sure!
+      
+      tmp <- makeXvX_gam2(covData = covsData , dIData = dIData , listfefdKnots = modelX$listfefdKnots , incInts = modelX$incInts , intMthd = modelX$intMthd , colnamesXcns = modelX$colnamesX , nDiscPts = 1000 , lnTfmdData = lnTfmdData)
+      XData <- tmp$X
+      vXU <- tmp$vXU
+      iU <- tmp$iU
+      namesX <- tmp$namesX
+      XLims <- NA
+    }else if(identical(modelX$type , 'cubist')){
+      print('Reducing the initial cubist model by removing redundant columns...')      
+      if(compLikMats$compLikOptn == 0){ 
+        
+        tmp <- refineXIAK3D(X = XData , z = zData , profID = NULL , alpha = optionsModelX$alpha , iAX = lmmFit$iCX / lmmFit$cxdhat , iAz = lmmFit$iC %*% zData / lmmFit$cxdhat)
+        namesRemove <- tmp$namesRemove
+        ipRemove <- tmp$ipRemove
+        
+        tmp <- removeColinPreds(X = XData , cubistModel = modelX , dataFit = covsData , ipRmvd = ipRemove , reasonRmv = 1)
+        XData <- tmp$X
+        modelX <- tmp$cubistModel 
+        modelX$namesX <- colnames(XData)    
+        modelX$type <- 'cubist'
+        
+        tmp <- makeXvX(covData = covsData , dIData = dIData , modelX = modelX , allKnotsd = optionsModelX$allKnotsd , opt_dSpline = optionsModelX$opt_dSpline , nDiscPts = 1000 , lnTfmdData = lnTfmdData)
+        XData <- tmp$X
+        vXU <- tmp$vXU
+        iU <- tmp$iU
+        namesX <- tmp$namesX
+        XLims <- tmp$XLims
+
+      }else{
+        stop('Not sure the code works to reduce cubist X with approximate likelihood.')
+      }
+    }else{}
     
-    modelX$colnamesX <- colnames(tmp$Xcns)
-    
-    tmp <- makeXvX_gam2(covData = covsData , dIData = dIData , listfefdKnots = modelX$listfefdKnots , incInts = modelX$incInts , intMthd = modelX$intMthd , colnamesXcns = modelX$colnamesX , nDiscPts = 1000 , lnTfmdData = lnTfmdData)
-    XData <- tmp$X
-    vXU <- tmp$vXU
-    iU <- tmp$iU
-    namesX <- tmp$namesX
-    XLims <- NA
-    
-    print('Refitting with the reduced gam2 model...')
+    print(paste0('Refitting with the reduced ' , modelX$type , ' model...'))
     if (compLikMats$compLikOptn == 0){
       parsFit <- optimIt(par = parsInit , fn = nllIAK3D , gr = gr4Optim , fitRange = fitRange ,
                          zData = zData , XData = XData , vXU = vXU , iU = iU , modelx = modelx , nud = nud ,
@@ -493,15 +532,22 @@ fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'mate
     
   }else{}
   #######################################################################
+  if(identical(modelX$type , 'cubist')){
+    colnames(XData) <- modelX$namesX  
+  }else if(identical(modelX$type , 'gam2')){
+    colnames(XData) <- modelX$colnamesX
+  }else{
+    print('Should make sure that XData has col names here!')
+  }
   
   ############################################
   ### also attach everything that was used to call the function to lmmFit...
   ############################################
   lmmFit <- attachSettings2lmmFit(lmmFit = lmmFit , xData = xData , dIData = dIData , zData = zData , covsData = covsData , 
-                                  modelX = modelX , namesX = namesX , modelx = modelx , nud = nud , allKnotsd = allKnotsd , XLims = XLims , 
+                                  modelX = modelX , namesX = namesX , modelx = modelx , nud = nud , XLims = XLims , 
                                   sdfdType_cd1 = sdfdType_cd1 , sdfdType_cxd0 = sdfdType_cxd0 , sdfdType_cxd1 = sdfdType_cxd1 , cmeOpt = cmeOpt , 
                                   prodSum = prodSum , sdfdKnots = sdfdKnots , minRange = minRange , maxRange = maxRange , setupMats = setupMats , lnTfmdData = lnTfmdData , 
-                                  useReml = useReml , parBnds = parBnds , fitRange = fitRange , compLikMats = compLikMats , siteIDData = siteIDData , colnames4ssre = colnames4ssre)
+                                  useReml = useReml , optionsModelX = optionsModelX , parBnds = parBnds , fitRange = fitRange , compLikMats = compLikMats , siteIDData = siteIDData , colnames4ssre = colnames4ssre)
   
   if (!is.na(namePlot)){
     ##############################################
@@ -566,7 +612,9 @@ fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'mate
     # return(list('xTmp' = rbind(xPred , xPredDistant) , 'dIMap' = dIPred , 'covsMap' = rbind(covsPred , covsPredDistant) , 'lmmFit' = lmmFit))
     
     ### call the predict function...
-    tmp <- predictIAK3D(xMap = rbind(xPred , xPredDistant) , dIMap = dIPred , covsMap = rbind(covsPred , covsPredDistant) , siteIDMap = siteID4Predict , lmmFit = lmmFit , rqrBTfmdPreds = rqrBTfmdPreds , constrainX4Pred = FALSE)
+    tmp <- predictIAK3D(xMap = rbind(xPred , xPredDistant) , dIMap = dIPred , 
+                        covsMap = rbind(covsPred , covsPredDistant) , siteIDMap = siteID4Predict , 
+                        lmmFit = lmmFit , rqrBTfmdPreds = rqrBTfmdPreds , constrainX4Pred = FALSE)
     
     zPred <- tmp$zMap[,1:nxPred]
     vPred <- tmp$vMap[,1:nxPred]
@@ -589,6 +637,7 @@ fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'mate
     ### also note, they are a bi-product of the method (ie you can use the method to predict at profiles where we have data), 
     ### not to be confused with the spline-then-krige type approach where similar plots may be produced in the first step of analysis
     #################################################    
+    print('Making the profile plots...')
     tmp <- plotProfilesIAK3D(namePlot = namePlot , xData = xData , dIData = dIData , zData = zData , 
                              xPred = xPred , dIPred = dIPred , zPred = zPred , pi90LPred = pi90LPred , pi90UPred = pi90UPred , zPredDistant = zPredDistant , profNames = profNamesPlot)
     
@@ -868,14 +917,22 @@ nllIAK3D <- function(pars , zData , XData , vXU , iU , modelx , nud ,
 
       if(attachBigMats){
         
-        iC <- chol2inv(chol(C))
+        ### 30-08-2021 - some numerical issues with chol2inv(chol(C)) for teh edgeroi eg???
+        # iC <- chol2inv(chol(C))
+        iC <- solve(C)
+
         iCXRes <- matrix(iC %*% cbind(XData , zData - muhat) , ncol = p+1)
         
       	return(list('nll' = nll , 'pars' = pars , 'parsBTfmd' = parsBTfmd , 'betahat' = betahat , 'vbetahat' = vbetahat , 'cxdhat' = cxdhat , 
                   'C' = C , 'sigma2Vec' = sigma2Vec , 'XData' = XData , 'vXU' = vXU , 'iU' = iU , 'iCX' = iCXRes[,1:p,drop=FALSE] , 'iCz_muhat' = iCXRes[,p+1,drop=FALSE] , 'iC' = iC))
       }else{
+#        return(list('nll' = nll , 'pars' = pars , 'parsBTfmd' = parsBTfmd , 'betahat' = betahat , 'vbetahat' = vbetahat , 'cxdhat' = cxdhat , 
+#                    'sigma2Vec' = sigma2Vec , 'XData' = XData , 'vXU' = vXU , 'iU' = iU))
+### change to have iAX and iAz, 02/09/2021... 
         return(list('nll' = nll , 'pars' = pars , 'parsBTfmd' = parsBTfmd , 'betahat' = betahat , 'vbetahat' = vbetahat , 'cxdhat' = cxdhat , 
-                    'sigma2Vec' = sigma2Vec , 'XData' = XData , 'vXU' = vXU , 'iU' = iU))
+                    'sigma2Vec' = sigma2Vec , 'XData' = XData , 'vXU' = vXU , 'iU' = iU , 
+                    'iAX' = iAW[,1:p,drop=FALSE] ,'iAz' = iAW[,p+1,drop=FALSE]))
+
       }                
     }else{
     	return(nll)
@@ -1074,7 +1131,8 @@ setCIAK3D2 <- function(parsBTfmd , modelx ,
     phix0 <- sparseMatrix(i = ijTmp[,1] , j = ijTmp[,2] , x = 1 , dims = c(nrow(setupMats$Dx) , ncol(setupMats$Dx)))
     C <- parsBTfmd$cx0 * setupMats$Kx %*% phix0 %*% t(setupMats$Kx2)
   }else{
-    phix0 <- sparseMatrix(i = 1 , ,j=1 , x=0 , dims = c(nrow(setupMats$Dx),ncol(setupMats$Dx)))
+    # phix0 <- sparseMatrix(i = 1 , ,j=1 , x=0 , dims = c(nrow(setupMats$Dx),ncol(setupMats$Dx)))
+    phix0 <- sparseMatrix(i = 1 , j=1 , x=0 , dims = c(nrow(setupMats$Dx),ncol(setupMats$Dx)))
     C <- sparseMatrix(i=1,j=1,x=0,dims = c(nrow(setupMats$Kx),nrow(setupMats$Kx2)))
   }
 
@@ -1453,7 +1511,8 @@ updateLmmFitNames <- function(lmmFit){
   
   # if(class(lmmFit$modelX) == "cubist"){
   if(is(lmmFit$modelX , "cubist")){
-    lmmFit$modelX$allKnotsd <- lmmFit$allKnotsd
+    lmmFit$modelX$allKnotsd <- lmmFit$optionsModelX$allKnotsd
+    lmmFit$modelX$opt_dSpline <- lmmFit$optionsModelX$opt_dSpline
     if(length(lmmFit$modelX$allKnotsd) > 0){
       nparSpline <- ncol(lmmFit$XData) - length(lmmFit$modelX$names4XCubist)
       lmmFit$modelX$namesX <- c(lmmFit$modelX$names4XCubist , paste0('dSpline.' , seq(nparSpline)))
@@ -1470,8 +1529,9 @@ updateLmmFitNames <- function(lmmFit){
 #########################################################################
 ### function to attach settings...
 ########################################################################
-attachSettings2lmmFit <- function(lmmFit , xData , dIData , zData , covsData , modelX , namesX , modelx , nud , allKnotsd , XLims , 
-               sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1 , cmeOpt , prodSum , sdfdKnots , minRange , maxRange , setupMats , lnTfmdData , useReml , parBnds , fitRange , compLikMats , siteIDData , colnames4ssre){
+attachSettings2lmmFit <- function(lmmFit , xData , dIData , zData , covsData , modelX , namesX , modelx , nud , XLims , 
+               sdfdType_cd1 , sdfdType_cxd0 , sdfdType_cxd1 , cmeOpt , prodSum , sdfdKnots , minRange , maxRange , setupMats , 
+               lnTfmdData , useReml , optionsModelX , parBnds , fitRange , compLikMats , siteIDData , colnames4ssre){
     lmmFit$xData <- xData
     lmmFit$dIData <- dIData
     lmmFit$zData <- zData
@@ -1480,11 +1540,13 @@ attachSettings2lmmFit <- function(lmmFit , xData , dIData , zData , covsData , m
     lmmFit$namesX <- namesX
     lmmFit$modelx <- modelx
     lmmFit$nud <- nud
-    if(length(allKnotsd) > 0){
-      lmmFit$allKnotsd <- allKnotsd
-    }else{ # assigning as c() doesn't work, so: 
-      lmmFit['allKnotsd'] <- list(NULL)
-    }
+    # if(length(allKnotsd) > 0){
+    #   lmmFit$allKnotsd <- allKnotsd
+    # }else{ # assigning as c() doesn't work, so: 
+    #   lmmFit['allKnotsd'] <- list(NULL)
+    # }
+    # lmmFit$opt_dSpline <- opt_dSpline
+    lmmFit$optionsModelX <- optionsModelX
     lmmFit$XLims <- XLims
     lmmFit$sdfdType_cd1 <- sdfdType_cd1
     lmmFit$sdfdType_cxd0 <- sdfdType_cxd0
@@ -1508,209 +1570,6 @@ attachSettings2lmmFit <- function(lmmFit , xData , dIData , zData , covsData , m
     lmmFit$colnames4ssre <- colnames4ssre    
     
     return(lmmFit)
-}
-
-#########################################################################
-### function to iterate optim, each time starting from previous finishing point, until no more change...
-########################################################################
-### to put this into the global environment, so that it can be seen in function and in optimIt without passing...
-verboseOptim <<- F
-
-#optimIt <- function(par , fn , gr = NULL , methodOptim = c("Nelder-Mead" , "L-BFGS-B") , vecFixedIn = logical(length(par)) , fitRange = matrix(NA , length(par) , 2) , ...){
-optimIt <- function(par , fn , gr = NULL , methodOptim = c("L-BFGS-B" , "Nelder-Mead") , vecFixedIn = logical(length(par)) , fitRange = matrix(NA , length(par) , 2) , tolIt = 1E-4 , ...){
-# fitRange is npar x 2 with lower and upper values
-# iterate between first NM and then L-BFGS-B (or other specified algorithms) until no more improvement.
-    verboseOptim <<- T
-    eval(fn(par,...))
-    verboseOptim <<- F
-    
-    fitRange[is.na(fitRange[,1]),1] <- -Inf
-    fitRange[is.na(fitRange[,2]),2] <- Inf
-    
-    warnIn <- options()$warn
-    
-    # prevOF = 9E9
-    prevOF = eval(fn(par,...))
-    # stop when we improve by tol or less.
-    stillImproving = TRUE
-    listRes <- list()
-    it <- 1
-    parStore <- c()
-    vecFixed <- vecFixedIn
-
-    while (stillImproving){
-        iMethodThis <- it %% length(methodOptim)
-        if(iMethodThis == 0){ iMethodThis <- length(methodOptim) }else{}
-
-# set max n fn evals a bit less than the default, because we will iterate
-        if(all(!vecFixedIn)){ # to avoid an extra level of wrapping, straight to optim if nothing fixed
-          if(methodOptim[iMethodThis] == 'Nelder-Mead'){
-            options(warn = -1) # to ignore warnings from Nelder_Mead2 about lack of convergence.
-            res <- Nelder_Mead2(par = par , fn = fn , lower = fitRange[,1] , upper = fitRange[,2] , control = list(maxfun = 350 , warnOnly = TRUE) , ... = ...)
-            options(warn = warnIn)
-            newOF <- res$fval
-            res$value <- res$fval
-          }else{
-            res <- optim(par = par , fn = fn , gr = gr , method = methodOptim[iMethodThis] , lower = fitRange[,1] , upper = fitRange[,2] , control = list(maxit = 70) , ... = ...)
-            newOF <- res$value
-          }
-          verboseOptim <<- T
-          eval(fn(res$par,...))
-          verboseOptim <<- F
-          parInitsNext <- res$par
-          parStore <- cbind(parStore , res$par)
-        }else{
-          if(methodOptim[iMethodThis] == 'Nelder-Mead'){
-            options(warn = -1) # to ignore warnings from Nelder_Mead2 about lack of convergence.
-            res <- Nelder_Mead2fix(par = par , fn = fn , fixed = vecFixed , lower = fitRange[,1] , upper = fitRange[,2] , control = list(maxfun = 350 , warnOnly = TRUE) , ... = ...)
-            options(warn = warnIn)
-            newOF <- res$fval
-            res$value <- res$fval
-          }else{
-            res <- optifix(par = par , fn = fn , gr = gr , fixed = vecFixed , method = methodOptim[iMethodThis] , lower = fitRange[,1] , upper = fitRange[,2] , control = list(maxit = 70) , ... = ...)
-            newOF <- res$value
-          }
-          verboseOptim <<- T
-          eval(fn(res$fullpars,...))
-          verboseOptim <<- F
-          parInitsNext <- res$fullpars
-          parStore <- cbind(parStore , res$fullpars)
-          res$par <- res$fullpars
-        }
-        listRes[[it]] <- res
-
-        it <- it + 1
-        
-        if (newOF < (prevOF - tolIt)){
-            stillImproving = TRUE
-            prevOF <- newOF
-            par <- parInitsNext
-        }else{
-            stillImproving = FALSE
-        }
-    }
-
-    res$allRes <- listRes
-    res$parStore <- parStore
-         
-###23/04/2020, changing to return newres...
-    newres <- list('par' = res$par , 'value' = newOF , 'allRes' = listRes , 'parStore' = parStore)
-       
-    return(newres)
-}
-
-##########################################################
-### function to calculate lndetC and invC b (or just invC if b not given) using cholesky...
-##########################################################
-lndetANDinvCb_OLD <- function(C , b = NA){
-
-    if(is.numeric(C)){
-      cholC <- try(chol(C) , silent = TRUE)
-    }else{
-      n <- nrow(C)
-### some issue with dgeMatrix matrices, chol(C) was different to cholC[1:n1:n], so...    
-      cholC <- try(chol(C[1:n,1:n,drop = FALSE]) , silent = TRUE)
-    }
-    if (is.character(cholC)){
-        lndetC <- invCb <- NA
-    }else{
-        lndetC <- 2 * sum(log(diag(cholC)))
-        if (is.na(as.numeric(b)[1])){        
-            invCb <- chol2inv(cholC)
-        }else{
-### test if C is sparse...
-          if(is.matrix(C)){    
-### seems to be most efficient way if dense...
-            invCb<- backsolve(cholC , forwardsolve(t(cholC) , b))   
-          }else{
-### but above doesn't work for sparse matrices, so...          
-            invCb <- chol2inv(cholC) %*% b 
-          }
-        }
-   }
-
-   return(list('lndetC' = lndetC , 'invCb' = invCb, 'cholC' = cholC))
-}
-
-##########################################################
-### this version quicker; solve makes factorisation of C as side effect. 
-### determinant uses that if chol factorisation (for dgeMatrix or matrix)
-### for dspMatrix, factoristaion is BunchKaufman, not used by determinant fn, so manual calc...
-### not returning chol to save mem
-##########################################################
-lndetANDinvCb <- function(C , b = NULL){
-  if(is.null(dim(C))){ stop('Error - enter matrix for lndetANDinvCb_NEW') }else{}
-  if(!exists('methodSolveTEST')){ methodSolveTEST <- 1 }else{}
-  
-  if(methodSolveTEST == 0){
-    if(is.null(b)){
-      invCb <- try(solve(C) , silent = TRUE)
-    }else{
-      invCb <- try(solve(C , b) , silent = TRUE)
-    }
-    if (is.character(invCb)){
-      lndetC <- invCb <- NA
-    }else{
-      # if(class(C) == 'dspMatrix'){
-      if(is(C , 'dspMatrix')){
-        ### side effect of solve should have added BunchKaufman factorization (not used by determinant fn, so doing it here)...     
-        lndetC <- sum(log(diag(C@factors$pBunchKaufman)))
-      }else{
-        ### for matrix, side effect of solve should have added chol factorization, used by determinant fn...     
-        lndetC <- as.numeric(determinant(C , logarithm = TRUE)$modulus)
-      }
-    }
-  }else if(methodSolveTEST == 1){
-
-    invCb <- try(chol(C) , silent = TRUE) # note - not yet invCb, cholC at mo - but will be a bit later...
-    if (is.character(invCb)){
-      lndetC <- invCb <- NA
-    }else{
-### calc lndetC from the chol...
-      lndetC <- 2 * sum(log(diag(invCb))) #
-      
-      if(is.null(b)){
-        invCb <- chol2inv(invCb)
-      }else{
-        invCb<- backsolve(invCb , forwardsolve(t(invCb) , b))   
-      }
-    }
-    
-  }else{
-    stop('Error - enter valid methodSolveTEST!')
-  }
-  
-  
-  return(list('lndetC' = lndetC , 'invCb' = invCb))
-}
-
-##########################################################
-### this version quicker; solve makes factorisation of C as side effect. 
-### determinant uses that if chol factorisation (for dgeMatrix or matrix)
-### for dspMatrix, factoristaion is BunchKaufman, not used by determinant fn, so manual calc...
-### not returning chol to save mem
-##########################################################
-lndetANDinvCb_TMP <- function(C , b = NULL){
-  if(is.null(dim(C))){ stop('Error - enter matrix for lndetANDinvCb_NEW') }else{}
-  if(is.null(b)){
-    invCb <- try(solve(C) , silent = TRUE)
-  }else{
-    invCb <- try(solve(C , b) , silent = TRUE)
-  }
-  if (is.character(invCb)){
-    lndetC <- invCb <- NA
-  }else{
-    # if(class(C) == 'dspMatrix'){
-    if(is(C , 'dspMatrix')){
-      ### side effect of solve should have added BunchKaufman factorization (not used by determinant fn, so doing it here)...     
-      lndetC <- sum(log(diag(C@factors$pBunchKaufman)))
-    }else{
-      ### for matrix, side effect of solve should have added chol factorization, used by determinant fn...     
-      lndetC <- as.numeric(determinant(C , logarithm = TRUE)$modulus)
-    }
-  }
-  
-  return(list('lndetC' = lndetC , 'invCb' = invCb))
 }
 
 ##########################################################
@@ -2243,7 +2102,7 @@ setCApproxIAK3D2 <- function(parsBTfmd , modelx ,
     phix0 <- sparseMatrix(i = ijTmp[,1] , j = ijTmp[,2] , x = 1 , dims = c(nrow(setupMats$Dx) , ncol(setupMats$Dx)))
     C <- parsBTfmd$cx0 * setupMats$Kx %*% phix0 %*% t(setupMats$Kx2)
   }else{
-    phix0 <- sparseMatrix(i = 1 , ,j=1 , x=0 , dims = c(nrow(setupMats$Dx),ncol(setupMats$Dx)))
+    phix0 <- sparseMatrix(i = 1 , j = 1 , x = 0 , dims = c(nrow(setupMats$Dx),ncol(setupMats$Dx)))
     C <- sparseMatrix(i=1,j=1,x=0,dims = c(nrow(setupMats$Kx),nrow(setupMats$Kx2)))
   }
   
@@ -2369,12 +2228,13 @@ setCApproxIAK3D2 <- function(parsBTfmd , modelx ,
 ### so that only have to pass in the covariates and options to fit function
 ### if modelX is not a character, assume already initialised before calling fit function...
 ##############################################################
-initialiseModelX <- function(xData , dIData , zData , covsData , modelX , optionsModelX , allKnotsd){
+initialiseModelX <- function(xData , dIData , zData , covsData , modelX , optionsModelX){
   
   if(identical(modelX , 'cubist')){
     tmp <- cubistIAK3DInit(cFit = xFit , zFit = zData , covsFit = covsData , profIDFit = as.character(paste0(xData[,1] , '_' , xData[,2])) , 
-                           allKnotsd = allKnotsd , refineCubistModel = optionsModelX$refineCubistModel , nRules = optionsModelX$nRules)
+                           allKnotsd = optionsModelX$allKnotsd , opt_dSpline = optionsModelX$opt_dSpline , refineCubistModel = optionsModelX$refineCubistModel , nRules = optionsModelX$nRules)
     modelX <- tmp$cmFit
+    modelX$type <- 'cubist'
   }else if(identical(modelX , 'gam2')){
     ###################################################################################
     ### alternatively, set up for fitting a spline model.
@@ -2385,6 +2245,7 @@ initialiseModelX <- function(xData , dIData , zData , covsData , modelX , option
                          incInts = optionsModelX$incInts , intMthd = optionsModelX$intMthd , 
                          q4BdryKnotsd = optionsModelX$q4BdryKnotsd , q4BdryKnotss = optionsModelX$q4BdryKnotss)
     modelX <- tmp$modelX
+    modelX$type <- 'gam2'
     covsData <- tmp$covsFit
   }else{}
   

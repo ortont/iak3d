@@ -1485,4 +1485,204 @@ selectSpatVars4IAK3D <- function(dfFit , responseVar , covariateVars , siteVar =
 # }
 
 
+####################################################################################
+### fn to make piecewise linear basis fn for spline
+####################################################################################
+makeXls <- function(x , knots){
+  if(is.null(dim(x)) || (ncol(x) == 1)){
+    ### x just vector of known vals of x    
+    n <- length(x)
+    iaX <- FALSE
+  }else{
+    ### x should have 2 cols, first is lb, 2nd is ub for x
+    n <- nrow(x)
+    iaX <- TRUE
+  }
+  
+  X <- matrix(1 , n , 2 + length(knots))
+  
+  if(iaX){
+    X[,2] <- 0.5 * (x[,1] + x[,2])
+  }else{
+    X[,2] <- x
+  }
+  
+  if(length(knots) > 0){
+    if(iaX){
+      ### inc-avd vs... 
+      for (ik in 1:length(knots)){
+        tmpL <- (x[,1] - knots[ik])
+        tmpL[tmpL < 0] <- 0
+        tmpU <- (x[,2] - knots[ik])
+        tmpU[tmpU < 0] <- 0
+        ### direct translation of form for Xbs...
+        X[,2+ik] <- (tmpU ^ 2 - tmpL ^ 2) / (2 * (x[,2] - x[,1]))
+      }
+    }else{
+      ### pt-supp vs... 
+      for (ik in 1:length(knots)){
+        tmp <- (x - knots[ik])
+        tmp[tmp < 0] <- 0
+        X[,2+ik] <- tmp 
+      }
+    }
+  }else{}
+  
+  return(X)  
+}
 
+
+
+#######################################################################################
+### function to make a set of basis functions designed to model broad-scale spatial variation 
+### so that lmm random effects can focus on short-range variation 
+### and perhaps sparse covariance matrices will be ok (eg with spherical cov fn)
+### pass in kmData - result of applying kmeans to cData
+### basis functions are based on distances to cluster centres
+### using exp(-alpha * (d2centresData ^ powPar)) as membership of each cluster
+### powPar = 2 should give something smoother
+### overlapPar says the cluster centre that is most distant from its nearest neighbour 
+### has this membership with its nearest neighbour centre
+### experimental though - quite sensitive to cluster centres from kmeans
+#######################################################################################
+broadScaleSpatialBasis <- function(cData , ncentres , kmData = NULL , cGrid = NULL , overlapPar = 0.05 , dnn4Overlap = NULL , powPar = 2 , modelType = 0 , useAvDists = FALSE){
+
+  if (modelType == 1){
+    if(overlapPar != 0.05){ stop('Error - looks like you have tried to define overlapPar with modelType = 1 - overlapPar not used for the IDW basis!') }else{}
+  }else{}
+
+  if(is.null(kmData)){
+    kmData <- kmeans(cData , centers = ncentres)
+  }else{
+    if(nrow(kmData$centers) != ncentres){ stop('Error - number of centres in call to broadScaleSpatialBasis does not match the given kmData!') }else{}
+    if(nrow(cData) != length(kmData$cluster)){ stop('Error - number of data in call to broadScaleSpatialBasis does not match the given kmData!') }else{}
+  }
+  
+  if(useAvDists){
+    ### average distances between points in clusters...
+    ### and average distances to cluster points...
+    dkmData <- matrix(NA , ncentres , ncentres)
+    d2centresData <- matrix(NA , nrow(cData) , ncentres)
+    for(i in 1:ncentres){
+      iThis <- which(kmData$cluster == i)
+      for(j in i:ncentres){
+        jThis <- which(kmData$cluster == j)
+        dkmData[i,j] <- mean(xyDist(cData[iThis,,drop=FALSE] , cData[jThis,,drop=FALSE]))
+        if(i != j){ dkmData[j,i] <- dkmData[i,j] }else{}
+      }
+      dTmp <- xyDist(cData , cData[iThis,,drop=FALSE])
+      d2centresData[,i] <- rowMeans(dTmp)
+    }
+    
+  }else{
+    ### distances between cluster centres...
+    dkmData <- xyDist(kmData$centers , kmData$centers)
+    
+    ### distances from data points to cluster centres...
+    d2centresData <- xyDist(cData , kmData$centers)
+  }
+  
+  ### max of dists to nearest neighbour
+  if(is.null(dnn4Overlap)){
+    dnn4Overlap <- max(apply(dkmData + 9E99 * diag(ncentres) , 1 , min))
+  }else{}
+  
+  alpha <- -log(overlapPar) / (dnn4Overlap ^ powPar)
+  
+  if(modelType == 0){
+    ### 'membership' of each cluster based on powered distance to centre
+    ### membership = 1 at cluster centre
+    ### membership = overlapPar at dnn4Overlap
+    mclustersData <- exp(-alpha * (d2centresData ^ powPar))
+  }else if(modelType == 1){
+    ### 'membership' of each cluster based on IDW scheme, 
+    ### powered inv distance to centre (standardised to sum to 1)
+    mclustersData <- 1 / (d2centresData ^ powPar)
+    mclustersData <- mclustersData / matrix(rowSums(mclustersData) , nrow(mclustersData) , ncol(mclustersData))
+  }else if(modelType == 2){
+    mclustersData <- (d2centresData ^ 2) * log(d2centresData)
+  }else if(modelType == 3){ # clamped version?
+    mclustersData <- 0.5 * (1 - (d2centresData ^ 2) + (d2centresData ^ 2) * log(d2centresData ^ 2))
+  }else{
+    stop('Unknown modelType for broadScaleSpatialBasis!')
+  }
+  
+  if(!is.null(cGrid)){
+    if(useAvDists){
+      mclustersGrid <- matrix(NA , nrow(cGrid) , ncentres)
+      for(i in 1:ncentres){
+        iThis <- which(kmData$cluster == i)
+        dTmp <- xyDist(cGrid , cData[iThis,,drop=FALSE])
+        if(modelType == 0){
+          mclustersGrid[,i] <- exp(-alpha * (rowMeans(dTmp) ^ powPar))
+        }else if(modelType == 1){
+          mclustersGrid[,i] <- 1 / (rowMeans(dTmp) ^ powPar)
+        }else if(modelType == 2){
+          mclustersGrid[,i] <- (rowMeans(dTmp) ^ 2) * log(rowMeans(dTmp))
+        }else if(modelType == 3){ # clamped version?
+          mclustersGrid[,i] <- 0.5 * (1 - (rowMeans(dTmp) ^ 2) + (rowMeans(dTmp) ^ 2) * log(rowMeans(dTmp) ^ 2))
+        }else{
+          stop('Unknown modelType for broadScaleSpatialBasis!')
+        }
+      }
+      if(modelType == 1){
+        mclustersGrid <- mclustersGrid / matrix(rowSums(mclustersGrid) , nrow(mclustersGrid) , ncol(mclustersData))
+      }else{}
+      
+    }else{
+      d2centresGrid <- xyDist(cGrid , kmData$centers)
+      if(modelType == 0){
+        mclustersGrid <- exp(-alpha * (d2centresGrid ^ powPar))
+      }else if(modelType == 1){
+        mclustersGrid <- 1 / (d2centresGrid ^ powPar)
+        mclustersGrid <- mclustersGrid / matrix(rowSums(mclustersGrid) , nrow(mclustersGrid) , ncol(mclustersData))
+      }else if(modelType == 2){
+        mclustersGrid <- (d2centresGrid ^ 2) * log(d2centresGrid)
+      }else if(modelType == 3){ # clamped version?
+        mclustersGrid <- 0.5 * (1 - (d2centresGrid ^ 2) + (d2centresGrid ^ 2) * log(d2centresGrid ^ 2))
+      }else{
+        stop('Unknown modelType for broadScaleSpatialBasis!')
+      }
+    }
+
+  }else{
+    mclustersGrid <- NULL
+  }
+  
+  return(list('mclustersData' = mclustersData , 'mclustersGrid' = mclustersGrid))
+}
+
+######################################################
+### define grid of points to be used as centre points for radial basis functions
+### any grid points that do not have at least nDataMin data points whose nearest grid point is that grid point are removed!
+######################################################
+setGrid4BroadScaleSpatialBasis <- function(dfSoilData , resGridCenters , namesCoords4kriging , nDataMin = 1){
+  xVecTmp <- seq(min(dfSoilData[[namesCoords4kriging[1]]]) + 0.49 * resGridCenters , max(dfSoilData[[namesCoords4kriging[1]]]) + 0.51 * resGridCenters  , resGridCenters)
+  yVecTmp <- seq(min(dfSoilData[[namesCoords4kriging[2]]]) + 0.49 * resGridCenters , max(dfSoilData[[namesCoords4kriging[2]]]) + 0.51 * resGridCenters , resGridCenters)
+  dfCentersTmp <- data.frame('E' = rep(xVecTmp , each = length(yVecTmp)) , 
+                             'N' = rep(yVecTmp , length(xVecTmp)) , 
+                             'nData' = NA , 
+                             stringsAsFactors = F)
+  names(dfCentersTmp)[1:2] <- namesCoords4kriging
+  
+  for(i in 1:nrow(dfCentersTmp)){
+    dfCentersTmp$nData[i] <- length(which((dfSoilData[[namesCoords4kriging[1]]] >= (dfCentersTmp[[namesCoords4kriging[1]]][i] - 0.5 * resGridCenters)) &
+                                            (dfSoilData[[namesCoords4kriging[1]]] < (dfCentersTmp[[namesCoords4kriging[1]]][i] + 0.5 * resGridCenters)) &
+                                            (dfSoilData[[namesCoords4kriging[2]]] >= (dfCentersTmp[[namesCoords4kriging[2]]][i] - 0.5 * resGridCenters)) &
+                                            (dfSoilData[[namesCoords4kriging[2]]] < (dfCentersTmp[[namesCoords4kriging[2]]][i] + 0.5 * resGridCenters))))
+  }
+  
+  dfCentersTmp <- dfCentersTmp[dfCentersTmp$nData >= nDataMin,,drop=FALSE]
+  clustersTmp <- rep(NA , nrow(dfSoilData))
+  for(i in 1:nrow(dfCentersTmp)){
+    clustersTmp[which((dfSoilData[[namesCoords4kriging[1]]] >= (dfCentersTmp[[namesCoords4kriging[1]]][i] - 0.5 * resGridCenters)) &
+                        (dfSoilData[[namesCoords4kriging[1]]] < (dfCentersTmp[[namesCoords4kriging[1]]][i] + 0.5 * resGridCenters)) &
+                        (dfSoilData[[namesCoords4kriging[2]]] >= (dfCentersTmp[[namesCoords4kriging[2]]][i] - 0.5 * resGridCenters)) &
+                        (dfSoilData[[namesCoords4kriging[2]]] < (dfCentersTmp[[namesCoords4kriging[2]]][i] + 0.5 * resGridCenters)))] <- i
+  }
+  ### lining up with kmeans output (since that was orig used to define points)
+  gridInfo <- list('centers' = as.matrix(dfCentersTmp[,namesCoords4kriging]) , 
+                   'clusters' = clustersTmp)
+  
+  return(gridInfo)  
+}

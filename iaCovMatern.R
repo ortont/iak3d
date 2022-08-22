@@ -824,6 +824,64 @@ covCloud <- function(xData , zData){
   return(dfx)
 }
 
+##################################################
+### empirical horizontal mean absolute difference with hxBins (2 cols, lower and upper for each bin)...
+##################################################
+madiffCloud <- function(xData , zData , sepDists = NULL , decl = 0){
+  
+  if(is.null(sepDists)){ sepDists <- xyDist(xData , xData) }else{}
+  
+  if(decl > 0){
+    #    wData <- rowSums(sepDists < (max(sepDists)/50))
+    wData <- rowSums(sepDists < decl)
+    wData <- 1 / wData
+    wData <- wData / sum(wData)
+    ww <- matrix(wData , ncol = 1) %*% matrix(wData , nrow = 1)
+  }else{
+    # wData <- rep(1 / nrow(xData) , nrow(xData))
+    # ww <- matrix(wData , ncol = 1) %*% matrix(wData , nrow = 1)
+  }
+  
+  madiffVec <- abs(xyDist(zData , zData))
+  
+  n <- length(zData)
+  
+  ijTmp <- cbind(kronecker(seq(n) , matrix(1 , n , 1)) , kronecker(matrix(1 , n , 1) , seq(n)))
+  ijTmp <- ijTmp[which(ijTmp[,2] > ijTmp[,1]),]
+  sepDists <- sepDists[ijTmp]
+  madiffVec <- madiffVec[ijTmp]
+  if(decl > 0){
+    ww <- ww[ijTmp]
+  }else{}
+  
+  iGT0 <- which(sepDists > 0)
+  sepDists <- sepDists[iGT0]
+  madiffVec <- madiffVec[iGT0] 
+  if(decl > 0){
+    ww <- ww[iGT0]
+  }else{
+    ww <- rep(1 / (nrow(xData) ^ 2) , length(madiffVec))
+  }
+  return(list('sepDists' = sepDists , 'madiffVec' = madiffVec , 'ww' = ww))
+}
+
+madiff <- function(hxBins , xData , zData , sepDists = NULL , decl = 0){
+  madTmp <- madiffCloud(xData = xData , zData = zData , sepDists = sepDists , decl = decl)
+  
+  madiffAv <- hxAv <- nAv <- NA * hxBins[,1]
+  for(ihx in 1:nrow(hxBins)){
+    iThis <- which(madTmp$sepDists >= hxBins[ihx,1] & madTmp$sepDists < hxBins[ihx,2])
+    if(decl > 0){
+      madiffAv[ihx] <- sum(madTmp$ww[iThis] * madTmp$madiffVec[iThis])/sum(madTmp$ww[iThis])
+    }else{
+      madiffAv[ihx] <- mean(madTmp$madiffVec[iThis])
+    }
+    hxAv[ihx] <- mean(madTmp$sepDists[iThis])
+    nAv[ihx] <- length(iThis)
+  }
+  return(list('madiffAv' = madiffAv , 'hxAv' = hxAv , 'nAv' = nAv))
+}
+
 ####################################################################
 ### distance function...
 ####################################################################

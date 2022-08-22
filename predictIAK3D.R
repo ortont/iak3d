@@ -84,7 +84,7 @@ predictIAK3D <- function(xMap , dIMap , covsMap , siteIDMap = NULL , lmmFit , rq
       XLims4Pred[2,] <- Inf
     }
 
-    if(lmmFit$compLikMats$compLikOptn == 0){
+    if((lmmFit$compLikMats$compLikOptn == 0) & (lmmFit$lnTfmdData | (!is.element('iC' , names(lmmFit))))){
 ### make or load C and delete from lmmFit...    
       if(is.element('C' , names(lmmFit))){
         C <- lmmFit$C
@@ -119,9 +119,15 @@ predictIAK3D <- function(xMap , dIMap , covsMap , siteIDMap = NULL , lmmFit , rq
         iCz_muhat <- lmmFit$iCz_muhat
         iC <- lmmFit$iC
       }else{
-        C <- chol2inv(chol(C))
-        iC <- C # maybe better for memory to make as C then copy to iC then remove? 
-        remove(C)
+        ### 30-08-2021 - numerical issues with chol2inv?
+        # C <- chol2inv(chol(C))
+        if(is.element('iC'  , names(lmmFit))){
+          iC <- lmmFit$iC
+        }else{
+          C <- solve(C)
+          iC <- C # maybe better for memory to make as C then copy to iC then remove? 
+          remove(C)
+        }
         print('Inverted C for data in predictIAK3D. Now:')
         print(mem_used())
 
@@ -146,7 +152,7 @@ predictIAK3D <- function(xMap , dIMap , covsMap , siteIDMap = NULL , lmmFit , rq
         if(identical(lmmFit$modelX$type , 'gam2')){
           tmp <- makeXvX_gam2(covData = covsMap[iThis,,drop = FALSE] , dIData = dIMapThis , listfefdKnots = lmmFit$modelX$listfefdKnots , incInts = lmmFit$modelX$incInts , intMthd = lmmFit$modelX$intMthd , colnamesXcns = lmmFit$modelX$colnamesX , nDiscPts = 1000 , lnTfmdData = lmmFit$lnTfmdData)
         }else{
-          tmp <- makeXvX(covData = covsMap[iThis,,drop = FALSE] , dIData = dIMapThis , modelX = lmmFit$modelX , allKnotsd = lmmFit$allKnotsd , iU = lmmFit$iU , nDiscPts = 10 , lnTfmdData = lmmFit$lnTfmdData , XLims = XLims4Pred)
+          tmp <- makeXvX(covData = covsMap[iThis,,drop = FALSE] , dIData = dIMapThis , modelX = lmmFit$modelX , allKnotsd = lmmFit$optionsModelX$allKnotsd , opt_dSpline = lmmFit$optionsModelX$opt_dSpline , iU = lmmFit$iU , nDiscPts = 10 , lnTfmdData = lmmFit$lnTfmdData , XLims = XLims4Pred)
         }
         XMapThis <- as.matrix(tmp$X)
         vXUMapThis <- as.matrix(tmp$vXU)
@@ -376,7 +382,10 @@ profilePredictIAK3D <- function(xMap , dIMap , covsMap , siteIDMap = NULL , iDat
 #        iCz_muhat <- tmp$invCb[,p+1,drop=FALSE]
 #        iC <- chol2inv(tmp$cholC)
 
-        iC <- chol2inv(chol(lmmFit$C[iData,iData,drop=FALSE]))
+        ### 30-08-2021 - numerical issues with chol2inv?
+        # iC <- chol2inv(chol(lmmFit$C[iData,iData,drop=FALSE]))
+        iC <- solve(lmmFit$C[iData,iData,drop=FALSE])
+        
         iCXResTmp <- matrix(iC %*% cbind(lmmFit$XData[iData,,drop=FALSE] , lmmFit$zData[iData] - muhat[iData]) , ncol = p+1)
         iCX <- iCXResTmp[,1:p,drop=FALSE]
         iCz_muhat <- iCXResTmp[,p+1,drop=FALSE]
@@ -393,7 +402,7 @@ profilePredictIAK3D <- function(xMap , dIMap , covsMap , siteIDMap = NULL , iDat
     if(identical(lmmFit$modelX$type , 'gam2')){
       tmp <- makeXvX_gam2(covData = covsMap , dIData = dIMap , listfefdKnots = lmmFit$modelX$listfefdKnots , incInts = lmmFit$modelX$incInts , intMthd = lmmFit$modelX$intMthd , colnamesXcns = lmmFit$modelX$colnamesX , nDiscPts = 10 , lnTfmdData = lmmFit$lnTfmdData)
     }else{
-      tmp <- makeXvX(covData = covsMap , dIData = dIMap , modelX = lmmFit$modelX , allKnotsd = lmmFit$allKnotsd , iU = lmmFit$iU , nDiscPts = 10 , lnTfmdData = lmmFit$lnTfmdData , XLims = XLims4Pred)
+      tmp <- makeXvX(covData = covsMap , dIData = dIMap , modelX = lmmFit$modelX , allKnotsd = lmmFit$optionsModelX$allKnotsd , opt_dSpline = lmmFit$optionsModelX$opt_dSpline , iU = lmmFit$iU , nDiscPts = 10 , lnTfmdData = lmmFit$lnTfmdData , XLims = XLims4Pred)
     }
     XMap <- as.matrix(tmp$X)
     if(lmmFit$lnTfmdData){
@@ -490,7 +499,8 @@ profilePredictIAK3D <- function(xMap , dIMap , covsMap , siteIDMap = NULL , iDat
       vMap <- (exp(vMap) - 1) * (zMap ^ 2)
     }else{}
 
-    return(list('zMap' = zMap , 'vMap' = vMap , 'pi90LMap' = pi90LMap , 'pi90UMap' = pi90UMap , 'XMap' = XMap , 'muhatMap' = muhatMap , 'lmmFit' = lmmFit))
+    return(list('zMap' = zMap , 'vMap' = vMap , 'pi90LMap' = pi90LMap , 'pi90UMap' = pi90UMap , 'XMap' = XMap , 'muhatMap' = muhatMap , 'lmmFit' = lmmFit , 
+                'Ckk' = Ckk , 'Ckh' = Ckh , 'iC' = iC))
 }
 
 ########################################################
@@ -771,7 +781,7 @@ checkInputFormats4PredictIAK3D <- function(xMap , dIMap){
 #############################################################
 plotProfilesIAK3D <- function(namePlot = 'profilePlots.pdf' , xData , dIData , zData , xPred = NULL , dIPred = NULL , zPred = NULL  , pi90LPred = NULL , pi90UPred = NULL , 
                               dIStd = NULL , zStd = NULL , pi90LStd = NULL , pi90UStd = NULL , 
-                              zPredDistant = NULL , zhatxv = NULL , pi90Lxv = NULL , pi90Uxv = NULL , profNames = NULL , xlim = NULL , xlab = NULL){
+                              zPredDistant = NULL , zhatxv = NULL , pi90Lxv = NULL , pi90Uxv = NULL , profNames = NULL , xlim = NULL , xlab = NULL , maxdPlot = NULL){
 #################################################    
 ### make a pdf with the distant profile prediction (page 1) and all data profiles (6 per page thereafter)...
 ### note these are not validation predictions, they are predicted at the data profiles given the data for the same profiles
@@ -832,28 +842,30 @@ plotProfilesIAK3D <- function(namePlot = 'profilePlots.pdf' , xData , dIData , z
     }
     nPages <- ceiling(dim(xPred)[[1]] / nPerPage)
 
-    if(plotPreds){
-      maxd <- max(dIPred[,2])
-    }else{
-      maxd <- max(dIData[,2])
-    }
-    ylim  <- c(-maxd , 0)
-    if(maxd <= 0.5){
+    if(is.null(maxdPlot)){
+      if(plotPreds){
+        maxdPlot <- max(dIPred[,2])
+      }else{
+        maxdPlot <- max(dIData[,2])
+      }
+    }else{}
+    ylim  <- c(-maxdPlot , 0)
+    if(maxdPlot <= 0.5){
       yaxTck <- seq(-0.5 , 0 , 0.1)
       yaxTckLbls <- c('0.5' , '0.4' , '0.3' , '0.2' , '0.1' , '0.0')
-    }else if(maxd <= 1.0){
+    }else if(maxdPlot <= 1.0){
       yaxTck <- seq(-1 , 0 , 0.2)
       yaxTckLbls <- c('1.0' , '0.8' , '0.6' , '0.4' , '0.2' , '0.0')
-    }else if(maxd <= 2.0){
+    }else if(maxdPlot <= 2.0){
       yaxTck <- seq(-2 , 0 , 0.5)
       yaxTckLbls <- c('2.0' , '1.5' , '1.0' , '0.5' , '0.0')
-    }else if(maxd <= 5.0){
+    }else if(maxdPlot <= 5.0){
       yaxTck <- seq(-5 , 0 , 1)
       yaxTckLbls <- c('5.0' , '4.0' , '3.0' , '2.0' , '1.0' , '0.0')
-    }else if(maxd <= 10.0){
+    }else if(maxdPlot <= 10.0){
       yaxTck <- seq(-10 , 0 , 2)
       yaxTckLbls <- c('10.0' , '8.0' , '6.0' , '4.0' , '2.0' , '0.0')
-    }else if(maxd <= 20.0){
+    }else if(maxdPlot <= 20.0){
       yaxTck <- seq(-20 , 0 , 5)
       yaxTckLbls <- c('20' , '15' , '10' , '5' , '0')
     }else{}
@@ -908,55 +920,67 @@ plotProfilesIAK3D <- function(namePlot = 'profilePlots.pdf' , xData , dIData , z
             stop('x is 4d or more? Check this.')            
           }
           
-          if(is.character(xlim) && xlim == 'flex'){
-            ### justuse data and preds to define xlim...              
-            if(plotPreds){
-              if(!is.null(dIStd)){
-                xlimThis <- c(min(c(zPred[,iProfThis],zData[iThis],zStd[iProfThis,]),na.rm=T) , max(c(zPred[,iProfThis],zData[iThis],zStd[iProfThis,]),na.rm=T))
+          if(length(iThis) > 0){
+            if(is.character(xlim) && xlim == 'flex'){
+              ### justuse data and preds to define xlim...              
+              if(plotPreds){
+                if(!is.null(dIStd)){
+                  xlimThis <- c(min(c(zPred[,iProfThis],zData[iThis],zStd[iProfThis,]),na.rm=T) , max(c(zPred[,iProfThis],zData[iThis],zStd[iProfThis,]),na.rm=T))
+                }else{
+                  xlimThis <- c(min(c(zPred[,iProfThis],zData[iThis]),na.rm=T) , max(c(zPred[,iProfThis],zData[iThis]),na.rm=T))
+                }
               }else{
-                xlimThis <- c(min(c(zPred[,iProfThis],zData[iThis]),na.rm=T) , max(c(zPred[,iProfThis],zData[iThis]),na.rm=T))
+                xlimThis <- c(min(zData[iThis]) , max(zData[iThis]))
               }
             }else{
-              xlimThis <- c(min(zData[iThis]) , max(zData[iThis]))
+              xlimThis <- xlim
             }
+            if(xlimThis[2] - xlimThis[1] < 0.1){ xlimThis[1] <- xlimThis[1] - 0.1 ; xlimThis[2] <- xlimThis[2] + 0.1 }else{}
           }else{
-            xlimThis <- xlim
+            xlimThis <- c(NA , NA) # no data so going to make blank plot
           }
-          if(xlimThis[2] - xlimThis[1] < 0.1){ xlimThis[1] <- xlimThis[1] - 0.1 ; xlimThis[2] <- xlimThis[2] + 0.1 }else{}
 
-          if(plotPreds){
-            plot(zPred[,iProfThis] , -rowMeans(dIPred) , xlim = xlimThis , ylim = ylim , type = 'l' , lwd = 2 , col = 'red' , 
-              xlab = xlab , ylab = 'depth, m' , yaxt = 'n' , main = nameThis)
-            if((!is.null(pi90LPred)) & (!is.null(pi90UPred))){
-              lines(pi90LPred[,iProfThis] , -rowMeans(dIPred) , lty = 2 , lwd = 1 , col = 'red')
-              lines(pi90UPred[,iProfThis] , -rowMeans(dIPred) , lty = 2 , lwd = 1 , col = 'red')
-            }else{}
+          if(length(iThis) > 0){
             
-            if(!is.null(dIStd)){
-              for(j in 1:nrow(dIStd)){
-                lines(zStd[iProfThis,j] * c(1,1) , -dIStd[j,] , lty = 1 , lwd = 2 , col = 'green')
-                if((!is.null(pi90LStd)) & (!is.null(pi90UStd))){
-                  lines(pi90LStd[iProfThis,j] * c(1,1) , -dIStd[j,] , lty = 2 , lwd = 1 , col = 'green')
-                  lines(pi90UStd[iProfThis,j] * c(1,1) , -dIStd[j,] , lty = 2 , lwd = 1 , col = 'green')
-                }else{}
-              }
-            }else{}
-          }else{
-            plot(c() , c() , xlim = xlimThis , ylim = ylim , xlab = 'z' , ylab = 'depth, m' , yaxt = 'n' , main = nameThis)
-          } 
-          
-          for (j in 1:length(iThis)){
-            lines(zData[iThis[j]] * c(1,1) , -dIData[iThis[j],] , lty = 1 , lwd = 3 , col = 'black')
-            if((!is.null(zhatxv)) && (length(zhatxv) >= iThis[j]) && (!is.na(zhatxv[iThis[j]]))){
-              lines(zhatxv[iThis[j]] * c(1,1) , -dIData[iThis[j],] , lty = 1 , lwd = 2 , col = 'cyan')
-              
-              if((!is.null(pi90Lxv)) & (!is.null(pi90Uxv))){
-                lines(pi90Lxv[iThis[j]] * c(1,1) , -dIData[iThis[j],] , lty = 2 , lwd = 1 , col = 'cyan')
-                lines(pi90Uxv[iThis[j]] * c(1,1) , -dIData[iThis[j],] , lty = 2 , lwd = 1 , col = 'cyan')
+            if(plotPreds){
+              plot(zPred[,iProfThis] , -rowMeans(dIPred) , xlim = xlimThis , ylim = ylim , type = 'l' , lwd = 2 , col = 'red' , 
+                xlab = xlab , ylab = 'depth, m' , yaxt = 'n' , main = nameThis)
+              if((!is.null(pi90LPred)) & (!is.null(pi90UPred))){
+                lines(pi90LPred[,iProfThis] , -rowMeans(dIPred) , lty = 2 , lwd = 1 , col = 'red')
+                lines(pi90UPred[,iProfThis] , -rowMeans(dIPred) , lty = 2 , lwd = 1 , col = 'red')
               }else{}
-            }else{}
-          }
-          axis(side = 2 , at = yaxTck , labels = yaxTckLbls , las = 2)
+              
+              if(!is.null(dIStd)){
+                for(j in 1:nrow(dIStd)){
+                  lines(zStd[iProfThis,j] * c(1,1) , -dIStd[j,] , lty = 1 , lwd = 2 , col = 'green')
+                  if((!is.null(pi90LStd)) & (!is.null(pi90UStd))){
+                    lines(pi90LStd[iProfThis,j] * c(1,1) , -dIStd[j,] , lty = 2 , lwd = 1 , col = 'green')
+                    lines(pi90UStd[iProfThis,j] * c(1,1) , -dIStd[j,] , lty = 2 , lwd = 1 , col = 'green')
+                  }else{}
+                }
+              }else{}
+            }else{
+              plot(c() , c() , xlim = xlimThis , ylim = ylim , xlab = 'z' , ylab = 'depth, m' , yaxt = 'n' , main = nameThis)
+            } 
+            
+            for (j in 1:length(iThis)){
+              lines(zData[iThis[j]] * c(1,1) , -dIData[iThis[j],] , lty = 1 , lwd = 3 , col = 'black')
+              if((!is.null(zhatxv)) && (length(zhatxv) >= iThis[j]) && (!is.na(zhatxv[iThis[j]]))){
+                lines(zhatxv[iThis[j]] * c(1,1) , -dIData[iThis[j],] , lty = 1 , lwd = 2 , col = 'cyan')
+                
+                if((!is.null(pi90Lxv)) & (!is.null(pi90Uxv))){
+                  lines(pi90Lxv[iThis[j]] * c(1,1) , -dIData[iThis[j],] , lty = 2 , lwd = 1 , col = 'cyan')
+                  lines(pi90Uxv[iThis[j]] * c(1,1) , -dIData[iThis[j],] , lty = 2 , lwd = 1 , col = 'cyan')
+                }else{}
+              }else{}
+            }
+            axis(side = 2 , at = yaxTck , labels = yaxTckLbls , las = 2)
+
+          }else{
+            plot(c() , c() , xlim = c(0,1) , ylim = c(0,1) , xlab = '' , ylab = '' , xaxt = 'n' , yaxt = 'n' , main = nameThis)
+            text(0.5 , 0.5 , 'No soil data here!')
+          }          
+          
         }else{}
       }
     }
@@ -994,7 +1018,6 @@ linsCCCIAK3D <- function(o , p , na.rm = FALSE){
 ### calc val stats...
 ##########################################
 calcValStats <- function(zVal , dIVal , zkVal , vkVal , layerMidPts = c(0.025 , 0.1 , 0.225 , 0.45 , 0.8 , 1.5) , printValStats = TRUE){
-  
   
   dTmp <- xyDist(layerMidPts , rowMeans(dIVal))
   ilayer <- apply(dTmp , 2 , which.min)
