@@ -262,6 +262,8 @@ harmonizeMPS <- function(profIDData , dIData , zData , dfSpatialData4Copy = NULL
     }else{}
   
     profIDData <- as.character(profIDData)
+    
+    profIDDataIn <- profIDData # for aligning with dfSpatialData4Copy - not being subsetted.
 
     ### set up objects to be returned with results for all given profiles (even if all na)
     profIDDataH_FULL <- unique(profIDData)
@@ -275,9 +277,6 @@ harmonizeMPS <- function(profIDData , dIData , zData , dfSpatialData4Copy = NULL
       profIDData <- profIDData[iok]
       dIData <- dIData[iok,,drop=FALSE]
       zData <- zData[iok]
-      if(!is.null(dfSpatialData4Copy)){
-        dfSpatialData4Copy <- dfSpatialData4Copy[iok,,drop=FALSE]
-      }else{}
     }else{
       stop('No data given to harmonizeMPS!')
     }
@@ -401,7 +400,7 @@ harmonizeMPS <- function(profIDData , dIData , zData , dfSpatialData4Copy = NULL
     if(!is.null(dfSpatialData4Copy)){
       dfHrmnzdData_FULL[,names(dfSpatialData4Copy)] <- NA
       for(i in 1:length(profIDDataH_FULL)){
-        iThis <- which(profIDData == profIDDataH_FULL[i])
+        iThis <- which(profIDDataIn == profIDDataH_FULL[i])
         if(length(iThis) == 0){ stop(paste0('Error - could not find data for profID = ' , profIDDataH_FULL[i] , '!')) }else{}
         dfHrmnzdData_FULL[(i - 1) * nrow(dIStd) + seq(nrow(dIStd)),names(dfSpatialData4Copy)] <- dfSpatialData4Copy[rep(iThis[1] , nrow(dIStd)),,drop=FALSE]
       }
