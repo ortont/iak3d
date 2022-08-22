@@ -1,7 +1,9 @@
-cubist2X <- function(cubistModel , dataFit , zFit = NULL , profIDFit = NULL , allKnotsd = c() , removeColinCols = TRUE , refineCubistModel = FALSE){
+cubist2X <- function(cubistModel , dataFit , zFit = NULL , profIDFit = NULL , allKnotsd = c() , opt_dSpline = 0 , removeColinCols = TRUE , refineCubistModel = FALSE){
 
 ### removeColinCols and refineCubistModel are used in the cubist2XSetup function. 
-  
+    if(is.null(opt_dSpline)){ opt_dSpline <- 0 }else{}
+    if(!is.element(opt_dSpline , c(0,1))){ stop('Error - if entering knots, then enter at least 2 knots (2 boundary knots plus any internal knots)') }else{}
+
     if(length(allKnotsd) == 0){
       incdSpline <- FALSE
     }else if(length(allKnotsd) >= 2){
@@ -12,7 +14,7 @@ cubist2X <- function(cubistModel , dataFit , zFit = NULL , profIDFit = NULL , al
 
   if(is.null(cubistModel$listRules) || (is.null(cubistModel$allKnotsd) & (length(allKnotsd) > 0))){    
 
-      tmp <- cubist2XSetup(cubistModel = cubistModel , dataFit = dataFit , zFit = zFit , profIDFit = profIDFit , allKnotsd = allKnotsd , removeColinCols = removeColinCols , refineCubistModel = refineCubistModel)
+      tmp <- cubist2XSetup(cubistModel = cubistModel , dataFit = dataFit , zFit = zFit , profIDFit = profIDFit , allKnotsd = allKnotsd , opt_dSpline = opt_dSpline , removeColinCols = removeColinCols , refineCubistModel = refineCubistModel)
       X <- tmp$X 
       matRuleData <- tmp$matRuleData
       cubistModel <- tmp$cubistModel
@@ -163,7 +165,7 @@ cubist2XGivenSetup <- function(cubistModel , dataFit){
 ###########################################################    
     if(length(cubistModel$allKnotsd) > 0){
       
-      XSpline <- allKnotsd2X(dIMidPts = dataFit$dIMidPts, allKnotsd = cubistModel$allKnotsd)
+      XSpline <- allKnotsd2X(dIMidPts = dataFit$dIMidPts, allKnotsd = cubistModel$allKnotsd , opt_dSpline = cubistModel$opt_dSpline)
       X <- cbind(X , XSpline)
 
     }else{}
@@ -176,17 +178,29 @@ cubist2XGivenSetup <- function(cubistModel , dataFit){
 ### fn to make X given knots and dIMidPts. 
 ### dIMidPts is a vector, evaluated as pt-support for these depths
 ### intercept is not included.
+### opt_dSpline = 0 is the first version - b spline with boundaries + internal knots given
+###                 ie cubic eqn extends beyond boundary knots
+### opt_dSpline = 1 is the second version - natural spline with boundaries + internal knots given
+###                 clamped to have gradient = 0 at upper boundary
+###                 ie natural = linear beyond boundaries.
 ###############################################################
-allKnotsd2X <- function(dIMidPts , allKnotsd){
+allKnotsd2X <- function(dIMidPts , allKnotsd , opt_dSpline = 0){
 
+  if(is.null(opt_dSpline)){ opt_dSpline <- 0 }else{}
+  
   dIMidPts <- as.numeric(dIMidPts)
   if(length(allKnotsd) > 0){
     intKnots <- allKnotsd[-1]
     intKnots <- intKnots[-length(intKnots)]
     bdryKnots <- c(allKnotsd[1] , allKnotsd[length(allKnotsd)])
     
-    XSpline <- bs(dIMidPts , knots = intKnots , degree = 3 , intercept = F , Boundary.knots = bdryKnots)
-    colnames(XSpline) <- paste0('dSpline.' , seq(ncol(XSpline)))
+    if(opt_dSpline == 0){
+      XSpline <- bs(dIMidPts , knots = intKnots , degree = 3 , intercept = F , Boundary.knots = bdryKnots)
+      colnames(XSpline) <- paste0('dSpline.' , seq(ncol(XSpline)))
+    }else if(opt_dSpline == 1){
+      XSpline <- makeXnsClampedUG0(x = dIMidPts , bdryKnots = bdryKnots , intKnots = intKnots)[,-1,drop=FALSE]
+      colnames(XSpline) <- paste0('dSpline.' , seq(ncol(XSpline)))
+    }else{}
   }else{
     XSpline <- matrix(NA , n , 0)
   }
@@ -194,9 +208,11 @@ allKnotsd2X <- function(dIMidPts , allKnotsd){
   return(XSpline)
 }
 
-cubist2XSetup <- function(cubistModel , dataFit , zFit = NULL , profIDFit = NULL , allKnotsd = c() , removeColinCols = TRUE , refineCubistModel = FALSE){
+cubist2XSetup <- function(cubistModel , dataFit , zFit = NULL , profIDFit = NULL , allKnotsd = c() , opt_dSpline = 0 , removeColinCols = TRUE , refineCubistModel = FALSE){
 
   if(refineCubistModel & (!removeColinCols)){ stop('Error - if you want to refine the Cubist model, use removeColinCols = TRUE to make sure X is legal first.') }else{}
+  if(is.null(opt_dSpline)){ opt_dSpline <- 0 }else{}
+  if(!is.element(opt_dSpline , c(0,1))){ stop('Error - if entering knots, then enter at least 2 knots (2 boundary knots plus any internal knots)') }else{}
   
   if(length(allKnotsd) == 0){
     incdSpline <- FALSE
@@ -415,6 +431,7 @@ cubist2XSetup <- function(cubistModel , dataFit , zFit = NULL , profIDFit = NULL
     }else{ # assigning as c() doesn't work, so: 
       cubistModel['allKnotsd'] <- list(NULL)
     }
+    cubistModel$opt_dSpline <- opt_dSpline
     
 #######################################################
 ### convert to X, and check for potential colinearity within rules...
@@ -597,7 +614,7 @@ getColinPreds <- function(X , y = NULL , comms4XCubist = NULL){
 }
 
 
-removeColinPreds <- function(X , cubistModel , dataFit , ipRmvd , reasonRmv = 0){
+removeColinPreds <- function(X , cubistModel , dataFit , ipRmvd , reasonRmv = 0 , verbose = TRUE){
 
     n <- nrow(X)
     
@@ -616,14 +633,16 @@ removeColinPreds <- function(X , cubistModel , dataFit , ipRmvd , reasonRmv = 0)
       cubistModel$names4XCubist <- cubistModel$names4XCubist[-ipRmvd] 
       cubistModel$comms4XCubist <- cubistModel$comms4XCubist[-ipRmvd] 
 
-      if(reasonRmv == 0){
-        print('Some colinear columns found in X - legalizing X by removing the following columns:')
-      }else if(reasonRmv == 1){
-        print('Some redundant columns found in X - refining X by removing the following columns:')
-      }else{
-        stop('Enter valid reasonRmv value to removeColinPreds (0 or 1)!')
-      }
-      for(i in 1:length(ipRmvd)){ print(paste0(i , '.  ' , namesX[ipRmvd[i]])) }
+      if(verbose){
+        if(reasonRmv == 0){
+          print('Some colinear columns found in X - legalizing X by removing the following columns:')
+        }else if(reasonRmv == 1){
+          print('Some redundant columns found in X - refining X by removing the following columns:')
+        }else{
+          stop('Enter valid reasonRmv value to removeColinPreds (0 or 1)!')
+        }
+        for(i in 1:length(ipRmvd)){ print(paste0(i , '.  ' , namesX[ipRmvd[i]])) }
+      }else{}
 
       X <- X[,-ipRmvd,drop=FALSE]
     
@@ -1013,8 +1032,102 @@ legalizeXIAK3D <- function(X , z){
 ### if not, the least significant is removed
 ### continues until all are significant
 ### alpha = 0.5 intended to give a model that one would expect to be better at each stage.
+### alpha = 0.15 should be similar to using AIC
 #######################################################################
-refineXIAK3D <- function(X , z , profID , alpha = 0.5){
+refineXIAK3D <- function(X , z , profID = NULL , alpha = 0.15 , iAX = NULL , iAz = NULL){
+  
+  if((!is.null(iAX)) & (!is.null(profID))){ stop('Error - enter only one of profID or iAX!') }else{}  
+  if((is.null(iAX)) & (is.null(profID))){ stop('Error - enter exactly one of profID or iAX!') }else{}  
+  if(!is.null(iAX)){
+    if(is.null(iAz)){ stop('Error - if entering iAX, then also enter iAz!') }else{}
+    if(ncol(X) != ncol(iAX)){ stop('Error - iAX and X are different dimensions!') }else{}
+  }else{}
+  
+  continueRefining <- TRUE
+  n <- nrow(X)
+  p <- ncol(X)
+  colnamesXIn <- colnames(X)
+  
+  XIn <- X
+  ### rescale the candidate columns...
+  cands <- setdiff(seq(ncol(X)) , which(is.element(colnames(X) , paste0('const_R' , seq(100))))) 
+  cands <- setdiff(cands , which(substr(colnames(X) , 1 , 8) == 'dSpline.'))
+  
+  sdX <- sqrt(apply(X,2,var))
+  X[,cands] <- X[,cands,drop=FALSE]  / matrix(sdX[cands] , nrow(X) , length(cands) , byrow = TRUE)
+  
+  if(!is.null(iAX)){
+    iAX[,cands] <- iAX[,cands,drop=FALSE]  / matrix(sdX[cands] , nrow(X) , length(cands) , byrow = TRUE)
+    XiAX <- t(X) %*% iAX
+    XiAz <- t(X) %*% iAz
+    ziAz <- t(z) %*% iAz
+  }else{}
+  
+  namesRemove <- c()
+  while(continueRefining){
+    
+    if(!is.null(profID)){
+      formulaTmp <- paste0('z ~ 0 + ' , paste(colnames(X) , collapse = ' + ') , ' + (1|profID)')
+      df4lmer <- data.frame(X , 'z' = z , 'profID' = profID)
+      ft <- lmer(as.formula(formulaTmp) , data = df4lmer)
+      betahat <- summary(ft)$coefficients[,1]
+      vbetahat <- summary(ft)$vcov
+    }else{
+      ### using REML est of sigma2hat (conditional on cor mtx A)
+      betahat <- solve(XiAX , XiAz)
+      sigma2hat <- as.numeric(ziAz - 2 * t(betahat) %*% XiAz + t(betahat) %*% XiAX %*% betahat) / (nrow(X) - ncol(X))
+      vbetahat <- sigma2hat * solve(XiAX)
+    }  
+    
+    cands <- setdiff(seq(ncol(X)) , which(is.element(colnames(X) , paste0('const_R' , seq(100))))) 
+    cands <- setdiff(cands , which(substr(colnames(X) , 1 , 8) == 'dSpline.'))
+    
+    wStats <- NA * numeric(p)
+    for(i in cands){
+      wStats[i] <- waldTest(betahat = betahat , vbetahat = vbetahat , ip0 = i)
+    }
+    
+    ### are all of the variables in the mlrs significant?
+    ### if not, remove the one with the largest p value.
+    iOrder <- order(wStats)
+    nTests <- length(which(!is.na(wStats)))
+    wStatsOrdered <- wStats[iOrder[1:nTests]]
+    alphaMHT <- seq(alpha/nTests , alpha , alpha/nTests) 
+    
+    if(max(wStatsOrdered - alphaMHT) >= 0){
+      ### something not significant, so drop the least significant variable...
+      iRemoveThis <- which.max(wStats)
+      namesRemove <- c(namesRemove , colnames(X)[iRemoveThis])
+      X <- X[,-iRemoveThis,drop=FALSE]
+      if(!is.null(iAX)){
+        iAX <- iAX[,-iRemoveThis,drop=FALSE]
+        XiAX <- XiAX[,-iRemoveThis,drop=FALSE] 
+        XiAX <- XiAX[-iRemoveThis,,drop=FALSE] 
+        XiAz <- XiAz[-iRemoveThis,,drop=FALSE] 
+      }else{}
+      p <- ncol(X)
+    }else{
+      ### everything significant, so stop dropping.
+      continueRefining <- FALSE
+    }
+  }
+  
+  if(length(namesRemove) > 0){
+    ipRemove <- NA * integer(length(namesRemove))
+    for(j in 1:length(namesRemove)){
+      ipRemove[j] <- which(colnamesXIn == namesRemove[j])
+    }
+    ### X was stdzd, so returning to the unstandardized version and remoivng cols...
+    X <- XIn[,-ipRemove,drop=FALSE]
+  }else{
+    ipRemove <- c()
+  }
+  
+  return(list('X' = X , 'namesRemove' = namesRemove , 'ipRemove' = ipRemove))
+}
+
+### TEMP WHILE CHECKING NEWER VERSION ABOVE WORKS
+refineXIAK3D_OLD <- function(X , z , profID , alpha = 0.15){
 
   continueRefining <- TRUE
   n <- nrow(X)
@@ -1133,7 +1246,7 @@ makeProfID <- function(cAll , useOldVersion = TRUE){
 ### function to do a xv routine with cFit to select best nRules and whether refineCubistModel = T/F is best
 ### xv is with full profiles removed/kept.
 #############################################################################
-selectCubistOptsXV <- function(cFit , zFit , covsFit , allKnotsd = c() , nRulesVec = seq(10) , refineCubistModelVec = c(FALSE , TRUE)){
+selectCubistOptsXV <- function(cFit , zFit , covsFit , allKnotsd = c() , opt_dSpline = 0 , nRulesVec = seq(10) , refineCubistModelVec = c(FALSE , TRUE)){
 
 ### proportion of cFit profiles used to fit, the rest used as 'val' data
   prop4XVFit <- 0.7
@@ -1170,7 +1283,7 @@ selectCubistOptsXV <- function(cFit , zFit , covsFit , allKnotsd = c() , nRulesV
       cmFit <- cubist(x = covsFit , y = zFit , committees = 1 , cubistControl(rules = nRules))
       
       ### convert to des mtx
-      tmp <- cubist2X(cubistModel = cmFit, dataFit = covsFit , zFit = zFit , profIDFit = profIDFit , allKnotsd = allKnotsd , refineCubistModel = refineCubistModel)
+      tmp <- cubist2X(cubistModel = cmFit, dataFit = covsFit , zFit = zFit , profIDFit = profIDFit , allKnotsd = allKnotsd , opt_dSpline = opt_dSpline , refineCubistModel = refineCubistModel)
       cmFit <- tmp$cubistModel
       XFitThis <- tmp$X
       
@@ -1282,7 +1395,7 @@ selectCubistOptsXV <- function(cFit , zFit , covsFit , allKnotsd = c() , nRulesV
 #################################################################################################
 ### fn to wrap up all of the cubist stuff needed before the fitIAK3D fn is called. 
 #################################################################################################
-cubistIAK3DInit <- function(cFit , zFit , covsFit , profIDFit , allKnotsd , refineCubistModel = FALSE , nRules = NA , rtnRuleSelectInfo = FALSE){
+cubistIAK3DInit <- function(cFit , zFit , covsFit , profIDFit , allKnotsd , opt_dSpline = 0 , refineCubistModel = FALSE , nRules = NA , rtnRuleSelectInfo = FALSE){
   #################################################################################################
   ### an algorithm to select number of rules for cubist model, with dSpline included (if selected), 
   ### and rdm effect in lmm for profileID (ie so that lots of data from one profile don't contribute too much spatial info)
@@ -1290,7 +1403,7 @@ cubistIAK3DInit <- function(cFit , zFit , covsFit , profIDFit , allKnotsd , refi
   if(is.na(nRules) | is.na(refineCubistModel)){
     if(is.na(nRules)){ nRulesVec <- seq(20) }else{ nRulesVec <- nRules }
     if(is.na(refineCubistModel)){ refineCubistModelVec <- c(FALSE , TRUE) }else{ refineCubistModelVec <- refineCubistModel }
-    tmp <- selectCubistOptsXV(cFit = cFit , zFit = zFit , covsFit = covsFit , allKnotsd = allKnotsd , nRulesVec = nRulesVec , refineCubistModelVec = refineCubistModelVec)
+    tmp <- selectCubistOptsXV(cFit = cFit , zFit = zFit , covsFit = covsFit , allKnotsd = allKnotsd , opt_dSpline = opt_dSpline , nRulesVec = nRulesVec , refineCubistModelVec = refineCubistModelVec)
     nRules <- tmp$nRules
     refineCubistModel <- tmp$refineCubistModel
     rmseMatList <- tmp$rmseMatList
@@ -1307,7 +1420,7 @@ cubistIAK3DInit <- function(cFit , zFit , covsFit , profIDFit , allKnotsd , refi
   print(summary(cmFit))
     
   ### convert to des mtx
-  tmp <- cubist2X(cubistModel = cmFit, dataFit = covsFit , zFit = zFit , profIDFit = profIDFit , allKnotsd = allKnotsd , refineCubistModel = refineCubistModel)
+  tmp <- cubist2X(cubistModel = cmFit, dataFit = covsFit , zFit = zFit , profIDFit = profIDFit , allKnotsd = allKnotsd , opt_dSpline = opt_dSpline , refineCubistModel = refineCubistModel)
   cmFit <- tmp$cubistModel
   XFit <- tmp$X
   matRulesFit <- tmp$matRuleData
