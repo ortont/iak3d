@@ -2231,7 +2231,7 @@ setCApproxIAK3D2 <- function(parsBTfmd , modelx ,
 initialiseModelX <- function(xData , dIData , zData , covsData , modelX , optionsModelX){
   
   if(identical(modelX , 'cubist')){
-    tmp <- cubistIAK3DInit(cFit = xFit , zFit = zData , covsFit = covsData , profIDFit = as.character(paste0(xData[,1] , '_' , xData[,2])) , 
+    tmp <- cubistIAK3DInit(cFit = xData , zFit = zData , covsFit = covsData , profIDFit = as.character(paste0(xData[,1] , '_' , xData[,2])) , 
                            allKnotsd = optionsModelX$allKnotsd , opt_dSpline = optionsModelX$opt_dSpline , refineCubistModel = optionsModelX$refineCubistModel , nRules = optionsModelX$nRules)
     modelX <- tmp$cmFit
     modelX$type <- 'cubist'
