@@ -1033,7 +1033,8 @@ plotCovx <- function(lmm.fit , hx , dIPlot , addExpmntlV = TRUE , hzntlUnits = '
   EVTmp[is.nan(EVTmp)] <- NA
   hxEVTmp[is.nan(hxEVTmp)] <- NA
   
-  if(is.null(ylim)){ ylim <- c(0 , 1.01 * max(max(CTmp) , max(EVTmp , na.rm = TRUE))) }else{}
+  # if(is.null(ylim)){ ylim <- c(0 , 1.01 * max(max(CTmp) , max(EVTmp , na.rm = TRUE))) }else{}
+  if(is.null(ylim)){ ylim <- c(0 , 1.01 * max(max(VTmp) , max(EVTmp , na.rm = TRUE))) }else{}
   
   if(noPlot){
     listRtn <- list('hxEV' = hxEVTmp , 'EV' = EVTmp , 'nEV' = nEVTmp , 'n4dIPlot' = n4dIPlot , 'ylim' = ylim , 'parsVario' = parsVario)    
