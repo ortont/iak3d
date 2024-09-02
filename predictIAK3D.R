@@ -868,7 +868,11 @@ plotProfilesIAK3D <- function(namePlot = 'profilePlots.pdf' , xData , dIData , z
     }else if(maxdPlot <= 20.0){
       yaxTck <- seq(-20 , 0 , 5)
       yaxTckLbls <- c('20' , '15' , '10' , '5' , '0')
-    }else{}
+    }else{
+      yaxTck <- rev(pretty(c(0,maxdPlot)))
+      yaxTckLbls <- as.character(yaxTck)
+      yaxTck <- -1 * yaxTck
+    }
     
     if(is.null(xlim)){
       rangez <- max(zData) - min(zData)
