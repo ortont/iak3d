@@ -23,8 +23,9 @@ makeXvX <- function(covData = NA , dIData , modelX , allKnotsd = c() , opt_dSpli
   if(!is.element(opt_dSpline , c(0,1))){ stop('Error - if entering knots, then enter at least 2 knots (2 boundary knots plus any internal knots)') }else{}
   
     n <- dim(dIData)[[1]]
-    if((length(covData) == 1) && is.na(covData)){
-        nCovs <- 0
+    # if((length(covData) == 1) && is.na(covData)){
+    if(identical(covData , NA)){
+      nCovs <- 0
     }else{
         nCovs <- dim(covData)[[2]]
     }
@@ -185,13 +186,24 @@ makeXvX <- function(covData = NA , dIData , modelX , allKnotsd = c() , opt_dSpli
 
     }else{
       setXLims <- FALSE
-      if((min(XLims[1,]) == Inf) & (max(XLims[2,]) == -Inf)){
+      # if((min(XLims[1,]) == Inf) & (max(XLims[2,]) == -Inf)){
+      #   infBnds <- TRUE
+      # }else{
+      #   infBnds <- FALSE
+      # }
+      
+      ### 03/09/24 - think the above was incorrect order
+      if((min(XLims[1,]) == -Inf) & (max(XLims[2,]) == Inf)){
         infBnds <- TRUE
       }else{
         infBnds <- FALSE
       }
+      
     }
 
+    # print(XLims)
+    # print(infBnds)
+    
 # number of parameters associated with each name
 # 1 for continuous variable, nClasses - 1 for categorical, put in first column with that name (rest are NA)
     pX <- NA * integer(p) 
@@ -307,8 +319,13 @@ makeXvX <- function(covData = NA , dIData , modelX , allKnotsd = c() , opt_dSpli
             }else{
               if(!infBnds){
 ### slight difference, apply the given constraints to the interval-support design matrix...
-                X[,id123Tmp] <- matrix(mapply(replaceLT , x = t(X[,id123Tmp]) , llim = XLims[1,] , replaceZeros = FALSE , SIMPLIFY = TRUE) , nrow = nrow(X[,id123Tmp]) , ncol = ncol(X[,id123Tmp]) , byrow = TRUE)
-                X[,id123Tmp] <- matrix(mapply(replaceGT , x = t(X[,id123Tmp]) , ulim = XLims[2,] , replaceZeros = FALSE , SIMPLIFY = TRUE) , nrow = nrow(X[,id123Tmp]) , ncol = ncol(X[,id123Tmp]) , byrow = TRUE)
+                # X[,id123Tmp] <- matrix(mapply(replaceLT , x = t(X[,id123Tmp]) , llim = XLims[1,] , replaceZeros = FALSE , SIMPLIFY = TRUE) , nrow = nrow(X[,id123Tmp]) , ncol = ncol(X[,id123Tmp]) , byrow = TRUE)
+                # X[,id123Tmp] <- matrix(mapply(replaceGT , x = t(X[,id123Tmp]) , ulim = XLims[2,] , replaceZeros = FALSE , SIMPLIFY = TRUE) , nrow = nrow(X[,id123Tmp]) , ncol = ncol(X[,id123Tmp]) , byrow = TRUE)
+                
+                print(length(id123Tmp))
+                
+                X[,id123Tmp] <- matrix(mapply(replaceLT , x = t(X[,id123Tmp,drop=FALSE]) , llim = XLims[1,] , replaceZeros = FALSE , SIMPLIFY = TRUE) , nrow = nrow(X[,id123Tmp,drop=FALSE]) , ncol = ncol(X[,id123Tmp,drop=FALSE]) , byrow = TRUE)
+                X[,id123Tmp] <- matrix(mapply(replaceGT , x = t(X[,id123Tmp,drop=FALSE]) , ulim = XLims[2,] , replaceZeros = FALSE , SIMPLIFY = TRUE) , nrow = nrow(X[,id123Tmp,drop=FALSE]) , ncol = ncol(X[,id123Tmp,drop=FALSE]) , byrow = TRUE)
               }else{}
             }
           }else{}

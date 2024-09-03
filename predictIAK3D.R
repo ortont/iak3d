@@ -33,7 +33,7 @@ predictIAK3D <- function(xMap , dIMap , covsMap , siteIDMap = NULL , lmmFit , rq
     ############################################################
     ### for gam2 model, add scaled covariates to covsVal...
     ############################################################
-    if(identical(lmmFit$modelX$type , 'gam2')){
+    if((!is.numeric(lmmFit$modelX)) && identical(lmmFit$modelX$type , 'gam2')){
       tmp <- addScaledCovs2df(dfFit = covsMap , scalePars_m = lmmFit$modelX$scalePars_m , scalePars_sd = lmmFit$modelX$scalePars_sd)
       covsMap <- tmp$dfFit
     }else{}
@@ -149,7 +149,7 @@ predictIAK3D <- function(xMap , dIMap , covsMap , siteIDMap = NULL , lmmFit , rq
         
         dIMapThis <- kronecker(matrix(dIMap[i,,drop=FALSE] , 1 , 2) , matrix(1 , nxMapThis , 1))
           
-        if(identical(lmmFit$modelX$type , 'gam2')){
+        if((!is.numeric(lmmFit$modelX)) && identical(lmmFit$modelX$type , 'gam2')){
           tmp <- makeXvX_gam2(covData = covsMap[iThis,,drop = FALSE] , dIData = dIMapThis , listfefdKnots = lmmFit$modelX$listfefdKnots , incInts = lmmFit$modelX$incInts , intMthd = lmmFit$modelX$intMthd , colnamesXcns = lmmFit$modelX$colnamesX , nDiscPts = 1000 , lnTfmdData = lmmFit$lnTfmdData)
         }else{
           tmp <- makeXvX(covData = covsMap[iThis,,drop = FALSE] , dIData = dIMapThis , modelX = lmmFit$modelX , allKnotsd = lmmFit$optionsModelX$allKnotsd , opt_dSpline = lmmFit$optionsModelX$opt_dSpline , iU = lmmFit$iU , nDiscPts = 10 , lnTfmdData = lmmFit$lnTfmdData , XLims = XLims4Pred)
@@ -320,7 +320,7 @@ profilePredictIAK3D <- function(xMap , dIMap , covsMap , siteIDMap = NULL , iDat
     ############################################################
     ### for gam2 model, add scaled covariates to covsVal...
     ############################################################
-    if(identical(lmmFit$modelX$type , 'gam2')){
+    if((!is.numeric(lmmFit$modelX)) && identical(lmmFit$modelX$type , 'gam2')){
       tmp <- addScaledCovs2df(dfFit = covsMap , scalePars_m = lmmFit$modelX$scalePars_m , scalePars_sd = lmmFit$modelX$scalePars_sd)
       covsMap <- tmp$dfFit
     }else{}
@@ -399,7 +399,7 @@ profilePredictIAK3D <- function(xMap , dIMap , covsMap , siteIDMap = NULL , iDat
     covsMap <- covsMap[integer(ndIMap) + 1,,drop = FALSE]
     if(!is.null(siteIDMap)){ siteIDMap <- rep(siteIDMap , ndIMap) }else{}
 
-    if(identical(lmmFit$modelX$type , 'gam2')){
+    if((!is.numeric(lmmFit$modelX)) && identical(lmmFit$modelX$type , 'gam2')){
       tmp <- makeXvX_gam2(covData = covsMap , dIData = dIMap , listfefdKnots = lmmFit$modelX$listfefdKnots , incInts = lmmFit$modelX$incInts , intMthd = lmmFit$modelX$intMthd , colnamesXcns = lmmFit$modelX$colnamesX , nDiscPts = 10 , lnTfmdData = lmmFit$lnTfmdData)
     }else{
       tmp <- makeXvX(covData = covsMap , dIData = dIMap , modelX = lmmFit$modelX , allKnotsd = lmmFit$optionsModelX$allKnotsd , opt_dSpline = lmmFit$optionsModelX$opt_dSpline , iU = lmmFit$iU , nDiscPts = 10 , lnTfmdData = lmmFit$lnTfmdData , XLims = XLims4Pred)
@@ -891,6 +891,7 @@ plotProfilesIAK3D <- function(namePlot = 'profilePlots.pdf' , xData , dIData , z
       }else{
         xlimThis <- xlim
       }
+      
       plot(zPredDistant , -rowMeans(dIPred) , xlim = xlimThis , ylim = ylim , type = 'l' , lwd = 2 , col = 'red' ,  
             xlab = xlab , ylab = 'depth, m' , yaxt = 'n' , main = 'Distant profile')
 ### add all data to this plot...                  

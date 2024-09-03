@@ -76,7 +76,7 @@ fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'mate
   
   # if(!identical(class(xData) , 'matrix')){ stop('Stopping - for fitIAKD3D function, enter xData as a matrix') }else{}
   # if(!identical(class(dIData) , 'matrix')){ stop('Stopping - for fitIAKD3D function, enter dIData as a matrix with 2 columns') }else{}
-  
+
   ########################################################
   ### if xData or dIData were dataframes, convert to matrices here.
   ### and make sure all are numeric...
@@ -177,7 +177,8 @@ fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'mate
   ### if using gam2, all knot info will be in modelX$listfefdKnots...
   ### other info will be in modelX$incInts and modelX$colnamesXcns
   ################################################
-  if(identical(modelX$type , 'gam2')){
+  # if(identical(modelX$type , 'gam2')){
+  if((!is.numeric(modelX)) && identical(modelX$type , 'gam2')){
     if(length(optionsModelX$allKnotsd) > 0){ stop('Error - if using gam2 for trend, enter knot info in modelX$listfefdKnots (you can use function makelistfefdKnots to do this); do not use allKnotsd.\n
                                       Note, modelX should also set modelX$incInts and modelX$comnamesXcns')}else{}
   }else{}
@@ -200,7 +201,7 @@ fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'mate
   ######################################################
   ### set up fixed-effect design matrices...
   ######################################################
-  if(identical(modelX$type , 'gam2')){
+  if((!is.numeric(modelX)) && identical(modelX$type , 'gam2')){
     tmp <- makeXvX_gam2(covData = covsData , dIData = dIData , listfefdKnots = modelX$listfefdKnots , incInts = modelX$incInts , intMthd = modelX$intMthd , colnamesXcns = modelX$colnamesX , nDiscPts = 1000 , lnTfmdData = lnTfmdData)
     XData <- tmp$X
     vXU <- tmp$vXU
@@ -215,7 +216,7 @@ fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'mate
     namesX <- tmp$namesX
     XLims <- tmp$XLims
   }
-  
+
   remove(tmp) ; gc(verbose = FALSE)
   
   ############################################################
@@ -440,7 +441,7 @@ fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'mate
   verboseOptim <<- F
   
   ### lost colnames somewhere?!
-  if(identical(modelX$type , 'cubist')){
+  if((!is.numeric(modelX)) && identical(modelX$type , 'cubist')){
     colnames(XData) <- modelX$namesX  
   }else{}
   
@@ -448,7 +449,7 @@ fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'mate
   ### if optionsModelX$reduceXAfterInitFit with a gam2 model
   ### then remove columns of X (using stepBackXcns algorihtm) and refit IAK3D model.
   #######################################################################
-  if(optionsModelX$reduceXAfterInitFit && (identical(modelX$type , 'gam2') | identical(modelX$type , 'cubist'))){
+  if(optionsModelX$reduceXAfterInitFit && ((identical(modelX$type , 'gam2') | identical(modelX$type , 'cubist')))){
     
     if(identical(modelX$type , 'gam2')){
       print('Reducing the initial gam2 model by removing redundant columns...')      
@@ -532,11 +533,13 @@ fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'mate
     
   }else{}
   #######################################################################
-  if(identical(modelX$type , 'cubist')){
+  if((!is.numeric(modelX)) && identical(modelX$type , 'cubist')){
     colnames(XData) <- modelX$namesX  
-  }else if(identical(modelX$type , 'gam2')){
+  }else if((!is.numeric(modelX)) && identical(modelX$type , 'gam2')){
     colnames(XData) <- modelX$colnamesX
   }else{
+    # print(colnames(XData))
+    # print(modelX)
     print('Should make sure that XData has col names here!')
   }
   
@@ -561,7 +564,12 @@ fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'mate
     #      dIPred <- cbind(seq(0 , 1.98 , 0.02) , seq(0.02 , 2 , 0.02))
     #      dIPred <- cbind(seq(0 , 1.9 , 0.1) , seq(0.1 , 2 , 0.1))
     #      dIPred <- cbind(seq(0 , 14.98 , 0.02) , seq(0.02 , 15 , 0.02))
-    dIPred <- cbind(seq(0 , parBnds$maxd-0.02 , 0.02) , seq(0.02 , parBnds$maxd , 0.02))
+    if(parBnds$maxd < 10){
+      dIPred <- cbind(seq(0 , parBnds$maxd-0.02 , 0.02) , seq(0.02 , parBnds$maxd , 0.02))
+    }else{
+      dTMP <- seq(0 , parBnds$maxd , length = 101)
+      dIPred <- cbind(dTmp[1:(length(dTMP)-1)] , dTMP[-1])
+    }
     
     ### below 1m, only do every 5th one of these depth intervals...
     iKeep1 <- which(dIPred[,1] < 1)
@@ -596,6 +604,7 @@ fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'mate
     
     ### add a distant location to the prediction locations...
     xPredDistant <- matrix(c(9E99 , 9E99) , 1 , 2)
+
     #      covsPredDistant <- colMeansAndModes(covsPred)
     #      covsPredDistant <- colMeansAndModes(covsData)
     
@@ -615,7 +624,7 @@ fitIAK3D <- function(xData , dIData , zData , covsData , modelX , modelx = 'mate
     tmp <- predictIAK3D(xMap = rbind(xPred , xPredDistant) , dIMap = dIPred , 
                         covsMap = rbind(covsPred , covsPredDistant) , siteIDMap = siteID4Predict , 
                         lmmFit = lmmFit , rqrBTfmdPreds = rqrBTfmdPreds , constrainX4Pred = FALSE)
-    
+
     zPred <- tmp$zMap[,1:nxPred]
     vPred <- tmp$vMap[,1:nxPred]
     pi90UPred <- tmp$pi90UMap[,1:nxPred]
